@@ -6,7 +6,7 @@ Output: Normalized wide-format data
 def example():
     pass
 
-def logtranasform()":
+def logtransform()":
     pass
 
 def main():
