@@ -1,0 +1,73 @@
+# Ignore macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Pytest cache
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+*.cover
+*.py,cover
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+MANIFEST
+
+# C extensions
+*.so
+
+# IDE and editor-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Anaconda environment
+*.conda
+*.env
+
+# PEP 582 (used by pipx)
+__pypackages__/
+
+# macOS-specific files
+*.DS_Store
+.Trashes
+._*
+
+# Ignore mypy cache
+.mypy_cache/
+
+# Ignore Pycharm project files
+/.idea/
+
+# Ignore Jupyter notebook config
+/.jupyter/
+
+# Ignore Poetry virtual environments
+.poetry/
