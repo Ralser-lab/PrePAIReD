@@ -2,6 +2,7 @@
 Input: wide-format data
 Output: Normalized wide-format data
 """
+<<<<<<< HEAD
 
 #Import
 import numpy as np
@@ -32,12 +33,23 @@ def logtransform(df, base = 2):
     
     # return log transformed df
     return np.log(df)/np.log(base)
+=======
+import numpy as np
+import pandas as pd
+
+def example():
+    pass
+
+def logtransform():
+    pass
+
 
 def quantile_norm():
     pass 
 
 def z_norm(df): 
     #calculate mean
+
     dfmean = df.mean(skipna = True)
     #calculate variance
     dfvar = df.var(skipna = True)
@@ -512,3 +524,15 @@ def main(intensities,logfilename=None):
         logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFinished normalization.\n")
         logfile.close()
     
+=======
+    mean = df.mean(skipna = True)
+    #calculate variance
+    var = df.var(skipna = True)
+    #standardize df
+    df_z = (df - mean)/np.sqrt(var)
+    #return z-normalized data
+    return df_z 
+
+def main():
+    return example()
+>>>>>>> 5f1fe3d (BZ added random comment)
