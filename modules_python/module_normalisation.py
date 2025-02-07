@@ -1,8 +1,8 @@
+# %%
 """
 Input: wide-format data
 Output: Normalized wide-format data
 """
-<<<<<<< HEAD
 
 #Import
 import numpy as np
@@ -10,55 +10,90 @@ import pandas as pd
 import re
 import time #used for logging
 
-
 #statistics and modelling
 from scipy.optimize import least_squares, minimize
 from itertools import combinations
+from sklearn.preprocessing import QuantileTransformer
 
-#ADDED RANDOM COMMENT
 
+def log_transform(df, base = 2):
+    """ Log scales a dataframe (no missing values)
+    Author: SB
+    :param df: Intensity dataframe (rows [samples], columns [protein feature])
+    :param base: base for log transformation, default is 2
+    :return: Log transformed intensity dataframe
+    """
 
-def logtransform(df, base = 2):
-    # check for missing vals
-    if df.isna().any().any() > 0:
-        # abort
-        print('missing values')
-        return df
+    # Check for missing values in matrix
+    if df.isna().any().any():
+        raise ValueError("Error: DataFrame contains missing values (NaNs). Please handle them before log transformation.")
     
-    # check for 0 or negative values
-    if (df < = 0).any().any() > 0:
-        # abort
-        print('negative and/or zero values')
-        return df
+    # Apply log transformation and recover true Zero
+    l_df = np.log(df) / np.log(base)
+    l_df.replace(-np.inf, 0, inplace=True)
+
+    # Return log transformed df
+    return l_df
+
+
+def quantile_transform(df):
+    """ For scaling experiments with diverse signal distribution (due to severe defects in LC-MS acquisition)
+    Brute forces samples (rows) to follow gaussian distribution with same parameters (grand mean and std of original data)
+    Author: SB
+    :param df: Intensity dataframe (rows [samples], columns [protein feature])
+    :return: Quantile transformed intensity dataframe
+    """
+
+    # Apply quantile normalization on rows (samples)
+    transformer = QuantileTransformer(n_quantiles=len(df.T), output_distribution='normal', random_state=0)
+    data_qtransformed = pd.DataFrame(transformer.fit_transform(df.T).T, columns=df.columns, index=df.index)
+
+    # Adjust the scale and location to match original data's mean and standard deviation
+    original_mean = df.mean().mean()
+    original_std = df.stack().std()
+    data_adjusted = (data_qtransformed * original_std) + original_mean
+
+    # Return the adjusted quantile-transformed data
+    return data_adjusted
+
+def quantile_normalize(df):
+    """ Apply biological quantile normalization (rank ordered quantile normalization for Omics) on a dataframe
+    Author: SB
+    :param df: Intensity dataframe (rows [samples], columns [protein feature])
+    :return: Biological quantile normalized intensity dataframe
+    """
+
+    # Rank the values 
+    df_rank = df.rank(method="average")
     
-    # return log transformed df
-    return np.log(df)/np.log(base)
-=======
-import numpy as np
-import pandas as pd
-
-def example():
-    pass
-
-def logtransform():
-    pass
+    # Compute the average ranked value across all samples
+    df_sorted_mean = df.stack().groupby(df_rank.stack().astype(int)).mean()
+    
+    # Replace the ranked values with the average ranked values
+    df_normalized = df_rank.stack().astype(int).map(df_sorted_mean).unstack()
+    
+    # Return the normalized dataframe
+    return df_normalized
 
 
-def quantile_norm():
-    pass 
-
-def z_norm(df): 
-    #calculate mean
-
+def z_scale(df): 
+    """ Z-scales each feature (column) in a dataframe, i.e. for covariation / comparing across features
+    Author: SB
+    :param df: Intensity dataframe (rows [samples], columns [protein feature])
+    :return: Z-scaled intensity dataframe
+    """
+    
+    #calculate feature distribution parameters (mean and standard deviation)
     dfmean = df.mean(skipna = True)
-    #calculate variance
-    dfvar = df.var(skipna = True)
-    #standardize df
-    df_z = (df - dfmean)/np.sqrt(dfvar)
-    #return z-normalized data
+    dfstd = df.std(skipna = True)
+
+    #center and scale the features
+    df_z = (df - dfmean)/dfstd
+
+    #return z-scaled data
     return df_z 
 
-
+# %%
 ####################################################################
 # log transformation
 ####################################################################
@@ -535,4 +570,3 @@ def main(intensities,logfilename=None):
 
 def main():
     return example()
->>>>>>> 5f1fe3d (BZ added random comment)
