@@ -19,10 +19,6 @@ from sklearn.preprocessing import QuantileTransformer
 # Global 
 RANDOM_STATE = 42
 
-#%%
-import pandas as pd
-import numpy as np
-
 # %%
 ####################################################################
 # Helper functions
