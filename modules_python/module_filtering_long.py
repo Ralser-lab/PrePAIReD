@@ -26,8 +26,7 @@ import pandas as pd
 import numpy as np
 import os.path
 import time
-from Preprocessing import tools
-
+from modules_python import module_helper
 
 
 
@@ -197,7 +196,7 @@ def filtering(file, filters, ids=["Precursor.Id","Stripped.Sequence","Protein.Gr
                 logfile.close()
         if keep_track:
             if mask is None or mask_description is None:
-                mask,mask_description=tools.create_filtering_matrix(file,profile_annotation_df,min_peptides=filters["min_peptides"],values=values,ids=ids,filename_col=filename_col,diann_sample_column=diann_sample_column)
+                mask,mask_description=module_helper.create_filtering_matrix(file,profile_annotation_df,min_peptides=filters["min_peptides"],values=values,ids=ids,filename_col=filename_col,diann_sample_column=diann_sample_column)
     # FILTERING
     # FILTER BY PROTEOTYPIC
     # exclude non-proteotypic
@@ -515,7 +514,7 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
         logfile.close()
     # load filter_mask if needed and not provided
     if count_peptides and filter_mask is None:
-        filter_mask,mask_description=tools.create_filtering_matrix(file,profile_annotation_df,min_peptides=min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
+        filter_mask,mask_description=module_helper.create_filtering_matrix(file,profile_annotation_df,min_peptides=min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
     # delete path from diann_sample_column and set index in file (DIA-NN output)
     file["FileName_trimmed"] = list(map(lambda x: x.replace("/", "\\").split("\\")[-1], file[diann_sample_column].tolist()))
     # exclude filenames not present in profile_annotation_df
@@ -696,15 +695,15 @@ def load_profiles(ids, values=None, profiles_filename=None, raw_filename=None, f
         # load raw file
         file, path, filename = read_input(filename=raw_filename)
         #file = filtering(file=file, filter_proteotypic=filters["filter_proteotypic"], filter_by_qvalue=filters["filter_by_qvalue"], filter_by_global_qvalue=filters["filter_by_global_qvalue"], filter_by_gg_qvalue=filters["filter_by_gg_qvalue"], filter_by_pg_qvalue=filters["filter_by_pg_qvalue"], filter_by_p_qvalue=filters["filter_by_p_qvalue"], filter_by_lib_qvalue=filters["filter_by_lib_qvalue"], filter_by_PEP=filters["filter_by_PEP"],filter_by_MScorr=filters["filter_by_MScorr"], filter_by_evidence=filters["filter_by_evidence"], filter_by_MScorr_evidence_combined=filters["filter_by_MScorr_evidence_combined"], qvalue_thresh=filters["qvalue_thresh"], lib_qvalue_thresh=filters["lib_qvalue_thresh"], pep_thresh=filters["pep_thresh"], MScorr_thresh=filters["MScorr_thresh"], evidence_thresh=filters["evidence_thresh"], MScorr_evidence_combined_thresh=filters["MScorr_evidence_combined_thresh"])
-        tools.create_analysis_folder(analysis_folder)
+        module_helper.create_analysis_folder(analysis_folder)
         # filering on peptide level
         # file=filtering_peptide_specific(file=file) #UNDER CONSTRUCTION
-        profile_annotation_df = tools.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
+        profile_annotation_df = module_helper.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
                                                                  profile_order=profile_order, raw_data_folder=raw_data_folder, profile_annotation=profile_annotation, filename2run_pattern=filename2run_pattern, filename2samplegroup_pattern=filename2samplegroup_pattern, overwrite_filename_annotations=overwrite_filename_annotations,encoding=encoding, diann_sample_column=diann_sample_column)
         print("If wanted, annotate names of runs in "+analysis_folder+profile_annotation_file +
               " in column name on x-axis.\n You can reorder the runs as well.")
         input("Press enter when finished annotations (saved and closed file) or to skip...")
-        profile_annotation_df = tools.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
+        profile_annotation_df = module_helper.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
                                                                  profile_order=profile_order, raw_data_folder=raw_data_folder, profile_annotation=profile_annotation, filename2run_pattern=filename2run_pattern, filename2samplegroup_pattern=filename2samplegroup_pattern, overwrite_filename_annotations=overwrite_filename_annotations,encoding=encoding,diann_sample_column=diann_sample_column)
         file,filter_mask,mask_description = filtering(file=file, filters=filters, ids=ids, profile_annotation_df=profile_annotation_df, values=values, filename_col=filename_col, diann_sample_column=diann_sample_column)
         profiles_file, profiles_file_numpeptides, filter_mask, mask_description = create_profiles(file=file, ids=ids, values=values, profile_annotation_df=profile_annotation_df,
