@@ -26,10 +26,114 @@ import pandas as pd
 import numpy as np
 import os.path
 import time
+import seaborn as sns
+import matplotlib.pyplot as plt
 from modules_python import module_helper
 
 
+##############################################################################
+# Retention based sample thresholding (long)
+##############################################################################
 
+def calculate_retention_stats(df, step = 20):
+    """ 
+    Calculates number of recovered samples across incremental threshold intervals between 
+    0 - 100% sample completeness.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        A DataFrame with rows representing samples and columns representing 
+        protein features (or other measurements).
+    
+    step : int
+        number of intervals for thresholding bteween 0 - 100% sample completeness,
+        default = 20 
+
+    Returns:
+    --------
+    pandas.DataFrame
+        A DataFrame containing the retention statistics with:
+        - Samples: Number of retained samples at each threshold.
+        - Precursors: Number of retained protein features.
+        - Missing Sample Percentage: Average percentage of missing values.
+
+    Author: SB
+    """
+    summary = []
+    # Remove rows that are entierely NaN
+    data = df.dropna(axis = 0, how = 'all')
+
+    # Calculate Retention Thresholds
+    for x in range(step + 1):  
+        gradient = x * (100 / step)
+        select_sample = data.isnull().mean(axis=1) * 100
+        sample_filtered = data.loc[select_sample <= gradient, :]
+        if sample_filtered.empty:
+            sample_miss = 0.0
+        else:
+            sample_miss = sample_filtered.isnull().mean(axis=0).mean() * 100
+        summary.append((sample_filtered.shape[0], sample_filtered.shape[1], sample_miss))
+
+    # Return retention data
+    retention_stats = pd.DataFrame(summary, columns=['Samples', 'Precursors', 'Missing Sample Percentage'])
+    return retention_stats
+
+def apply_retention_filter(df, step = 20):
+    """ 
+    Applies threshold on samples based on retention across 0 - 100% sample 
+    completeness using first and second derivatives
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+    A DataFrame with rows representing samples and columns representing 
+    protein features (or other measurements).
+
+    step : int
+        number of intervals for thresholding bteween 0 - 100% sample completeness,
+        default = 20 
+
+    Returns:
+    --------
+    pandas.DataFrame
+        A DataFrame that is filtered by completeness based on retention gradient 
+        decceleration point. If no minimum is found, returns unfiltered dataframe
+        containing samples (rows) & protein features (columns)
+
+    Author: SB
+    """
+    # Set threshold multiplier and calculate retention stats
+    xmult = 100 / step
+    df_retention = calculate_retention_stats(df, step)
+
+    # Calculate missing threshold (retention) gradient minima
+    samples = df_retention['Missing Sample Percentage']
+    threshold = df_retention.index
+    first_derivative = np.gradient(samples, threshold)
+    second_derivative = np.gradient(first_derivative, threshold)
+    zero_idx = np.where(np.isclose(second_derivative, 0, atol = 1e-6))[0] #zero grad
+
+    # Filter on first mininum 
+    if zero_idx.size > 0:
+        first_zero_value = threshold[zero_idx[0]]*xmult
+        print(f"First zero gradient occurs at x = {first_zero_value} % sample completeness")
+
+        #Plot retention curve
+        sns.lineplot(x = threshold * xmult, y = samples)
+        plt.axvline(x = first_zero_value)
+        plt.ylabel('missing sample percent')
+        plt.xlabel('sample completeness')
+
+        #Apply filtering
+        filtered_df = df[df.isnull().mean(axis = 1)*100<=first_zero_value]
+        print(f"Dropped {df.shape[0]-filtered_df.shape[0]} samples")
+        return filtered_df
+    else:
+        print("No zero gradient found.")
+        print('Dropped 0 samples')
+        return df
+    
 
 ##############################################################################
 # File handling
