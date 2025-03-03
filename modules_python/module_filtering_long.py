@@ -90,17 +90,17 @@ def find_optimal_threshold(retention_stats, step = 20):
     retention_stats : pd.DataFrame
         DataFrame containing sample retention statistics.
 
-    step : int, optional
-        Number of intervals for thresholding sample completeness (default: 20).
-    
+    step : int
+        number of intervals for thresholding bteween 0 - 100% sample completeness,
+        default = 20 
+
     Returns
     -------
     float or None
         Optimal completeness threshold or None if no stabilization point is found.
     """
-    # Set threshold multiplier and calculate retention stats
+    # Set threshold multiplier and calculate gradient minimum
     xmult = 100 / step
-    # Calculate missing threshold (retention) gradient minima
     samples = retention_stats['Missing Sample Percentage']
     threshold = retention_stats.index
     first_derivative = np.gradient(samples, threshold)
@@ -117,20 +117,23 @@ def apply_retention_filter(df, step=20, logfilename=None):
 
     Parameters
     ----------
-    df : pd.DataFrame
-        DataFrame where rows are samples and columns are protein features.
+    df : pandas.DataFrame
+        A DataFrame with rows representing samples and columns representing 
+        protein features (or other measurements).
 
-    step : int, optional
-        Number of intervals for thresholding sample completeness (default: 20).
+    step : int
+        number of intervals for thresholding bteween 0 - 100% sample completeness,
+        default = 20 
     
-    logfilename : str or None, optional
+    logfilename : str or None
         If provided, logs progress to a specified file (default: None, no logging).
 
     Returns
     -------
     pd.DataFrame
-        Filtered DataFrame based on sample completeness.
-
+        Filtered DataFrame based on sample completeness if optimum is found, 
+        if no minimum exists, returns original DataFrame without filtering on
+        completeness 
     """
     if df.empty:
         logging.warning("DataFrame is empty. Returning unfiltered data.")
@@ -165,6 +168,7 @@ def apply_retention_filter(df, step=20, logfilename=None):
                 logfile.write(f"Dropped {df.shape[0] - filtered_df.shape[0]} samples.\n")
 
         return filtered_df
+
     logging.warning("No  minimum found. Returning unfiltered data.")
     return df
 
