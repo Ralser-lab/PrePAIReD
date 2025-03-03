@@ -18,7 +18,7 @@ functions:
 - add filtering from MSFragger output
 
 """
-
+# %%
 
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
@@ -28,7 +28,7 @@ import os.path
 import time
 import seaborn as sns
 import matplotlib.pyplot as plt
-from modules_python import module_helper
+#from modules_python import module_helper
 
 
 ##############################################################################
@@ -39,6 +39,7 @@ def calculate_retention_stats(df, step = 20):
     """ 
     Calculates number of recovered samples across incremental threshold intervals between 
     0 - 100% sample completeness.
+    Author: SB
     
     Parameters:
     -----------
@@ -57,8 +58,6 @@ def calculate_retention_stats(df, step = 20):
         - Samples: Number of retained samples at each threshold.
         - Precursors: Number of retained protein features.
         - Missing Sample Percentage: Average percentage of missing values.
-
-    Author: SB
     """
     summary = []
     # Remove rows that are entierely NaN
@@ -79,61 +78,94 @@ def calculate_retention_stats(df, step = 20):
     retention_stats = pd.DataFrame(summary, columns=['Samples', 'Precursors', 'Missing Sample Percentage'])
     return retention_stats
 
-def apply_retention_filter(df, step = 20):
+def find_optimal_threshold(retention_stats, step = 20):
     """ 
-    Applies threshold on samples based on retention across 0 - 100% sample 
-    completeness using first and second derivatives
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-    A DataFrame with rows representing samples and columns representing 
-    protein features (or other measurements).
-
-    step : int
-        number of intervals for thresholding bteween 0 - 100% sample completeness,
-        default = 20 
-
-    Returns:
-    --------
-    pandas.DataFrame
-        A DataFrame that is filtered by completeness based on retention gradient 
-        decceleration point. If no minimum is found, returns unfiltered dataframe
-        containing samples (rows) & protein features (columns)
-
+    Identifies the threshold at which missing sample percentage stabilizes 
+    using first and second derivatives.
     Author: SB
+
+    Parameters
+    ----------
+    retention_stats : pd.DataFrame
+        DataFrame containing sample retention statistics.
+
+    step : int, optional
+        Number of intervals for thresholding sample completeness (default: 20).
+    
+    Returns
+    -------
+    float or None
+        Optimal completeness threshold or None if no stabilization point is found.
     """
     # Set threshold multiplier and calculate retention stats
     xmult = 100 / step
-    df_retention = calculate_retention_stats(df, step)
-
     # Calculate missing threshold (retention) gradient minima
-    samples = df_retention['Missing Sample Percentage']
-    threshold = df_retention.index
+    samples = retention_stats['Missing Sample Percentage']
+    threshold = retention_stats.index
     first_derivative = np.gradient(samples, threshold)
     second_derivative = np.gradient(first_derivative, threshold)
     zero_idx = np.where(np.isclose(second_derivative, 0, atol = 1e-6))[0] #zero grad
-
-    # Filter on first mininum 
     if zero_idx.size > 0:
-        first_zero_value = threshold[zero_idx[0]]*xmult
-        print(f"First zero gradient occurs at x = {first_zero_value} % sample completeness")
+        return zero_idx[0] * xmult  # Convert to percentage scale
+    return None
 
-        #Plot retention curve
-        sns.lineplot(x = threshold * xmult, y = samples)
-        plt.axvline(x = first_zero_value)
-        plt.ylabel('missing sample percent')
-        plt.xlabel('sample completeness')
+def apply_retention_filter(df, step=20, logfilename=None):
+    """ 
+    Applies thresholding on samples based on retention completeness using first and second derivatives.
+    Author: SB
 
-        #Apply filtering
-        filtered_df = df[df.isnull().mean(axis = 1)*100<=first_zero_value]
-        print(f"Dropped {df.shape[0]-filtered_df.shape[0]} samples")
-        return filtered_df
-    else:
-        print("No zero gradient found.")
-        print('Dropped 0 samples')
-        return df
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame where rows are samples and columns are protein features.
+
+    step : int, optional
+        Number of intervals for thresholding sample completeness (default: 20).
     
+    logfilename : str or None, optional
+        If provided, logs progress to a specified file (default: None, no logging).
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame based on sample completeness.
+
+    """
+    if df.empty:
+        logging.warning("DataFrame is empty. Returning unfiltered data.")
+        return df
+
+    logging.info("Calculating retention statistics...")
+    retention_stats = calculate_retention_stats(df, step)
+
+    logging.info("Identifying optimal threshold...")
+    optimal_threshold = find_optimal_threshold(retention_stats, step)
+
+    if optimal_threshold is not None:
+        logging.info(f"Optimal threshold found at {optimal_threshold:.2f}% sample completeness.")
+
+        # Plot retention curve
+        sns.lineplot(x=retention_stats.index * (100 / step), y=retention_stats['Missing Sample Percentage'])
+        plt.axvline(x=optimal_threshold, linestyle="--", color="red", label=f"Threshold: {optimal_threshold:.2f}%")
+        plt.ylabel('Missing Sample Percentage')
+        plt.xlabel('Sample Completeness (%)')
+        plt.title('Retention Threshold Detection')
+        plt.legend()
+        plt.show()
+
+        # Apply filtering
+        filtered_df = df[df.isnull().mean(axis=1) * 100 <= optimal_threshold]
+        logging.info(f"Dropped {df.shape[0] - filtered_df.shape[0]} samples.")
+
+        # Write to log file if specified
+        if logfilename:
+            with open(logfilename, "a") as logfile:
+                logfile.write(f"Optimal threshold: {optimal_threshold:.2f}% sample completeness.\n")
+                logfile.write(f"Dropped {df.shape[0] - filtered_df.shape[0]} samples.\n")
+
+        return filtered_df
+    logging.warning("No  minimum found. Returning unfiltered data.")
+    return df
 
 ##############################################################################
 # File handling
