@@ -38,8 +38,8 @@ from modules_python import module_helper
 
 def calculate_retention_stats(df, step = 20):
     """ 
-    Calculates number of recovered samples across incremental threshold intervals between 
-    0 - 100% sample completeness.
+    Calculates number of recovered samples across incremental threshold intervals 
+    between 0 - 100% sample completeness.
     Author: SB
     
     Parameters:
@@ -59,6 +59,7 @@ def calculate_retention_stats(df, step = 20):
         - Samples: Number of retained samples at each threshold.
         - Precursors: Number of retained protein features.
         - Missing Sample Percentage: Average percentage of missing values.
+
     """
     summary = []
     # Remove rows that are entierely NaN
@@ -76,13 +77,14 @@ def calculate_retention_stats(df, step = 20):
         summary.append((sample_filtered.shape[0], sample_filtered.shape[1], sample_miss))
 
     # Return retention data
-    retention_stats = pd.DataFrame(summary, columns=['Samples', 'Precursors', 'Missing Sample Percentage'])
+    retention_stats = pd.DataFrame(summary, columns=['Samples', 'Precursors', 
+    'Missing Sample Percentage'])
     return retention_stats
 
 def find_optimal_threshold(retention_stats, step = 20):
     """ 
     Identifies the threshold at which missing sample percentage stabilizes 
-    using first and second derivatives.
+    by finding first and second derivative minima on retention data
     Author: SB
 
     Parameters
@@ -98,6 +100,7 @@ def find_optimal_threshold(retention_stats, step = 20):
     -------
     float or None
         Optimal completeness threshold or None if no stabilization point is found.
+
     """
     # Set threshold multiplier and calculate gradient minimum
     xmult = 100 / step
@@ -112,7 +115,8 @@ def find_optimal_threshold(retention_stats, step = 20):
 
 def apply_retention_filter(df, step=20, logfilename=None):
     """ 
-    Applies thresholding on samples based on retention completeness using first and second derivatives.
+    Applies thresholding on samples based on retention completeness using first and 
+    second derivatives.
     Author: SB
 
     Parameters
@@ -134,6 +138,7 @@ def apply_retention_filter(df, step=20, logfilename=None):
         Filtered DataFrame based on sample completeness if optimum is found, 
         if no minimum exists, returns original DataFrame without filtering on
         completeness 
+
     """
     if df.empty:
         logging.warning("DataFrame is empty. Returning unfiltered data.")
@@ -145,12 +150,14 @@ def apply_retention_filter(df, step=20, logfilename=None):
     logging.info("Identifying optimal threshold...")
     optimal_threshold = find_optimal_threshold(retention_stats, step)
 
-    if optimal_threshold is not None:
+    if optimal_threshold is not None: # If gradient optimum found, apply filter
         logging.info(f"Optimal threshold found at {optimal_threshold:.2f}% sample completeness.")
 
         # Plot retention curve
-        sns.lineplot(x=retention_stats.index * (100 / step), y=retention_stats['Missing Sample Percentage'])
-        plt.axvline(x=optimal_threshold, linestyle="--", color="red", label=f"Threshold: {optimal_threshold:.2f}%")
+        sns.lineplot(x=retention_stats.index * (100 / step), 
+            y=retention_stats['Missing Sample Percentage'])
+        plt.axvline(x=optimal_threshold, linestyle="--", color="red", 
+            label=f"Threshold: {optimal_threshold:.2f}%")
         plt.ylabel('Missing Sample Percentage')
         plt.xlabel('Sample Completeness (%)')
         plt.title('Retention Threshold Detection')
@@ -169,7 +176,7 @@ def apply_retention_filter(df, step=20, logfilename=None):
 
         return filtered_df
 
-    logging.warning("No  minimum found. Returning unfiltered data.")
+    logging.warning("No  minimum found. Returning unfiltered data.") # If not optimum found
     return df
 
 ##############################################################################
