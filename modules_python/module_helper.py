@@ -13,7 +13,8 @@ functions:
     - load_metadata: loads existing metadata, either automatically generated tsv-file or manually curated xlsx-file
     - weighted_median: calculate the weighted median for an array with given weights
     - weighted_nanmedian: calculate the weighted median for an array with given weights ignoring NaNs
-
+    - insert_column_level: inserts a new level to MultiIndex columns
+    - annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles
 
 """
 
@@ -887,4 +888,62 @@ def weighted_nanmedian(values,weights):
         return(weighted_median(values,weights))
     else:
         return(np.nan)
+
+
+def insert_column_level(df,new_level,level_name):
+    """
+    inserts a new level to MultiIndex columns. Insertion of new index level possible by passing transposed dataframe and transposing again after.
+
+    author: BZ
     
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe with multiindex columns.
+    new_level : iterable 
+        values for new level of length as df.columns
+    level_name : str
+        name for the new level.
+
+    Returns
+    -------
+    pd.DataFrame
+
+    """
+    columns_df=pd.DataFrame(index=df.columns)
+    columns_df[level_name]=new_level
+    df.columns=pd.MultiIndex.from_frame(columns_df.reset_index())
+    return(df)
+
+
+
+def annotate_metadata_to_profiles(profiles, metadata_df, sample_col="Sample.ID"):
+    """
+    adds all metadata as multi-layer column names to profiles
+
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        DataFrame with IDs as rows, samples as columns and intensities as values.
+    metadata_df : pd.DataFrame
+        DataFrame with samples as rows and metadata variables as columns.
+    sample_col : str , optional
+        name of the column in metadata_df containing the sample names as in profiles.columns or profiles.columns level "sample". The default is "Sample.ID".
+
+    Returns
+    -------
+    profiles : pd.DataFrame
+        same format as input argument profiles with MultiIndex columns containing all variables from the metadata
+
+    """
+    if metadata_df.index.name is None:
+        metadata_df.index.name="Index"
+    metadata_index_orig=metadata_df.index.names
+    metadata_df.reset_index(inplace=True)
+    metadata_df.set_index(sample_col,inplace=True,drop=False)
+    if "sample" in profiles.columns.names:
+      profiles.columns=pd.MultiIndex.from_arrays(profiles.columns.to_frame().join(metadata_df.loc[profiles.columns.get_level_values("sample")],rsuffix="_metadata").T.values,names=profiles.columns.names + metadata_df.columns.tolist())
+    else:
+      profiles.columns=pd.MultiIndex.from_arrays(profiles.columns.to_frame().join(metadata_df.loc[profiles.columns],rsuffix="_metadata").T.values,names=profiles.columns.names + metadata_df.columns.tolist())
+    metadata_df.set_index(metadata_index_orig,inplace=True)
+    return(profiles)
