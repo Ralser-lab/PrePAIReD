@@ -19,9 +19,8 @@ from collections import Counter
 import time
 
 #own scripts
-from Python.Snippets import global_variables as global_variables
-from Python.Preprocessing import diann_output_filtering
-
+from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
+from modules_python import module_helper
 
 
 
@@ -77,7 +76,7 @@ def remove_peptides_with_excessing_nans(peptide_profiles, file=None,profile_anno
         if mask is None:
             if ids is None:
                 print("Please provide Ids")
-            mask,mask_description=diann_output_filtering.create_filtering_matrix(file, profile_annotation_df, min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
+            mask,mask_description=module_helper.create_filtering_matrix(file, profile_annotation_df, min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
     if "sample group" in peptide_profiles.index:
         indices = peptide_profiles.index.drop("sample group")
     else:
