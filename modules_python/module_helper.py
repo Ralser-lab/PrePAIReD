@@ -11,6 +11,9 @@ functions:
     - create_filename_annotations_file: if no metadata present, creates a metadata .tsv file containing the original filenames, shorter sample names and sample groups
     - check_filename_annotations_on_unique_indices: sample and group names in created metadata can be assigned manually (e.g. via Excel). This function checks whether sample names are unique
     - load_metadata: loads existing metadata, either automatically generated tsv-file or manually curated xlsx-file
+    - weighted_median: calculate the weighted median for an array with given weights
+    - weighted_nanmedian: calculate the weighted median for an array with given weights ignoring NaNs
+
 
 """
 
@@ -787,3 +790,101 @@ def load_metadata(metafilename=None,metadata_sheet="Sheet1",ending="",sample_col
     print("Meta-data/Profile Annotations loaded successfully.")
     return([metafilename,metadata_df])
 
+
+
+#source: https://www.geeksforgeeks.org/program-to-find-weighted-median-of-a-given-array/ , access: 02.11.2022 12:00
+def weighted_median(arr,W):
+    """
+    Calculate the weighted median for an array with weights W.
+    author: BZ
+    
+    Parameters
+    ----------
+    arr : np.array
+        array for which the median should be calculated.
+    W : TYPE
+        weights for every element of arr.
+
+    Returns
+    -------
+    weighted median of the array arr with weights W.
+
+    """
+    # Store pairs of arr[i] and W[i]
+    pairs = []
+    for index in range(len(arr)):
+        pairs.append([arr[index], W[index]])
+    # Sort the list of pairs w.r.t.
+    # to their arr[] values
+    pairs.sort(key = lambda p: p[0])
+    # If N is odd
+    if len(arr) % 2 != 0:
+        # Traverse the set pairs
+        # from left to right
+        sums = 0
+        for element, weight in pairs:
+            # Update sums
+            sums += weight
+            # If sum becomes > 0.5
+            if sums > 0.5:
+                return(element)
+    # If N is even
+    else:
+        # For lower median traverse
+        # the set pairs from left
+        sums = 0
+        for element, weight in pairs:
+            # Update sums
+            sums += weight
+            # When sum >= 0.5
+            if sums >= 0.5:
+                lower_median=element
+                break
+        # For upper median traverse
+        # the set pairs from right
+        sums = 0
+        for index in range(len(pairs)-1, -1, -1):
+            element = pairs[index][0]
+            weight = pairs[index][1]
+            # Update sums
+            sums += weight
+            # When sum >= 0.5
+            if sums >= 0.5:
+                upper_median=element
+                break
+        return(np.mean([lower_median,upper_median]))
+    
+
+
+def weighted_nanmedian(values,weights):
+    """
+    Calculate weighted median ignoring NaNs and zero weights, scales weights to a sum of 1, returns nan for weighted mean of empty arrays
+    author: BZ
+    
+    Parameters
+    ----------
+    values : list or np.array
+        list or array for which the weighted median should be calculated.
+    weights : list or array
+        list or array providing the weights for values.
+
+    Returns
+    -------
+    weighted median of the array arr with weights W ignoring missing values.
+
+    """
+    #remove missing values and convert input to np.arrays
+    nans=np.isnan(values)
+    values=np.asarray(values)[~nans]
+    weights=np.asarray(weights)[~nans]
+    #remove weights with zeros
+    notzeros=np.nonzero(weights)
+    values=values[notzeros]
+    weights=weights[notzeros]
+    #scale weights between 0 and 1
+    weights=weights/np.sum(weights)
+    if len(values)>0:
+        return(weighted_median(values,weights))
+    else:
+        return(np.nan)
+    
