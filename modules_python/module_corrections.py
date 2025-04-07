@@ -192,6 +192,9 @@ def correct_for_confounders(profiles_uncorr,metadata_df,datatype_df,sample_col=N
         containing for every ID the association/correlation, pvalue from test on association/correlation and coefficient of determination R2 from the model.
 
     """
+    if model not in ["OLS","ridge","lasso","elasticnet","huber","bayesian","loess"]:
+        print("Model " + model + " not implemented yet, no correction applied.")
+        return([None,None]) # or sys.exit(0)
     profiles=profiles_uncorr.copy()
     if metadata_df is None:
         metadata=profiles.columns.to_frame().set_index(sample_col)
