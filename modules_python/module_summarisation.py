@@ -14,7 +14,7 @@ Output: Summarised wide-format data
     - summarize_peptides: summarizes peptide intensities to protein intensities with own approach using a pythagorean mean on representative precursors for a protein
     - transform_profiles_to_longformat_table: reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns
     - MaxLFQ_summarization: summarize precursors to protein intensities using MaxLFQ
-
+    - precursor_sum: sums precursor intensities to obtain protein quantities
 
 """
 
@@ -705,5 +705,32 @@ def MaxLFQ_summarization(peptide_profiles,unlog=False, seq_col="Precursor.Id", p
         logfile.write("\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarization done.\n")
         logfile.close()
     return(protein_profiles)
+
+
+
+def precursor_sum(peptide_profiles,protein_levels=["Protein.Group","Genes"]):
+    """
+    sums precursor intensities to obtain protein quantities.
+
+    author: BZ
     
+    Parameters
+    ----------
+    peptide_profiles : pd.DataFrame
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+    protein_levels : TYPE, optional
+        name of index level(s) containing protein Ids. The default is ["Protein.Group","Genes"].
+
+    Returns
+    -------
+    pd.DataFrame.
+
+    """
+    protein_profiles=peptide_profiles.groupby(axis=0,level=protein_levels).sum()
+    if global_variables.logfilename is not None:
+        logfile=open(global_variables.logfilename,"a")
+        logfile.write("\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n")
+        logfile.close()
+    return(protein_profiles)
+
     
