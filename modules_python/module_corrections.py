@@ -448,6 +448,8 @@ def batchwise_drift_correction(logprofiles, metadata_df, metadata_metadata, mode
                     elif len(fitsamples_batch)<10:
                         print("\nWARNING: Only "+str(len(fitsamples_batch)) + " samples used for fitting correction model in batch: " + str(batch) + ", covariate: " + str(covariate))
                 corr_logprofiles, r2_df = correct_for_confounders(profiles_uncorr=uncorr_logprofiles,metadata_df=pd.DataFrame(uncorr_logprofiles.columns.to_frame(index=False).set_index(sample_col)[covariate]),datatype_df=metadata_metadata,sample_col=sample_col,model=model,random_state=random_state,fitsamples=fitsamples_batch)
+                r2_df.rename(columns={"R2":"R2 "+covariate})
+                r2_df.columns = [x + " batch"+str(batch) for x in r2_df.columns]
                 r2_dfs.append(r2_df)
                 corrected_logprofiles.append(corr_logprofiles)
             #concatenate all corrected profiles and apply batch correction
@@ -463,6 +465,7 @@ def batchwise_drift_correction(logprofiles, metadata_df, metadata_metadata, mode
                     print("\nNo samples for model-fitting present in batch "+str(batch)+"\nPlease adjust fitsamples argument.") 
                     continue 
             corr_logprofiles, r2_df = correct_for_confounders(profiles_uncorr=uncorr_logprofiles,metadata_df=pd.DataFrame(uncorr_logprofiles.columns.to_frame(index=False).set_index("sample")[covariates]),datatype_df=metadata_metadata,sample_col="sample",model=model,random_state=42,fitsamples=fitsamples_batch)
+            r2_df.columns = [x + " batch"+str(batch) for x in r2_df.columns]
             r2_dfs.append(r2_df)
             #r2_df.to_csv(qc_folder + savefilename_precursors + appendix + "reprep_normalized_imputed,imputed_loesscorrected_on_all_for_SPBatch_"+str(int(spbatch))+".tsv",sep="\t")
             corrected_logprofiles.append(corr_logprofiles)
