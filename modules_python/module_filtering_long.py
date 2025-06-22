@@ -29,155 +29,125 @@ import time
 import logging
 import seaborn as sns
 import matplotlib.pyplot as plt
+import scipy.stats as stats
 from modules_python import module_helper
 
-
 ##############################################################################
-# Retention based sample thresholding (long)
+# Sample thresholding based on statistical inference on detection proportion
+# Author: SB
 ##############################################################################
 
-def calculate_retention_stats(df, step = 20):
-    """ 
-    Calculates number of recovered samples across incremental threshold intervals 
-    between 0 - 100% sample completeness.
-    Author: SB
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        A DataFrame with rows representing samples and columns representing 
-        protein features (or other measurements).
-    
-    step : int
-        number of intervals for thresholding bteween 0 - 100% sample completeness,
-        default = 20 
-
-    Returns:
-    --------
-    pandas.DataFrame
-        A DataFrame containing the retention statistics with:
-        - Samples: Number of retained samples at each threshold.
-        - Precursors: Number of retained protein features.
-        - Missing Sample Percentage: Average percentage of missing values.
-
+def condition_on_missingness(data_in):
     """
-    summary = []
-    # Remove rows that are entierely NaN
-    data = df.dropna(axis = 0, how = 'all')
+    Calculates the percentage of missing values for each precursor (column) in the input DataFrame.
+    Adds a 'missingness' attribute sorted by missing percentage.
 
-    # Calculate Retention Thresholds
-    for x in range(step + 1):  
-        gradient = x * (100 / step)
-        select_sample = data.isnull().mean(axis=1) * 100
-        sample_filtered = data.loc[select_sample <= gradient, :]
-        if sample_filtered.empty:
-            sample_miss = 0.0
-        else:
-            sample_miss = sample_filtered.isnull().mean(axis=0).mean() * 100
-        summary.append((sample_filtered.shape[0], sample_filtered.shape[1], sample_miss))
-
-    # Return retention data
-    retention_stats = pd.DataFrame(summary, columns=['Samples', 'Precursors', 
-    'Missing Sample Percentage'])
-    return retention_stats
-
-def find_optimal_threshold(retention_stats, step = 20):
-    """ 
-    Identifies the threshold at which missing sample percentage stabilizes 
-    by finding first and second derivative minima on retention data
-    Author: SB
+    author: SB
 
     Parameters
     ----------
-    retention_stats : pd.DataFrame
-        DataFrame containing sample retention statistics.
-
-    step : int
-        number of intervals for thresholding bteween 0 - 100% sample completeness,
-        default = 20 
+    data_in : pd.DataFrame
+        Input DataFrame with samples as rows and precursors as columns.
 
     Returns
     -------
-    float or None
-        Optimal completeness threshold or None if no stabilization point is found.
-
+    missingness : pd.Series
+        Series indexed by precursor names, indicating percentage of missing values.
     """
-    # Set threshold multiplier and calculate gradient minimum
-    xmult = 100 / step
-    samples = retention_stats['Missing Sample Percentage']
-    threshold = retention_stats.index
-    first_derivative = np.gradient(samples, threshold)
-    second_derivative = np.gradient(first_derivative, threshold)
-    zero_idx = np.where(np.isclose(second_derivative, 0, atol = 1e-6))[0] #zero grad
-    if zero_idx.size > 0:
-        return zero_idx[0] * xmult  # Convert to percentage scale
-    return None
+    missing = data_in.isna().mean(axis=0) * 100
+    missingness = missing.sort_values()
+    return missingness
 
-def apply_retention_filter(df, step=20, logfilename=None):
-    """ 
-    Applies thresholding on samples based on retention completeness using first and 
-    second derivatives.
-    Author: SB
+
+def calculate_optimum_threshold(data_in, alpha = .95):
+    """
+    Calculates the optimal missingness threshold based on a parametric (normal distribution)
+    statistical approach. Provides visualizations (KDE and pseudo CDF plots) to assist threshold 
+    determination.
+
+    author: SB
 
     Parameters
     ----------
-    df : pandas.DataFrame
-        A DataFrame with rows representing samples and columns representing 
-        protein features (or other measurements).
+    data_in : pd.DataFrame
+        Input DataFrame containing missing values.
+    alpha : float, optional
+        Confidence interval alpha level for threshold calculation (default 0.95).
 
-    step : int
-        number of intervals for thresholding bteween 0 - 100% sample completeness,
-        default = 20 
+    Returns
+    -------
+    missingness : pd.Series
+        Series indicating percentage of missing values per precursor.
+    upper_bound : float
+        Calculated threshold value (upper bound) for missingness percentage.
+    """
+
+    missingness = condition_on_missingness(data_in)
+
+    # Parametric stats
+    mu = np.mean(missingness)
+    sigma = np.std(missingness, ddof=1)
+    z = stats.norm.ppf(alpha)  # One-sided Z value
+    upper_bound = mu + z * sigma
+
+    # Plot empirical KDE with normal overlay
+    plt.figure(figsize=(6,5))
+    sns.kdeplot(missingness, fill=True, label='Empirical KDE')
+
+    # Plot normal PDF with same mean and std
+    x_vals = np.linspace(min(missingness), max(missingness), 1000)
+    normal_pdf = stats.norm.pdf(x_vals, mu, sigma)
+    plt.plot(x_vals, normal_pdf, linestyle='--', label='Normal PDF', color='black')
+    # Add vertical line at upper bound
+    plt.axvline(upper_bound, color='red', linestyle='--', label=f'{int(alpha*100)}% Upper Bound = {upper_bound:.2f}%')
+    # Labels and legend
+    plt.xlabel('Sample Missingness (%)')
+    plt.title(f'Missingness PDF with Parametric CI (alpha = {alpha})')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
     
-    logfilename : str or None
-        If provided, logs progress to a specified file (default: None, no logging).
+    # Plot pseudo CDF using cumulative retention of samples (not %)
+    thresholds = np.linspace(0, 100, 21)
+    recovered_counts = (missingness.values[None, :] <= thresholds[:, None]).sum(axis=1)
+    plt.figure(figsize = (6,5))
+    plt.plot(thresholds, recovered_counts)
+    plt.title(f'Pseudo CDF using sample retention (alpha = {alpha})')
+    plt.xlabel('Sample Missingness Threshold %')
+    plt.axvline(upper_bound, linestyle = '--', color = 'red')
+    plt.show()
+
+    return missingness, upper_bound
+
+def detection_control(data_in, optimum = 'Auto'):
+    """
+    Integrated pipeline that filters precursors from the dataset based on a calculated or 
+    user-defined optimal missingness threshold.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Input DataFrame.
+    optimum : str or float, optional
+        Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
 
     Returns
     -------
     pd.DataFrame
-        Filtered DataFrame based on sample completeness if optimum is found, 
-        if no minimum exists, returns original DataFrame without filtering on
-        completeness 
-
+        Filtered DataFrame retaining precursors below missingness threshold.
     """
-    if df.empty:
-        logging.warning("DataFrame is empty. Returning unfiltered data.")
-        return df
+    
+    missingness, optimal_threshold = calculate_optimum_threshold(data_in)
 
-    logging.info("Calculating retention statistics...")
-    retention_stats = calculate_retention_stats(df, step)
+    if optimum != 'Auto':
+        optimal_threshold = optimum 
 
-    logging.info("Identifying optimal threshold...")
-    optimal_threshold = find_optimal_threshold(retention_stats, step)
+    data_in = data_in.loc[:,missingness<optimal_threshold]
 
-    if optimal_threshold is not None: # If gradient optimum found, apply filter
-        logging.info(f"Optimal threshold found at {optimal_threshold:.2f}% sample completeness.")
+    return data_in
 
-        # Plot retention curve
-        sns.lineplot(x=retention_stats.index * (100 / step), 
-            y=retention_stats['Missing Sample Percentage'])
-        plt.axvline(x=optimal_threshold, linestyle="--", color="red", 
-            label=f"Threshold: {optimal_threshold:.2f}%")
-        plt.ylabel('Missing Sample Percentage')
-        plt.xlabel('Sample Completeness (%)')
-        plt.title('Retention Threshold Detection')
-        plt.legend()
-        plt.show()
-
-        # Apply filtering
-        filtered_df = df[df.isnull().mean(axis=1) * 100 <= optimal_threshold]
-        logging.info(f"Dropped {df.shape[0] - filtered_df.shape[0]} samples.")
-
-        # Write to log file if specified
-        if logfilename:
-            with open(logfilename, "a") as logfile:
-                logfile.write(f"Optimal threshold: {optimal_threshold:.2f}% sample completeness.\n")
-                logfile.write(f"Dropped {df.shape[0] - filtered_df.shape[0]} samples.\n")
-
-        return filtered_df
-
-    logging.warning("No  minimum found. Returning unfiltered data.") # If not optimum found
-    return df
 
 ##############################################################################
 # File handling

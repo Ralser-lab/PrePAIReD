@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 
 #statistics and modelling
 import pycombat #CoAxLab
+import scanpy as sc
 #from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
@@ -35,9 +36,122 @@ from sklearn import linear_model
 from skmisc import loess
 from sklearn import metrics
 
+##############################################################################
+# Batch correction using parametric ComBat
+# Author: SB
+##############################################################################
+
+def prepare_input_data(raw_data, log_transform=True):
+    """
+    Prepares data by optionally applying log2 transformation.
+
+    author: SB
+
+    Parameters
+    ----------
+    raw_data : pd.DataFrame
+        Raw data for batch correction.
+    log_transform : bool, optional
+        Applies log2 transform if True (default True).
+
+    Returns
+    -------
+    pd.DataFrame
+        Prepared data.
+    """
+    return np.log2(raw_data) if log_transform else raw_data.copy()
+
+def load_batch_metadata(input_data, meta_path, batchID):
+    """
+    Loads and merges batch metadata aligned with input data samples.
+
+    author: SB
+
+    Parameters
+    ----------
+    input_data : pd.DataFrame
+        DataFrame of input samples.
+    meta_path : str
+        Path to metadata Excel file.
+    batchID : str
+        Column identifier for batch information.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame of merged batch metadata.
+    """
+    metadata = pd.read_excel(meta_path, index_col=0)
+    batchdata = metadata[[batchID]].drop_duplicates()
+    input_batchdata = pd.DataFrame(index=input_data.index)
+    batchdata_merged = pd.merge(input_batchdata, batchdata, how='inner', left_index=True, right_index=True)
+    return batchdata_merged
 
 
+def parametric_combat(input_data, batchdata, batchID):
+    """
+    Performs batch correction using ComBat method from Scanpy.
 
+    author: SB
+
+    Parameters
+    ----------
+    input_data : pd.DataFrame
+        Input data to batch correct.
+    batchdata : pd.DataFrame
+        Batch information aligned to samples.
+    batchID : str
+        Identifier for batch information.
+
+    Returns
+    -------
+    pd.DataFrame
+        Batch-corrected data.
+    """
+    adata = sc.AnnData(X=input_data.values, 
+                       obs=batchdata, 
+                       var=pd.DataFrame(index=input_data.columns))
+
+    sc.pp.combat(adata, batchID)
+
+    corrected_data = pd.DataFrame(adata.X, 
+                                  index=adata.obs_names, 
+                                  columns=input_data.columns,
+                                  dtype=float)
+    return corrected_data
+
+
+def combat_batch_correction(data_in, metadata, batchID):
+    """
+    Integrated pipeline for preparing data, loading metadata, and performing ComBat batch correction.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Data requiring batch correction.
+    metadata : str
+        Path to metadata Excel file.
+    batchID : str
+        Batch identifier column in metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        Batch-corrected dataset.
+    """
+
+    # Prepare input data
+    input_data = prepare_input_data(data_in, log_transform=True)
+
+    # Load metadata and merge
+    batchdata = load_batch_metadata(input_data, meta_path=metadata, batchID=batchID)
+
+    # Perform batch correction
+    corrected_data = combat_batch_correction(input_data, batchdata, batchID=batchID)
+
+    return corrected_data
 
 def batchcorrection_combat(profiles,correction_level,fitsamples=None,covariates=None,binlevel=False,bins=10,sample_column="sample"):
     """

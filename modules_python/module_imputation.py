@@ -13,7 +13,6 @@ Output: imputed wide-format data
 
 """
 
-
 #general
 import pandas as pd
 import numpy as np
@@ -29,7 +28,211 @@ from modules_python import module_helper
 from itertools import permutations
 import igraph
 from sklearn.impute import KNNImputer
+import statsmodels.api as sm
 
+##############################################################################
+# Mixed imputation by detection probability modelling using precursor intensities
+# Author: SB
+##############################################################################
+
+def preprocess_data(data):
+    """
+    Preprocesses input data by removing fully missing columns and replacing zeros with NaNs.
+
+    author: SB
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data for preprocessing.
+
+    Returns
+    -------
+    pd.DataFrame
+        Preprocessed DataFrame.
+    """
+
+    data = data.dropna(axis=1, how='all')
+    data = data.replace(0, np.nan)
+
+    return data
+
+def compute_log2_means_and_missingness(data):
+    """
+    Computes log2-transformed mean abundances and calculates missingness proportion per precursor.
+
+    author: SB
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input DataFrame.
+
+    Returns
+    -------
+    means_log2 : pd.Series
+        Log2-transformed mean abundance per precursor.
+    missing : pd.Series
+        Missingness proportion per precursor.
+    """
+
+    means = data.mean(axis=0)
+    means_log2 = np.log2(means.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    missing = data.isnull().mean(axis=0)
+    return means_log2, missing
+
+def detection_probability_curve(means_log2, missingness, boundary=0.5):
+    """
+    Fits logistic regression to precursor detection probability and calculates a decision 
+    boundary for missingness classification.
+
+    author: SB
+
+    Parameters
+    ----------
+    means_log2 : pd.Series
+        Log2-transformed precursor abundances.
+    missingness : pd.Series
+        Missingness proportion per precursor.
+    boundary : float, optional
+        Decision probability boundary for classification (default 0.5).
+
+    Returns
+    -------
+    decision_boundary : float
+        Calculated abundance threshold for MNAR/MAR classification.
+    result : statsmodels.GLMResults
+        Logistic regression model fit results.
+    """
+
+    df = pd.DataFrame({
+        'Avg Log2 Abundance': means_log2,
+        'Missing %': 1 - missingness
+    }).dropna()
+
+    X = sm.add_constant(df['Avg Log2 Abundance'])
+    y = df['Missing %']
+
+    model = sm.GLM(y, X, family=sm.families.Binomial())
+    result = model.fit()
+
+    intercept, coef = result.params
+
+    decision_boundary = (np.log(boundary / (1 - boundary)) - intercept) / coef
+
+    return round(decision_boundary, 2), result
+
+
+def classify_precursors(means_log2, boundary):
+    """
+    Classifies precursors as Missing Not At Random (MNAR) based on an abundance boundary.
+
+    author: SB
+
+    Parameters
+    ----------
+    means_log2 : pd.Series
+        Log2 mean abundances.
+    boundary : float
+        Decision boundary for classification.
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask indicating MNAR (True) or MAR (False) precursors.
+    """
+
+    MNAR_mask = means_log2 < boundary
+    return MNAR_mask
+
+
+def mixed_imputer(data, MNAR_mask, missing, boundary, ramp, knn=3):
+    """
+    Imputes missing data using minimum abundance for MNAR precursors and KNN imputation for MAR precursors.
+
+    author: SB
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame with missing precursor abundances.
+    MNAR_mask : pd.Series
+        Boolean mask identifying MNAR precursors.
+    missing : pd.Series
+        Missingness per precursor.
+    boundary : float
+        Decision boundary for MNAR/MAR classification.
+    ramp : float
+        Missingness threshold percentage for precursor inclusion.
+    knn : int, optional
+        Number of neighbors for KNN imputation (default 3).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with missing values imputed.
+    """
+
+    threshold = ramp / 100
+    min_values = data.min()
+
+    # Filter columns based on missingness threshold
+    data_filtered = data.loc[:, missing < (1 - threshold)]
+
+    # Ensure MNAR and MAR columns exist after filtering
+    MNAR_cols = MNAR_mask[MNAR_mask].index.intersection(data_filtered.columns)
+    MAR_cols = MNAR_mask[~MNAR_mask].index.intersection(data_filtered.columns)
+
+    # Minimum imputation for MNAR columns
+    data_filtered[MNAR_cols] = data_filtered[MNAR_cols].fillna(min_values[MNAR_cols])
+
+    # KNN imputation (applied after minimum imputation)
+    imputer = KNNImputer(n_neighbors=knn)
+    data_imputed = pd.DataFrame(
+        imputer.fit_transform(data_filtered),
+        index=data_filtered.index,
+        columns=data_filtered.columns
+    )
+
+    return data_imputed
+
+def mixed_imputation(data, threshold = 50):
+    """
+    Integrated pipeline for preprocessing data, classifying precursors, and performing 
+    mixed imputation (minimum and KNN).
+
+    author: SB
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data requiring imputation.
+    threshold : float, optional
+        Missingness threshold for precursor retention (default 50%).
+
+    Returns
+    -------
+    pd.DataFrame
+        Imputed dataset.
+    """
+
+    # Initial Data
+    sample_filtered = preprocess_data(data)
+
+    # Compute Means and Missingness
+    means_log2, missing = compute_log2_means_and_missingness(sample_filtered)
+
+    # Fit Logistic Regression
+    boundary, regression_result = detection_probability_curve(means_log2, missing, boundary=0.5)
+    print(f"Decision boundary (Avg Log2): {boundary}")
+
+    # Classify MNAR/MAR
+    MNAR_mask = classify_precursors(means_log2, boundary)
+
+    # Perform Mixed Imputation
+    imputed_data = mixed_imputer(sample_filtered, MNAR_mask, missing, boundary, ramp=threshold, knn=3)
+
+    return imputed_data
 
 def graphbased_imputation(peptide_profiles,mask=None,mask_description=None,impute_modifications=False,group=None,estimate_threshold=1,weighting=False,keep_track=True):
     """
