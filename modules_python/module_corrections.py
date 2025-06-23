@@ -149,7 +149,7 @@ def combat_batch_correction(data_in, metadata, batchID):
     batchdata = load_batch_metadata(input_data, meta_path=metadata, batchID=batchID)
 
     # Perform batch correction
-    corrected_data = combat_batch_correction(input_data, batchdata, batchID=batchID)
+    corrected_data = parametric_combat(input_data, batchdata, batchID=batchID)
 
     return corrected_data
 
