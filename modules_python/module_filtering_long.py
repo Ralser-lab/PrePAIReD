@@ -141,6 +141,9 @@ def detection_control(data_in, optimum = 'Auto'):
     
     missingness, optimal_threshold = calculate_optimum_threshold(data_in)
 
+         ## Check this bit as dtype might not work as intended
+         ## Parsing of alpha might be included (missing)
+         
     if optimum != 'Auto':
         optimal_threshold = optimum 
 
