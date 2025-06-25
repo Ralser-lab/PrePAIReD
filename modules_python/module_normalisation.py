@@ -17,9 +17,6 @@ from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
 
 import module_helper as helper
-# Global Variables
-RANDOM_STATE = 42 # Import from global wrapper!
-
 
 ####### Not testes yet #########
 
@@ -29,7 +26,7 @@ RANDOM_STATE = 42 # Import from global wrapper!
 ####################################################################  
 
 ## Quantile Normalization
-def normalize_quantile(df, distribution="normal"):
+def normalize_quantile(df, distribution="normal", seed=42):
     """ 
     Apply quantile normalization to a DataFrame, transforming sample intensities
     to follow a Gaussian distribution with the same grand mean and sd
@@ -57,7 +54,7 @@ def normalize_quantile(df, distribution="normal"):
     # Apply quantile normalization on rows (samples)
     tf = QuantileTransformer(
         n_quantiles=len(df), output_distribution=distribution, 
-        random_state=RANDOM_STATE)
+        random_state=seed)
     qtransformed_df = pd.DataFrame(
         tf.fit_transform(df), columns=df.columns, index=df.index)
 
@@ -200,17 +197,18 @@ def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_outpu
         Filled log file.
         
     """
-    normalization_factors=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
-    normalization_factors.set_index("sample",inplace=True)
+        
+    normalization_factors_df=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
+    normalization_factors_df.set_index("sample",inplace=True)
     if on_mad:
-        max_nf=normalization_factors["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors["NormalizationFactor"])
-        min_nf=normalization_factors["NormalizationFactor"].median() - rel_threshold * helper.mad(normalization_factors["NormalizationFactor"])
-    normalization_factors["keep"]=normalization_factors.applymap(lambda x: min_nf < x < max_nf)
+        max_nf=normalization_factors_df["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
+        min_nf=normalization_factors_df["NormalizationFactor"].median() - rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
+    normalization_factors_df["keep"]=normalization_factors_df.applymap(lambda x: min_nf < x < max_nf)
     #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
     module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
-    module_output += ", ".join(normalization_factors[~normalization_factors["keep"]].index.get_level_values("sample").tolist())+"\n\n"
-    return(profiles_group[normalization_factors.index[normalization_factors["keep"]]]),module_output
+    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.get_level_values("sample").tolist())+"\n\n"
+    return(profiles_group[normalization_factors_df.index[normalization_factors_df["keep"]]]),module_output
 
 
 def get_normalization_factors(df, axis:int=0):
@@ -236,12 +234,6 @@ def get_normalization_factors(df, axis:int=0):
         raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
 
     return np.nanmedian(np.nanmedian(df, axis=axis))/np.nanmedian(df,axis=axis)
-
-    
-    if axis not in [0, 1]:
-        raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
-
-    return np.nanmedian(np.nanmedian(df, axis=axis))
 
 def normalize_median(df):
     """
@@ -531,6 +523,9 @@ if __name__ == "__main__":
     else:
         data_arr = np.load(data_df_fp)
         
+    # Define seed
+    seed = parameters_dict["seed"] + counter
+        
     # Load mask and log file
     """
     mask = load_mask() # load mask (in parent directory)
@@ -550,7 +545,7 @@ if __name__ == "__main__":
     # Process data
     if parameters_dict["normalization_method"] == "quantile":
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
-        data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"])
+        data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
         
     elif parameters_dict["normalization_method"] == "quantile_ranked":
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
