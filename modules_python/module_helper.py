@@ -419,6 +419,7 @@ def create_logfile(logfilename,ids,savefilename,analysis_folder,profile_annotati
     return
     
 
+#create a matrix with precursors as rows and files/runs/samples/fractions as columns to keep track of filtered and imputed precursors
 def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
     """
     Creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
@@ -454,9 +455,9 @@ def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.
     #get sorted File.Names
     samples=[x.replace("\\","/").split("/")[-1] for x in file[diann_sample_column].unique()]
     if len(set(samples)) > len(set(metadata_df.index)):
-        log += "\t\t\tWARNING: Not all samples in DIA-NN output annotated in metadata\n"
+        log += "\t\t\t###WARNING###: Not all samples in DIA-NN output annotated in metadata\n"
     elif len(set(samples)) < len(set(metadata_df.index)):
-        log += "\t\t\tWARNING: Not all samples in metadata found in DIA-NN output\n"
+        log += "\t\t\t###WARNING###: Not all samples in metadata found in DIA-NN output\n"
     #get intersection between filenames and metadata
     samples=list(set(samples) & set(metadata_df.index))
     #sort File.Names
@@ -693,6 +694,7 @@ def check_filename_annotations_on_unique_indices(profile_annotation_file, sample
     return
 
 
+
 def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name", encoding="utf-8"):
     """
     load the metadata file
@@ -709,8 +711,7 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         column name with complete filenames in metadata. The default is "filename".
     encoding : str, optional
         encoding passed to pandas read_csv
-    log : str
-	string for report log messages
+
         
     Returns
     -------
@@ -718,6 +719,8 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         name of the metadata file.
     metadata_df : pd.DataFrame
         the metadata file as dataframe
+    log : str
+        string for report log messages
 
     """
     '''
@@ -729,7 +732,7 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
             initialdir="S:/AG/AG-CF-HTMS/CoreFacility/")
         root.destroy()
     '''
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "Loading metadata " + metadata_fp + "\n"
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading metadata " + metadata_fp + "\n"
     # read tsv file
     if metadata_fp[-4:] in [".txt",".tsv"]:
         metadata_df = pd.read_csv(metadata_fp, sep="\t", encoding=encoding)
@@ -753,8 +756,9 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
     if sum(metadata_df.index.duplicated())>0:
         log += "\t\t\t" + str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n"
         metadata_df=metadata_df.drop_duplicates()
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "Metadata loaded successfully.\n"
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMetadata loaded successfully.\n"
     return([metadata_df, log])
+
 
 
 #source: https://www.geeksforgeeks.org/program-to-find-weighted-median-of-a-given-array/ , access: 02.11.2022 12:00
