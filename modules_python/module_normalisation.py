@@ -8,16 +8,21 @@ import warnings
 import numpy as np
 import pandas as pd
 import sys
-import helper
 import json
 import os
 from scipy.optimize import least_squares, minimize
+import time
 
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
 
+import module_helper as helper
 # Global Variables
 RANDOM_STATE = 42 # Import from global wrapper!
+
+
+####### Not testes yet #########
+
 
 ####################################################################
 # Normalization functions
@@ -33,10 +38,8 @@ def normalize_quantile(df, distribution="normal"):
     Parameters:
     -----------
     df : pandas.DataFrame
-        A DataFrame with rows representing samples and columns representing 
-        protein features (or other measurements). The function assumes that the 
-        data consists of intensity values that need to be transformed to improve 
-        distribution consistency.
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
     distribution: str
         Distribution for Quantile normalization. Available distributions are:
         [normal, uniform].
@@ -53,21 +56,167 @@ def normalize_quantile(df, distribution="normal"):
 
     # Apply quantile normalization on rows (samples)
     tf = QuantileTransformer(
-        n_quantiles=len(df.T), output_distribution=distribution, 
+        n_quantiles=len(df), output_distribution=distribution, 
         random_state=RANDOM_STATE)
     qtransformed_df = pd.DataFrame(
-        tf.fit_transform(df.T).T, columns=df.columns, index=df.index)
+        tf.fit_transform(df), columns=df.columns, index=df.index)
 
     # Adjust the scale and location to match original data's mean and sd
-    original_mean = df.mean().mean()
-    original_std = df.stack().std()
-    adj_df = (qtransformed_df * original_std) + original_mean
+    if distribution == "normal":
+        original_mean = df.mean().mean()
+        original_std = df.stack().std()
+        adj_df = (qtransformed_df * original_std) + original_mean
+    elif distribution == "uniform":
+        original_min = df.min().min()
+        original_max = df.max().max()
+        adj_df = qtransformed_df * (original_max-original_min) + original_min
 
     # Return the adjusted quantile-transformed data
     return adj_df
 
+def normalize_quantile_ranked(df):
+    """ 
+    Apply quantile normalization (rank ordered quantile normalization).
+    Very similiar to uniform distribution.
+
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
+
+    Returns:
+    --------
+    adj_df : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
+
+    Author: SB
+    """
+
+    # Rank the values 
+    rank_df = df.rank(method="average")
+    
+    # Compute the average ranked value across all samples
+    sorted_mean_df = df.stack().groupby(rank_df.stack().astype(int)).mean()
+    
+    # Replace the ranked values with the average ranked values
+    normalize_df = rank_df.stack().astype(int).map(sorted_mean_df).unstack()
+    
+    # Adjust the scale and location to match original data's mean and sd
+    ### Check how to do the rescaling
+    original_min = df.min().min()
+    original_max = df.max().max()
+    adj_df = normalize_df * (original_max-original_min) + original_min
+    
+    # Return the normalized dataframe
+    return adj_df
+
 ## Median Scaling    
-def normalize_median_scaling(df, axis:int=0):
+def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_intersecting_precs=True, nan_intersect_thresh=0.8, exclude_outlier_nfs=False, rel_threshold=2, on_mad=True, min_nf=0.5, max_nf=2, axis:int=0):
+    """
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
+    out_dir_fp : str
+        File path of the output directory to save the normalization factors.
+    module_output: str
+        Log file to be filled
+    normalization_on_intersecting_precs : bool, optional
+        if True, performs normalization only on precursors present in nan_intersect_thresh samples.
+    nan_intersect_thresh : float, optional
+        use for normalization all precursors present in at least nan_intersect_thresh samples. The default is 0.8.
+    exclude_outlier_nfs : bool, optional
+        switch to True to exclude samples with outlier normalization factors as defined by rel_threshold, on_mad, min_nf, max_nf. The default is False.
+    rel_threshold : float, optional
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+    on_mad : bool, optional
+        switch True if filter by median +/- rel_threshold * MAD. The default is True.
+    min_nf : float, optional
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+    max_nf : float, optional
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+    axis: int, optional
+        Axis for calculation of the normalization factors. The default is 0.
+
+    Returns
+    -------
+    df_norm : pandas.DataFrame
+        A DataFrame containing the median scaled data
+
+    """
+    
+    if normalization_on_intersecting_precs:
+        #extract precursors present over all samples
+        abs_nan_intersect_thresh=int(nan_intersect_thresh*df.shape[1])
+        intersect_precursors=df.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
+        module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
+    else:
+        intersect_precursors=df.index
+    #calculate normalization factors
+    normalization_factors=get_normalization_factors(df.loc[intersect_precursors],axis=axis)
+    normalization_factors_df=pd.DataFrame(index=df.columns,columns=["NormalizationFactor"],data=normalization_factors)
+    normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors.tsv"),sep="\t")
+    if exclude_outlier_nfs: #if normalization factor is np.inf, not sufficient precursors where measured in given sample
+        df_trim=df
+        while True: #as long as normalization factors are not in given range of min_nf and max_nf, exclude outliers and recalculate them
+            #exclude samples with outlier normalization factors
+            df_trim,module_output=exclude_outlier_normalization_factors(profiles_group=df_trim,out_dir_fp=out_dir_fp,module_output=module_output,rel_threshold=rel_threshold,on_mad=on_mad,min_nf=min_nf,max_nf=max_nf)
+            #repeat normalization procedure on selected samples
+            normalization_factors=get_normalization_factors(df_trim.loc[intersect_precursors],axis=axis)
+            if (np.min(normalization_factors)>min_nf) & (np.max(normalization_factors)<max_nf):
+                break
+        normalization_factors_df=pd.DataFrame(index=df_trim.columns,columns=["NormalizationFactor"],data=normalization_factors)
+        normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors_trim.tsv"),sep="\t")
+        df_norm=df_trim*normalization_factors
+    else:
+        df_norm=df*normalization_factors
+        
+    return df_norm, module_output
+
+def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_output,group,rel_threshold=2,on_mad=True,min_nf=0.5,max_nf=2):
+    """
+    determine samples with outlier normalization factors by median +- rel_threshold * MAD or by specified normalization factors.    
+    Parameters
+    ----------
+    profiles_group : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    out_dir_fp : str
+        name of directory where analysis (pre-processed file), logfile, metadata are stored.
+    module_output: str
+        Log file to be filled
+    rel_threshold : float, optional
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+    on_mad : bool, optional
+        switch True if filter by median +/- rel_threshold * MAD. The default is True.
+    min_nf : float, optional
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+    max_nf : float, optional
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+
+    Returns
+    -------
+    profiles_group : pd.DataFrame
+        rows equal protein groups, multi columns correspond to samples and values in the dataframe to intensities, samples with normalization factors out of range excluded.
+
+    """
+    normalization_factors=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
+    normalization_factors.set_index("sample",inplace=True)
+    if on_mad:
+        max_nf=normalization_factors["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors["NormalizationFactor"])
+        min_nf=normalization_factors["NormalizationFactor"].median() - rel_threshold * helper.mad(normalization_factors["NormalizationFactor"])
+    normalization_factors["keep"]=normalization_factors.applymap(lambda x: min_nf < x < max_nf)
+    #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
+    #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
+    module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
+    module_output += ", ".join(normalization_factors[~normalization_factors["keep"]].index.get_level_values("sample").tolist())+"\n\n"
+    return(profiles_group[normalization_factors.index[normalization_factors["keep"]]]),module_output
+
+
+def get_normalization_factors(df, axis:int=0):
     """
     Perform median scaling normalization.
     
@@ -75,8 +224,9 @@ def normalize_median_scaling(df, axis:int=0):
     
     Parameters
     ----------
-    intensities : np.array
-        matrix of intensities (1st dim peptides, 2nd dim samples)
+    intensities : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
 
     Returns
     -------
@@ -90,29 +240,6 @@ def normalize_median_scaling(df, axis:int=0):
 
     return np.nanmedian(np.nanmedian(df, axis=axis))/np.nanmedian(df,axis=axis)
 
-
-def normalize_median_scaling_intensity(df, axis=0):
-    """
-    Calculate the median of median intensities, used for normalizing a test 
-    set to a training set.
-
-    Author: BZ
-
-    Parameters
-    ----------
-    df : np.array or pd.DataFrame
-        Matrix of intensities with rows as precursors and columns as samples.
-        
-    axis : int, optional (default=0)
-        Axis along which to calculate the first median. Set to 0 for precursors 
-        (rows) and 1 for samples (columns).
-
-    Returns
-    -------
-    float
-        Median of the median intensities.
-
-    """
     
     if axis not in [0, 1]:
         raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
@@ -128,13 +255,14 @@ def normalize_median(df):
     
     Parameters
     ----------
-    df : np.array
-        matrix of intensities (1st dim peptides, 2nd dim samples)
+    df : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
 
     Returns
     -------
-    intensities : np.array
-        matrix of normalized intensities with column medians of 0 
+    intensities : pandas.DataFrame
+        pandas.DataFrame of normalized intensities with column medians of 0 
         (1st dim peptides, 2nd dim samples)
 
     """
@@ -150,13 +278,14 @@ def normalize_mean(df):
     
     Parameters
     ----------
-    df : np.array
-        matrix of intensities (1st dim peptides, 2nd dim samples)
+    df : pandas.DataFrame
+        A DataFrame with rows representing precursors and columns representing 
+        samples.
 
     Returns
     -------
-    intensities : np.array
-        matrix of normalized intensities with column means of 0 
+    intensities : pandas.DataFrame
+        pandas.DataFrame of normalized intensities with column means of 0 
         (1st dim peptides, 2nd dim samples)
 
     """
@@ -322,32 +451,19 @@ def normalize_delayed(arr, method="trf", bounds=(0,np.inf)):
         fun=H,x0=x0,method="lm",max_nfev=2,ftol=10000,args=[arr]) 
     #Levenberg-Marquardt
     return(res.x)
-
-####################################################################
-#logging EXAMPLE in main
-####################################################################
-
-# def main(intensities,logfilename=None):
-#     if logfilename is not None:
-#         logfile=open(logfilename,"a")
-#         logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNormalizing using median scaling normalization.\n")
-#         logfile.close()
-#     median_scaling_intensity(intensities,axis=0)
-#     if logfilename is not None:
-#         logfile=open(logfilename,"a")
-#         logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFinished normalization.\n")
-#         logfile.close()
-
-#### Do we want to have a logger return???
     
 if __name__ == "__main__":
     
     # Get data from wrapper
-    df_fp = sys.argv[0]
-    param_fp = sys.argv[1]
-    out_dir_fp = sys.argv[2]
+    #### We should include flags here
+    df_fp = sys.argv[0] #-d
+    param_fp = sys.argv[1] #-p
+    out_dir_fp = sys.argv[2] #-o
+    log_file = sys.argv[3] #-l
+    #meta_data = sys.argv[4] #-md ### not needed here
+    #mask_fp = sys.argv[5] # -mask ### not implemented yet and not needed here
     
-    # To be modified
+    ###### To be modified
     outname = "data_imputed"
     
     # Load parameter_file
@@ -362,38 +478,62 @@ if __name__ == "__main__":
     # Load mask and log file
     """
     mask = load_mask() # load mask (in parent directory)
-    log = load_log() # load log-file
+    """
     
+    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization\n"
+    module_output += "Parameters\n------------\n"
+    for key,value in parameters_dict.items():
+        module_output += str(key)+"\t\t\t"+str(value)+"\n"
+    module_output += "------------\n"  
     
-    # Helper DataFrames
-    log = helper.logger(log, parameters_dict)
+    """
+    # Helper DataFrames -> Maybe automate upper bit?
+    log = helper.logger_add_parameters(log_file, parameters_dict)
     """
     
     # Process data
     if parameters_dict["normalization_method"] == "quantile":
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
         data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"])
         
+    elif parameters_dict["normalization_method"] == "quantile_ranked":
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
+        data_processed_df = normalize_quantile_ranked(data_df)
     elif parameters_dict["normalization_method"] == "median_scaling":
-        data_processed_df = normalize_median_scaling(data_df, parameters_dict["axis"])
-        
-    elif parameters_dict["normalization_method"] == "median_scaling_intensity":
-        data_processed_df = normalize_median_scaling_intensity(data_df, parameters_dict["axis"])
-        
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization.\n"
+        data_processed_df, module_output = normalize_median_scaling(data_df, out_dir_fp, module_output,
+                                                               normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
+                                                               nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
+                                                               exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
+                                                               rel_threshold=parameters_dict["rel_threshold"],
+                                                               on_mad=parameters_dict["on_mad"],
+                                                               min_nf=parameters_dict["min_nf"],
+                                                               max_nf=parameters_dict["max_nf"],
+                                                               axis=parameters_dict["axis"])
+
     elif parameters_dict["normalization_method"] == "median":
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
         data_processed_df = normalize_median(data_df)
         
     elif parameters_dict["normalization_method"] == "mean":
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
         data_processed_df = normalize_mean(data_df)
-        
+
     elif parameters_dict["normalization_method"] == "delayed":
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
         data_processed_arr = normalize_delayed(data_arr, parameters_dict["method"], parameters_dict["bounds"])
+        ### logger
+    
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
 
     # Comparison for mask and logger what changed between both files
     """
     # Helper DataFrames
     mask = helper.update_mask(mask)
-    log = helper.logger(logf)
+    log = helper.update_log(module_output)
     """
+    
+    helper.logger(log_file, module_output=str)
     
     # Save data
     if parameters_dict["normalization_method"] not in ["delayed"]:
