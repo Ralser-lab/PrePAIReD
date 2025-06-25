@@ -101,13 +101,7 @@ def normalize_quantile_ranked(df):
     sorted_mean_df = df.stack().groupby(rank_df.stack().astype(int)).mean()
     
     # Replace the ranked values with the average ranked values
-    normalize_df = rank_df.stack().astype(int).map(sorted_mean_df).unstack()
-    
-    # Adjust the scale and location to match original data's mean and sd
-    ### Check how to do the rescaling
-    original_min = df.min().min()
-    original_max = df.max().max()
-    adj_df = normalize_df * (original_max-original_min) + original_min
+    adj_df = rank_df.stack().astype(int).map(sorted_mean_df).unstack()
     
     # Return the normalized dataframe
     return adj_df
