@@ -9,8 +9,7 @@ Output: imputed wide-format data
     - meanval_imputation: performs mean value imputation on dataframe
     - bpca_imputation: performs Bayesian PCA imputation on dataframe
 
-
-
+Add to main function: Check whether NAs exist: If yes log and skip
 """
 
 #general
