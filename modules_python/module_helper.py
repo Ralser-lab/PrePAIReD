@@ -719,7 +719,8 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         column name with complete filenames in metadata. The default is "filename".
     encoding : str, optional
         encoding passed to pandas read_csv
-
+    log : str
+	string for report log messages
         
     Returns
     -------
