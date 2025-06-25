@@ -739,7 +739,7 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
             initialdir="S:/AG/AG-CF-HTMS/CoreFacility/")
         root.destroy()
     '''
-    log = ""
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "Loading metadata " + metadata_fp + "\n"
     # read tsv file
     if metadata_fp[-4:] in [".txt",".tsv"]:
         metadata_df = pd.read_csv(metadata_fp, sep="\t", encoding=encoding)
@@ -751,7 +751,7 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         metadata_df=metadata_excel.parse(metadata_sheet)
         metadata_excel.close()
     else:
-        log += "Please implement how how to read metadata of filetype "+metadata_fp[-5:]
+        log += "\t\t\tPlease implement how how to read metadata of filetype "+metadata_fp[-5:] + "\n"
     #exclude all annotations without filename (e.g. not measured yet)
     if filename_col in metadata_df.columns:
         metadata_df=metadata_df.dropna(subset=[filename_col])
@@ -761,10 +761,10 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         metadata_df.set_index("FileName_trimmed", inplace=True)
     # drop duplicated indices
     if sum(metadata_df.index.duplicated())>0:
-        log += str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped."
-        metadata_df=metadata_df.drop_duplicates() 
-    return([metadata_fp,metadata_df, log])
-
+        log += "\t\t\t" + str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n"
+        metadata_df=metadata_df.drop_duplicates()
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "Metadata loaded successfully.\n"
+    return([metadata_df, log])
 
 
 #source: https://www.geeksforgeeks.org/program-to-find-weighted-median-of-a-given-array/ , access: 02.11.2022 12:00
