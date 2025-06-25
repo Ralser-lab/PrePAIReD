@@ -8,33 +8,41 @@ Output: Corrected wide-format data
 - correct_for_confounders: drift correction per id for a given set of confounders which are statistically significant correlated to the id
 - batchwise_drift_correction: applies drift correction per batch for a set of covariates
 
-
-
 """
-
+# %%
 
 #general
+import os
+import sys
+import warnings
+import argparse 
+import json
 import pandas as pd
 import numpy as np
 import time
 from tqdm import tqdm
 
+warnings.filterwarnings("ignore")
+
 #own scripts
-from Python.Snippets import global_variables as global_variables # kept as place holder for logging, will be removed during programming of main 
-from modules_python import module_helper
+# from Python.Snippets import global_variables as global_variables # kept as place holder for logging, will be removed during programming of main 
+# from modules_python import module_helper
 
 #visualization
 import matplotlib.pyplot as plt
 
 #statistics and modelling
 import pycombat #CoAxLab
-import scanpy as sc
-#from harmony import harmonize
+# import scanpy as sc
+from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
 from sklearn import linear_model
 from skmisc import loess
 from sklearn import metrics
+
+
+os.chdir(r"c:\\Users\\cleme\\OneDrive - Charité - Universitätsmedizin Berlin\\Projects\\11_PREPROCESSING\\Preprocessing")
 
 ##############################################################################
 # Batch correction using parametric ComBat
@@ -87,7 +95,6 @@ def load_batch_metadata(input_data, meta_path, batchID):
     batchdata_merged = pd.merge(input_batchdata, batchdata, how='inner', left_index=True, right_index=True)
     return batchdata_merged
 
-
 def parametric_combat(input_data, batchdata, batchID):
     """
     Performs batch correction using ComBat method from Scanpy.
@@ -119,7 +126,6 @@ def parametric_combat(input_data, batchdata, batchID):
                                   columns=input_data.columns,
                                   dtype=float)
     return corrected_data
-
 
 def combat_batch_correction(data_in, metadata, batchID):
     """
@@ -153,9 +159,19 @@ def combat_batch_correction(data_in, metadata, batchID):
 
     return corrected_data
 
-def batchcorrection_combat(profiles,correction_level,fitsamples=None,covariates=None,binlevel=False,bins=10,sample_column="sample"):
+
+############################################
+
+def batchcorrection_combat(data_df, 
+                           correction_level,
+                           fitsamples=None,
+                           covariates=None,
+                           binlevel=False,
+                           bins=10,
+                           sample_column="sample"):
     """
     Apply combat batch correction, see https://github.com/CoAxLab/pycombat
+    
     #TODO
     check whether covariates provided overlap with profiles.columns, if not inform the user
     
@@ -197,78 +213,24 @@ def batchcorrection_combat(profiles,correction_level,fitsamples=None,covariates=
         logfile.close()
     #binning of level of interest
     if binlevel:
-        counts,bins = np.histogram(profiles.columns.get_level_values(correction_level),bins=bins)
+        counts,bins = np.histogram(data_df.columns.get_level_values(correction_level),bins=bins)
         bins[0]=bins[0]-0.01
-        groups=pd.cut(profiles.columns.get_level_values(correction_level),bins,labels=range(1,len(bins)))
-        profiles=module_helper.insert_column_level(df=profiles,new_level=groups.tolist(),level_name=correction_level)
+        groups=pd.cut(data_df.columns.get_level_values(correction_level),bins,labels=range(1,len(bins)))
+        data_df=module_helper.insert_column_level(df=data_df,new_level=groups.tolist(),level_name=correction_level)
     if fitsamples is None:
-        fitsamples=profiles.columns
+        fitsamples=data_df.columns
     combat=pycombat.Combat()
     #define covariates
     if covariates is not None:
-        C_fit=profiles[fitsamples].columns.droplevel(list(set(profiles.columns.names) - set(covariates))).to_frame()
-        combat.fit(Y=profiles.T.loc[fitsamples].values,b=profiles[fitsamples].columns.get_level_values(correction_level).tolist(),C=C_fit)
-        C=profiles.columns.droplevel(list(set(profiles.columns.names) - set(covariates))).to_frame()
-        data_corrected=combat.transform(Y=profiles.T.values,b=profiles.columns.get_level_values(correction_level).tolist(),C=C)
+        C_fit=data_df[fitsamples].columns.droplevel(list(set(data_df.columns.names) - set(covariates))).to_frame()
+        combat.fit(Y=data_df.T.loc[fitsamples].values,b=data_df[fitsamples].columns.get_level_values(correction_level).tolist(),C=C_fit)
+        C=data_df.columns.droplevel(list(set(data_df.columns.names) - set(covariates))).to_frame()
+        data_corrected=combat.transform(Y=data_df.T.values,b=data_df.columns.get_level_values(correction_level).tolist(),C=C)
     else:
-        combat.fit(Y=profiles.T.loc[fitsamples].values,b=profiles[fitsamples].columns.get_level_values(correction_level).tolist())
-        data_corrected=combat.transform(Y=profiles.T.values,b=profiles.columns.get_level_values(correction_level).tolist())
-    profiles_corrected=pd.DataFrame(data=data_corrected,columns=profiles.index,index=profiles.columns).T
-    return(profiles_corrected)
-
-
-def batchcorrection_harmony(profiles,correction_level,fitsamples=None,binlevel=False,bins=10):
-    """
-    Apply harmony batch correction, see https://pypi.org/project/harmony-pytorch/
-    
-    author: BZ
-    
-    Parameters
-    ----------
-    profiles : pd.DataFrame
-        features (e.g. precursors) as rows, samples as columns
-    correction_level : str
-        column level to correct by (e.g. "batch")
-    fitsamples : list, optional
-        samples to use for fitting the combat class (e.g. QC-samples only), must be column names of profiles. The default is None, fitting with all samples in profiles.
-    binlevel : bool
-        if True, bin the levels provided by correction_level
-    bins : int
-        number of bins for the binning of correction_level
-
-    Returns
-    -------
-    pd.DataFrame, same shape as input profiles.
-
-    """
-    
-    from harmony import harmonize
-    print("Batch correction using combat: "+time.strftime("%Y-%m-%d%t%H:%M:%S"))
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tBatch correction using combat\n")
-        if fitsamples is not None:
-            if type(fitsamples[0])!=str:
-                fitsamplenames=fitsamples.get_level_values(0)
-            else:
-                fitsamplenames=fitsamples
-            logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t\t\t\tsamples used to fit batch correction:\n")
-            logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t\t\t\t"+"; ".join(fitsamplenames)+"\n")
-        logfile.close()
-    #binning of level of interest
-    if binlevel:
-        counts,bins = np.histogram(profiles.columns.get_level_values(correction_level),bins=bins)
-        bins[0]=bins[0]-0.01
-        groups=pd.cut(profiles.columns.get_level_values(correction_level),bins,labels=range(1,len(bins)))
-        profiles=module_helper.insert_column_level(df=profiles,new_level=groups.tolist(),level_name=correction_level)
-    if fitsamples is None:
-        fitsamples=profiles.columns
-    metadata_df=profiles.columns.to_frame()
-    profiles_corrected = harmonize(profiles.T.values,metadata_df,batch_key=correction_level)
-    profiles_corrected = pd.DataFrame(data=profiles_corrected,columns=profiles.index,index=profiles.columns).T
-    return(profiles_corrected)
-
-
+        combat.fit(Y=data_df.T.loc[fitsamples].values,b=data_df[fitsamples].columns.get_level_values(correction_level).tolist())
+        data_corrected=combat.transform(Y=data_df.T.values,b=data_df.columns.get_level_values(correction_level).tolist())
+    data_df_corrected=pd.DataFrame(data=data_corrected,columns=data_df.index,index=data_df.columns).T
+    return(data_df_corrected)
 
 def correct_for_confounders(profiles_uncorr,metadata_df,datatype_df,sample_col=None,alpha_significance=0.05,model="loess",random_state=None,fitsamples=None):
     """
@@ -476,8 +438,6 @@ def correct_for_confounders(profiles_uncorr,metadata_df,datatype_df,sample_col=N
         profiles.columns=pd.MultiIndex.from_frame(profiles_columns_orig.loc[profiles.columns])
     return([profiles, r2_df])
 
-
-#
 def batchwise_drift_correction(logprofiles, metadata_df, metadata_metadata, model="loess", covariates=None, sample_col="sample", batch_level="msbatch", fitsamples=None, correct_one_by_one=True, random_state=None):
     """
     apply drift correction per batch
@@ -588,4 +548,259 @@ def batchwise_drift_correction(logprofiles, metadata_df, metadata_metadata, mode
     r2_df_final=pd.concat(r2_dfs,axis=1)
     return([logprofiles_corr, r2_df_final])
     
+def batchcorrect_harmony(
+            data_df:pd.DataFrame, meta_df:pd.DataFrame, 
+            batch_key:list, random_seed:int, **kwargs): 
+
+    """
+    Applies the HARMONY batch correction algorithm to the input data.
+    The function does not accept Na's.
+
+    author: CD
+
+    As implemented here: https://pypi.org/project/harmony-pytorch/
+
+    This function takes an expression matrix and associated metadata, 
+    and performs batch correction using the Harmony algorithm based on the 
+    specified batch variables.
+
+    Parameters
+    ----------
+        data_df (pd.DataFrame) : The data matrix (e.g., gene expression), with rows as samples and columns as features.
+        meta_df (pd.DataFrame) : Metadata for the samples, must align with `data_df` by index.
+        batch_key (list) : List of column names in `meta_df` that define batch groupings.
+        random_seed (int) : Random seed for reproducibility.
+        **kwargs: Additional keyword arguments passed to the `harmonize` function
+
+    Returns:
+    -------
+        Tuple[pd.DataFrame, list]: A tuple containing:
+            - `data_processed_df` (pd.DataFrame): Batch-corrected data.
+            - `log_list` (list of str): Log messages detailing the correction process.
+    """
+    log_list = []
+    log_list.append(time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Start HARMONY batch correction"))
+
+    data_arr = data_df.fillna(0).to_numpy()
+    # Apply harmony algorithm
+    data_arr = data_df.to_numpy()
+    data_processed_arr = harmonize(
+        data_arr, meta_df, batch_key, random_state=random_seed,
+        **kwargs)
+    data_processed_df = pd.DataFrame(
+        data_processed_arr, 
+        index=data_df.index, columns=data_df.columns)
+
+    log_list.append(
+        time.strftime("%Y-%m-%d%t%H:%M:%S: "\
+                      +"Finished HARMONY batch correction"))
+    log_string = "\n".join(log_list)
+
+    return data_processed_df, log_string
+
+# %%
+
+## remove before pushing!
+data_df_fp = "data/Test_data/Reduced_set/QCs/QC_data_red_pivot.tsv"
+param_fp = ""
+out_dir_fp = ""
+meta_df_fp = "data/Test_data/Additional_Information/Metadata.tsv"
+parameters_dict = {
+    "batchcorrect_method" : "harmony", # string
+    "batch_cols_meta" : ["MS.Batch"], # list os strings
+    "random_seed" : 42,
+    "harmony_n_clusters": None,
+    "harmony_max_iter_harmony": 10,
+    "harmony_max_iter_clustering": 200,
+    "harmony_tol_harmony": 1e-4,
+    "harmony_tol_clustering": 1e-5,
+    "harmony_ridge_lambda": 1.0,
+    "harmony_sigma": 0.1,
+    "harmony_n_jobs": -1,
+    "harmony_verbose": False,
+    "harmony_theta": 2.0,
+    "harmony_tau": 0
+}
     
+
+if __name__ == "__main__":
+
+    # Return string for logging from the function
+    # for large functions log begfore function state
+    
+    # # Get data from wrapper by parsing flags
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "-d", "--datapath", required=True, 
+    #     help="Filepath to datafile that will be processed") 
+    # parser.add_argument(
+    #     "-p", "--parampath", required=True, 
+    #     help="Filepath to parameter json") 
+    # parser.add_argument(
+    #     "-o", "--outpath", required=True, 
+    #     help="Filepath for outputfile") 
+    # parser.add_argument(
+    #     "-md", "--metapath", required=True, 
+    #     help="Filepath to metadatafile") 
+    # parser.add_argument(
+    #     "-ma", "--maskpath", required=True, 
+    #     help="Filepath to maskfile") 
+    # parser.add_argument(
+    #     "-l", "--log_file", required=True, 
+    #     help="Filepath to logfile") 
+    # parser.add_argument(
+    #     "-c", "--counter", required=True, 
+    #     help="Module counter") 
+
+    # args = parser.parse_args()
+
+    # data_df_fp = args.datapath
+    # param_fp = args.parampath
+    # out_dir_fp = args.outpath
+    # meta_df_fp = args.metapath
+    # mask_df_fp = args.maskpath
+    # log_file = args.log_file
+    # counter = args.counter
+    counter = 0
+
+    outname_str = "data_batchcorrected"
+
+    log_string = time.strftime("%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
+    
+    
+    # Load data
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load precusor data!\n")
+    data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+    # Load metadata
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load meta data!\n")
+    meta_df = pd.read_csv(meta_df_fp,sep="\t",index_col=0)
+    # Load parameter file
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load parameter file!\n")
+    # with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
+    #     parameters_dict = json.load(f)
+    # Load Mask
+    # log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load mask!\n")
+    # mask = pd.read_csv(mask_df_fp,sep="\t",index_col=0)
+
+    # check if batchcolumns in metafile
+    for batch_col in parameters_dict["batch_cols_meta"]:
+        if batch_col not in meta_df.columns:
+            raise ValueError(f"###ERROR###: Batch Column {batch_col} not in metafile columns!")
+
+    # check if data and meta file consist of same samples
+    # only keep intersect on index
+    common_idx_list = list(set(data_df.index) & set(meta_df.index))
+    n_samples_data_int = data_df.shape[0]
+    n_samples_meta_int = meta_df.shape[0]
+    drop_samples_data_lst = list(set(data_df.index) - set(meta_df.index))
+    drop_samples_meta_lst = list(set(meta_df.index) - set(data_df.index))
+
+    data_df = data_df.loc[common_idx_list]
+    meta_df = meta_df.loc[common_idx_list]
+    
+    flag_sample_intersect_int = False
+    warning_intersect_data_str = ""
+    if n_samples_data_int != data_df.shape[0]:
+        flag_sample_intersect_int = True
+        n_final_samples_data_int = n_samples_data_int - data_df.shape[0]
+        warning_intersect_samples_str = \
+                time.strftime('%Y-%m-%d\t%H:%M:%S: ') \
+                +f"###WARNING###: {n_final_samples_data_int} sample(s) did not appear in meta data:"\
+                + "\nFollowing sample(s) has/have been dropped for analysis:" \
+                + "\n\t"+'\n\t'.join(drop_samples_data_lst) \
+                + "\n"
+        log_string += warning_intersect_samples_str
+    if n_samples_meta_int != meta_df.shape[0]:
+        flag_sample_intersect_int = True
+        n_final_samples_meta_int = n_samples_meta_int - meta_df.shape[0]
+        warning_intersect_samples_str = \
+                time.strftime('%Y-%m-%d\t%H:%M:%S: ') \
+                +f"###WARNING###: {n_final_samples_meta_int} sample(s) did not appear in precursor data:"\
+                + "\nFollowing sample(s) has/have been dropped for analysis:" \
+                + "\n\t"+'\n\t'.join(drop_samples_meta_lst) \
+                + "\n"
+        log_string += warning_intersect_samples_str
+    
+    if flag_sample_intersect_int:
+        log_string += time.strftime('%Y-%m-%d\t%H:%M:%S ') \
+                +f"{meta_df.shape[0]} remain for analysis.\n"
+        
+    # remove before pushing
+    meta_df[parameters_dict["batch_cols_meta"][0]].iloc[0] = np.nan
+    meta_df[parameters_dict["batch_cols_meta"][0]].iloc[1] = np.nan
+    # meta_df[parameters_dict["batch_cols_meta"][1]].iloc[0] = np.nan
+    # meta_df[parameters_dict["batch_cols_meta"][1]].iloc[1] = np.nan
+    # meta_df[parameters_dict["batch_cols_meta"][1]].iloc[2] = np.nan
+
+    # Warn user that some samples do not have a batch annotation
+    # if batch_cols
+    for batch_col in parameters_dict["batch_cols_meta"]:
+        samples_na_list = []
+        if meta_df[batch_col].isna().sum() > 0:
+            count_na_int = meta_df[batch_col].isna().sum()
+            samples_na_list = list(
+                meta_df[meta_df[batch_col].isna()].index)
+            warning_na_meta_str = \
+                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                +f"###WARNING###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
+                + "\nFollowing sample(s) has/have been dropped for analysis:" \
+                + "\n\t"+'\n\t'.join(samples_na_list) + "\n"
+            log_string += warning_na_meta_str
+
+            # drop samples
+            if len(samples_na_list) > 0:
+                drop_samples = set(samples_na_list) & set(data_df.index)
+                data_df = data_df.drop(drop_samples, axis=0)
+                meta_df = meta_df.drop(drop_samples, axis=0)
+
+
+    # ---------------------------------
+    # # Process data
+    if parameters_dict["batchcorrect_method"] == "harmony":
+
+        # translate harmony parameter from dict 
+        harmony_kwargs_dict = {
+                "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
+                if k.startswith("harmony")}
+
+        data_processed_df, log_string_harmony = batchcorrect_harmony(
+            data_df.fillna(0), meta_df, 
+            parameters_dict["batch_cols_meta"],
+            random_seed=parameters_dict["random_seed"] + counter, 
+            **harmony_kwargs_dict
+        )
+        log_string += log_string_harmony
+
+        
+    # elif parameters_dict["normalization_method"] == "median_scaling":
+    #     data_processed_df = normalize_median_scaling(data_df, parameters_dict["axis"])
+        
+    # elif parameters_dict["normalization_method"] == "median_scaling_intensity":
+    #     data_processed_df = normalize_median_scaling_intensity(data_df, parameters_dict["axis"])
+        
+    # elif parameters_dict["normalization_method"] == "median":
+    #     data_processed_df = normalize_median(data_df)
+        
+    # elif parameters_dict["normalization_method"] == "mean":
+    #     data_processed_df = normalize_mean(data_df)
+        
+    # elif parameters_dict["normalization_method"] == "delayed":
+    #     data_processed_arr = normalize_delayed(data_arr, parameters_dict["method"], parameters_dict["bounds"])
+
+    # # Comparison for mask and logger what changed between both files
+    # """
+    # # Helper DataFrames
+    # mask = helper.update_mask(mask)
+    # log = helper.logger(logf)
+    # """
+    
+    # # Save data
+    # if parameters_dict["normalization_method"] not in ["delayed"]:
+    #     data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
+    # else:
+    #     np.save(os.path.join(out_dir_fp,out_dir_fp+".npy"),data_processed_arr)
+
+    print(log_string)
+    sys.exit(0)
+
+# %%
