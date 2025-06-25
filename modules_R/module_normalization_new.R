@@ -9,8 +9,6 @@
 
 # Packages
 library(roxygen2)
-library(limma)
-library(vsn)
 
 
 
@@ -20,18 +18,6 @@ library(vsn)
 ###############################################################################
 ############################## Create functions ###############################
 ###############################################################################
-
-#' @description
-#' Function to manage input to the normalization function in R
-#' Probably from a JSON file, import it and extract the parameters relevant to 
-#' normalization? Still need to figure out how this will go exactly
-#' 
-#' 
-handle_json_input <- function(json_file) {
-  
-}
-
-
 
 #' @description
 #' Function to apply variance stabilizing normalization (VSN).   
@@ -46,8 +32,8 @@ normalize_vsn <- function(DM_df){
   DM_df <- 2^DM_df
   
   # Perform the normalization
-  require(limma)
-  DM_df <- normalizeVSN(DM_df);  # What is this semicolon doing, can I get rid of it?
+  library(limma)
+  DM_df <- limma::normalizeVSN(DM_df)
   
   # Return output
   return(as.data.frame(DM_df))
@@ -71,7 +57,7 @@ normalize_vsn <- function(DM_df){
 #' transformed data. Columns correspond to variables and rows to observations. 
 #' @param parameters A list of arguments to pass to \code{limma::normalizeCyclicLoess}:
 #' \itemize{
-#'    \item \code{weight_vect}: A numeric vector containing the "probe" weights. 
+#'    \item \code{span}: The span of LOESS smoothing window, float between 0 and 1. 
 #'    Default is \code{NULL}.
 #'    \item \code{method_str}: A character string specifying the type of cyclic 
 #'    LOESS method to be used. Options are "fast" (default), "affy" and "pairs".
@@ -81,15 +67,15 @@ normalize_vsn <- function(DM_df){
 #' 
 #' @return A \code{data.frame} with the normalized, log2-transformed data.
 normalize_cyclic_loess <- function(DM_df,
-                                   weight_vect = NULL,
+                                   span = 0.7,
                                    method_str = c("fast", "affy", "pairs"),
                                    iter_int = 3) {
   # Make sure the method chosen is a valid option
   method_str <- match.arg(method_str)
   
   # Perform the normalization
-  DM_df <- normalizeCyclicLoess(DM_df, 
-                                weights = weight_vect, 
+  library(limma)
+  DM_df <- limma::normalizeCyclicLoess(DM_df, 
                                 span = 0.7, 
                                 iterations = iter_int, 
                                 method = method_str)
@@ -100,60 +86,70 @@ normalize_cyclic_loess <- function(DM_df,
 
 
 #' @description
-#' Function for normalizing data in R. Takes the parameters read by 
-#' handle_json_input, and calls the appropriate normalization function. 
+#' Function for normalizing data in R. Reads the data from the provided location,
+#' applies the normalization method specified in the parameter list as "method" 
+#' (providing the necessary parameters from this list as well), and writes the
+#' resulting, normalized data frame to the specified output location. 
 #' 
-#' @param DM_df A \code{data.frame} or numeric matrix, containing log2
-#' transformed data. Columns correspond to variables and rows to observations. 
-#' @param parameters A list of arguments to pass to \code{limma::normalizeCyclicLoess}:
+#' @param data_path A string pointing to the location of the dataset to be normalized
+#' This must be a \code{data.frame} or numeric matrix, containing log2 transformed
+#' data. Columns correspond to variables and rows to observations. 
+#' @param out_dir_path A string pointing to the directory where the produced, 
+#' normalized data set should be written as a .tsv file. 
+#' @param parameters_path A string pointing to the location of a JSON file, which
+#' contains the list of parameters defining how to perform the normalization:
 #' \itemize{
-#'    \item \code{weight_vect}: A numeric vector containing the "probe" weights. 
-#'    Default is \code{NULL}.
-#'    \item \code{method_str}: A character string specifying the type of cyclic 
-#'    LOESS method to be used. Options are "fast" (default), "affy" and "pairs".
-#'    \item \code{iter_int}: An integer, the number of times to cycle through all 
-#'    pairs of columns. Default is 3.
+#'    \item \code{method} A string defining the normalization method to be used.
+#'    Can be "vsn" or "cyclic_loess"
+#'    \item Parameters passed to the function normalize_cyclic_loess
 #' }
 #' 
-#' @return A \code{data.frame} with the normalized, log2-transformed data.
-main_normalize <- function(DM_df, 
-                           method_str = c("vsn", "cyclic_loess"),
-                           cyclic_loess_weight_vect = NULL,
-                           cyclic_loess_method_str = c("fast", "affy", "pairs"),
-                           cyclic_loess_iter_int = 3) {
-  
+#' @return Returns \code{NULL}. Writes the normalized version of the dataframe,
+#' as a .tsv file, to the location where the original data was located
+main_normalize <- function(data_path,
+                           out_dir_path,
+                           parameters_path) {
   # First of all we make sure the method chosen is one of the options we provide
-  method_str <- match.arg(method_str)
+  method_str <- match.arg(method_str, choices = c("vsn", "cyclic_loess"))
+  
+  # Read the data 
+  DM_df <- as.data.frame(fread(data_path))
+  
+  # Read the parameters
+  library(jsonlite)
+  parameter_list <- jsonlite::fromJSON(parameters_path)
   
   # Depending on which method was chosen, perform that normalization
-  if (method_str == "vsn") {
-    DM_df <- normalize_vsn(DM_df)
-  }
-  else if (method_str == "cyclic_loess") {
-    # If cyclic LOESS was selected, make sure we received the right arguments
-    cyclic_loess_method_str <- match.arg(cyclic_loess_method_str)
-    
-    # Then perform the normalization
-    DM_df <- normalize_cyclic_loess(DM_df,
-                                     cyclic_loess_weight_vect,
-                                     cyclic_loess_method_str,
-                                     cyclic_loess_iter_int)
-  }
+  normalized_df <- switch(
+    tolower(parameter_list[["method"]]),
+    "vsn" = normalize_vsn(DM_df),
+    "cyclic_loess" = normalize_cyclic_loess(DM_df, parameter_list)
+  )
   
-  # Return output
-  return(DM_df)
+  # OLD  VERSION - SUBSTITUTED BY THE "SWITCH" ABOVE
+  ## Depending on which method was chosen, perform that normalization
+  #if (method_str == "vsn") {
+  #  DM_df <- normalize_vsn(DM_df)
+  #}
+  #else if (method_str == "cyclic_loess") {
+  #  # If cyclic LOESS was selected, make sure we received the right arguments
+  #  cyclic_loess_method_str <- match.arg(parameter_list[["cyclic_loess_method"]])
+  #  
+  #  # Then perform the normalization
+  #  DM_df <- normalize_cyclic_loess(DM_df,
+  #                                  span = parameter_list[["span"]],
+  #                                  method_str = parameter_list[["method"]],
+  #                                  iter_int = parameter_list[["iter"]])
+  #}
+  
+  # Write output to the provided directory
+  fwrite(normalized_df, paste(out_dir_path, "dataset_name", "_normalized.tsv", sep=""))
 }
 
 
 
 
 
-
-
-
-###############################################################################
-############################ Perform normalization ############################
-###############################################################################
 
 
 
