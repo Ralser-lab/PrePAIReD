@@ -395,3 +395,186 @@ def replace_labelled_peptides(peptide_profiles,replace_label,to_be_replaced_with
         logfile.close()
     return(peptide_profiles)
 
+
+
+##############################################################################
+# SAMPLE EXCLUSION
+##############################################################################
+
+
+def exclude_outlier_normalization_factors(profiles_group,analysis_folder,savefilename_precursors,group,appendix="",rel_threshold=2,on_mad=True,min_nf=0.5,max_nf=2):
+    """
+    determine samples with outlier normalization factors by median +- rel_threshold * MAD or by specified normalization factors.    
+    Parameters
+    ----------
+    profiles_group : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    analysis_folder : str
+        name of directory where analysis (pre-processed file), logfile, metadata are stored.
+    savefilename_precursors : str
+        savefilename of the filtered DIA-NN output
+    group : str
+        name of the group corresponding to profiles_group. The default is None for the whole matrix.
+    appendix : str
+        string added to savefilename_precursors to distinguish different subsets or analysis strategies
+    rel_threshold : float, optional
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+    on_mad : bool, optional
+        switch True if filter by median +/- rel_threshold * MAD. The default is True.
+    min_nf : float, optional
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+    max_nf : float, optional
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+
+    Returns
+    -------
+    profiles_group : pd.DataFrame
+        rows equal protein groups, multi columns correspond to samples and values in the dataframe to intensities, samples with normalization factors out of range excluded.
+
+    """
+    if group is None:
+        normalization_factors=pd.read_csv(analysis_folder+savefilename_precursors+appendix+"_normalization_factors.tsv",sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
+        group=""
+    else:
+        normalization_factors=pd.read_csv(analysis_folder+savefilename_precursors+appendix+"_"+group+"_normalization_factors.tsv",sep="\t")
+    if "group" in normalization_factors.columns:
+        normalization_factors.set_index(["sample","group"],inplace=True)
+    else:
+        normalization_factors.set_index("sample",inplace=True)
+    #max_nf=normalization_factors.median()+2*normalization_factors.std()
+    if on_mad:
+        max_nf=normalization_factors["NormalizationFactor"].median() + rel_threshold * mad(normalization_factors["NormalizationFactor"])
+        min_nf=normalization_factors["NormalizationFactor"].median() - rel_threshold * mad(normalization_factors["NormalizationFactor"])
+    normalization_factors["keep"]=normalization_factors.applymap(lambda x: min_nf < x < max_nf)
+    print("Following samples were excluded due to extreme normalization factors in group "+group+":")
+    print(normalization_factors[~normalization_factors["keep"]].index.tolist())
+    if global_variables.logfilename is not None:
+        logfile=open(global_variables.logfilename,"a")
+        logfile.write("\t\t\t\tFollowing samples were excluded due to extreme normalization factors in group "+group+":\n\t\t\t\t")
+        logfile.write(", ".join(normalization_factors[~normalization_factors["keep"]].index.get_level_values("sample").tolist())+"\n\n")
+        logfile.close()
+    return(profiles_group[normalization_factors.index[normalization_factors["keep"]]])
+
+
+
+def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
+    """
+    Excludes samples (columns in profiles) with too many missing values.
+    #thresh determines how many measured values have to be at least in data 
+    
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    thresh : float, optional
+        threshold on how many IDs relative to total amount of IDs are too many so that samples will be excluded. The default is 1/2.
+
+    Returns
+    -------
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too many missing IDs excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too many missing IDs.
+        
+    """
+    num_samples_before=profiles.shape[1]
+    if replace_zeros_with_nan:
+        profiles_trimmed=profiles.copy().replace(0,np.nan)
+    else:
+        profiles_trimmed=profiles.copy()
+    profiles_trimmed=profiles_trimmed.dropna(axis=1,thresh=int(thresh*len(profiles)))
+    num_samples_after=profiles_trimmed.shape[1]
+    print(str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).")  #TODO print statements, ff
+    if global_variables.logfilename:
+        logfile=open(global_variables.logfilename,"a")
+        logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).\n")
+        logfile.close()
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
+
+
+
+def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
+    """
+    Excludes samples (columns in profiles) with too few IDs.
+
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    thresh : float, optional
+        Threshold on how many IDs need to be at least in sample to be kept for further analysis, thresh * median(number of precursors over samples) determines how many precursors need to be at least in sample to be kept. The default is 1/2.
+    on_mad : bool, optional
+        if True, filters on median(number precursors) - thresh * MAD(number preecursors). The default is True.
+
+    Returns
+    -------
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too few IDs excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too few IDs.
+
+
+    """
+    num_samples_before=profiles.shape[1]
+    num_precs=(profiles>0).sum()
+    if on_mad:
+        min_precs=np.nanmedian(num_precs)-(thresh*mad(num_precs))
+    else:
+        min_precs=thresh*np.nanmedian(num_precs)
+    profiles_trimmed=profiles.copy().replace(0,np.nan).dropna(axis=1,thresh=int(min_precs))
+    profiles_trimmed.replace(np.nan,0,inplace=True)
+    num_samples_after=profiles_trimmed.shape[1]
+    if on_mad:
+        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).")
+        print("Median number of precursors/proteins: "+str(np.median(num_precs)))
+        print("Minimum number of precursors/proteins: "+str(np.median(num_precs)-(thresh*mad(num_precs))))
+    else:
+        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).")
+    if global_variables.logfilename:
+        logfile=open(global_variables.logfilename,"a")
+        if on_mad:
+            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).\n")
+        else:
+            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).\n")
+        logfile.close()
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
+
+
+
+
+def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.nan):
+    """
+    exclude samples based on a value in a certain column in metadata, e.g. dropout/excl., keep is the value in that column to keep values
+
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    column : str, optional
+        name of the multi column level in profiles with values defining which samples should be excluded/kept. The default is "dropout/excl.".
+    keep : , optional
+        defines which value in column defines which samples should be kept. The default is np.nan.
+
+    Returns
+    -------
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples as defined excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only excluded samples.
+
+
+    """
+    num_samples_before=profiles.shape[1]
+    profiles_trimmed=profiles.xs(keep,axis=1,level=column,drop_level=False)
+    num_samples_after=profiles_trimmed.shape[1]
+    print(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.")
+    if global_variables.logfilename:
+        logfile=open(global_variables.logfilename,"a")
+        logfile.write(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.\n")
+        logfile.close()
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
+
+
