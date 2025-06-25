@@ -9,147 +9,33 @@ functions:
     - read_input: reads DIA-NN output report.tsv or MSFragger output
     - select_filtering_columns: provides based on applied filters a pre-selection of column names to read from the DIA-NN output report.tsv to save RAM
     - filtering: apply filtering on DIA-NN output report.tsv
-    - filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used
-    - create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime
-    - load_profiles: loads wide-format profiles if existent, else reads DIA-NN output report.tsv, filters it and creates wide-format profiles
+    (- filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used)
+    (- create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime)
+    - long_to_wide _format: Transforms long format data frame to wide format
 
-#TODO
-- create a function which checks beforehand for unique matching of DIA-NN runs filename and metadata filenames, e.g. by loading much smaller diann stats report filename column
-- add filtering from MSFragger output
+
+variable names + types
+    DataFrame: *_df
+    array: *_arr
+    dictionary: *_dict
+    list: *_list
+    set: *_set
+    int/float/bool/str: *
+    filenames: *_fp
+
+
 
 """
 # %%
 
-from tkinter import Tk
-from tkinter.filedialog import askopenfilename
+
+import sys
 import pandas as pd
 import numpy as np
-import os.path
 import time
-import logging
-import seaborn as sns
-import matplotlib.pyplot as plt
-import scipy.stats as stats
 from modules_python import module_helper
 
-##############################################################################
-# Sample thresholding based on statistical inference on detection proportion
-# Author: SB
-##############################################################################
 
-def condition_on_missingness(data_in):
-    """
-    Calculates the percentage of missing values for each precursor (column) in the input DataFrame.
-    Adds a 'missingness' attribute sorted by missing percentage.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_in : pd.DataFrame
-        Input DataFrame with samples as rows and precursors as columns.
-
-    Returns
-    -------
-    missingness : pd.Series
-        Series indexed by precursor names, indicating percentage of missing values.
-    """
-    missing = data_in.isna().mean(axis=0) * 100
-    missingness = missing.sort_values()
-    return missingness
-
-
-def calculate_optimum_threshold(data_in, alpha = .95):
-    """
-    Calculates the optimal missingness threshold based on a parametric (normal distribution)
-    statistical approach. Provides visualizations (KDE and pseudo CDF plots) to assist threshold 
-    determination.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_in : pd.DataFrame
-        Input DataFrame containing missing values.
-    alpha : float, optional
-        Confidence interval alpha level for threshold calculation (default 0.95).
-
-    Returns
-    -------
-    missingness : pd.Series
-        Series indicating percentage of missing values per precursor.
-    upper_bound : float
-        Calculated threshold value (upper bound) for missingness percentage.
-    """
-
-    missingness = condition_on_missingness(data_in)
-
-    # Parametric stats
-    mu = np.mean(missingness)
-    sigma = np.std(missingness, ddof=1)
-    z = stats.norm.ppf(alpha)  # One-sided Z value
-    upper_bound = mu + z * sigma
-
-    # Plot empirical KDE with normal overlay
-    plt.figure(figsize=(6,5))
-    sns.kdeplot(missingness, fill=True, label='Empirical KDE')
-
-    # Plot normal PDF with same mean and std
-    x_vals = np.linspace(min(missingness), max(missingness), 1000)
-    normal_pdf = stats.norm.pdf(x_vals, mu, sigma)
-    plt.plot(x_vals, normal_pdf, linestyle='--', label='Normal PDF', color='black')
-    # Add vertical line at upper bound
-    plt.axvline(upper_bound, color='red', linestyle='--', label=f'{int(alpha*100)}% Upper Bound = {upper_bound:.2f}%')
-    # Labels and legend
-    plt.xlabel('Sample Missingness (%)')
-    plt.title(f'Missingness PDF with Parametric CI (alpha = {alpha})')
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-    
-    # Plot pseudo CDF using cumulative retention of samples (not %)
-    thresholds = np.linspace(0, 100, 21)
-    recovered_counts = (missingness.values[None, :] <= thresholds[:, None]).sum(axis=1)
-    plt.figure(figsize = (6,5))
-    plt.plot(thresholds, recovered_counts)
-    plt.title(f'Pseudo CDF using sample retention (alpha = {alpha})')
-    plt.xlabel('Sample Missingness Threshold %')
-    plt.axvline(upper_bound, linestyle = '--', color = 'red')
-    plt.show()
-
-    return missingness, upper_bound
-
-def detection_control(data_in, optimum = 'Auto'):
-    """
-    Integrated pipeline that filters precursors from the dataset based on a calculated or 
-    user-defined optimal missingness threshold.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_in : pd.DataFrame
-        Input DataFrame.
-    optimum : str or float, optional
-        Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
-
-    Returns
-    -------
-    pd.DataFrame
-        Filtered DataFrame retaining precursors below missingness threshold.
-    """
-    
-    missingness, optimal_threshold = calculate_optimum_threshold(data_in)
-
-         ## Check this bit as dtype might not work as intended
-         ## Parsing of alpha might be included (missing)
-         
-    if optimum != 'Auto':
-        optimal_threshold = optimum 
-
-    data_in = data_in.loc[:,missingness<optimal_threshold]
-
-    return data_in
 
 
 ##############################################################################
@@ -157,7 +43,7 @@ def detection_control(data_in, optimum = 'Auto'):
 ##############################################################################
 
 
-def read_input(filename,file_columns=None,logfilename=None):
+def read_input(filename,file_columns_list=None):
     """
     Reads DIA-NN output report.tsv or MSFragger output, if specified only provided columns.
     author: BZ
@@ -166,88 +52,76 @@ def read_input(filename,file_columns=None,logfilename=None):
     ----------
     filename : str, optional
         string specifying DIA-NN output path and filename (report.tsv). The default is None, opening a GUI to select the file.
-    file_columns : list, optional
+    file_columns_list : list, optional
         list specifying which columns to read from DIA-NN output. The default is None, reading all columns.
-    logfilename : str
-        name (path + filename) of the logfile. The default is None, disabling logging into logfile.
+
     Returns
     -------
-    DIA-NN output pandas.DataFrame
+    pandas.DataFrame
 
     """
-    
-    if logfilename is not None:
-        logfile=open(logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tLoading file...\n")
-        logfile.close()
         
     #filesize = os.path.getsize(filename)
     #ram=psutil.virtual_memory()
     #if filesize<ram.available:
     # read tsv file
-    file = pd.read_csv(filename, usecols=file_columns, sep="\t") # ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
+    file = pd.read_csv(filename, usecols=file_columns_list, sep="\t") # ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
     
-    if logfilename is not None:
-        logfile=open(logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFile loaded successfully.\n")
-        logfile.close()
-
     return(file)
 
 
 
 
-
-def select_filtering_columns(filters,ids=["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes"],values_col="Precursor.Quantity",input_sample_col="File.Name"):
+def select_filtering_columns(filters_dict,ids_list=["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes"],values_col="Precursor.Quantity",input_filename_col="File.Name"):
     """
     with given filters dictionary, ids and values columns this function creates a list with column names of interest for extraction from DIA-NN output report.tsv
     author: BZ
     
     Parameters
     ----------
-    filters : dict
+    filters_dict : dict
         dictionary containing the used filters and filtering parameters.
-    ids : list
+    ids_list : list
         list of ids extracted from DIA-NN report.tsv. The default is ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes"].
     values_col : str
         values extracted from DIA-NN report.tsv, e.g. Precursor.Quantity.
-    input_sample_col : str, optional
+    input_filename_col : str, optional
         name of the sample names in the DIA-NN output, DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
     
     Returns
     -------
-    file_columns : list
+    file_columns_list : list
         list of e.g. DIANN output report.tsv column names to read.
 
     """
     #Only read necessary columns to save RAM (these computers are weak)
-    filtering_columns=list()
-    if filters["filter_proteotypic"]:
-        filtering_columns.append("Proteotypic")
-    if filters["filter_by_qvalue"]:
-        filtering_columns.append("Q.Value")
-    if filters["filter_by_global_qvalue"]:
-        filtering_columns.append("Global.Q.Value")
-    if filters["filter_by_gg_qvalue"]:
-        filtering_columns.append("GG.Q.Value")
-    if filters["filter_by_pg_qvalue"]:
-        filtering_columns.append("PG.Q.Value")
-    if filters["filter_by_global_pg_qvalue"]:
-        filtering_columns.append("Global.PG.Q.Value")
-    if filters["filter_by_p_qvalue"]:
-        filtering_columns.append("Protein.Q.Value")
-    if filters["filter_by_lib_qvalue"]:
-        filtering_columns.append("Lib.Q.Value")
-    if filters["filter_by_lib_pg_qvalue"]:
-        filtering_columns.append("Lib.PG.Q.Value")
-    if filters["filter_by_PEP"]:
-        filtering_columns.append("PEP")
-    if filters["filter_by_MScorr"] or filters["filter_by_MScorr_evidence_combined"]:
-        filtering_columns.append("Ms1.Profile.Corr")
-    if filters["filter_by_evidence"] or filters["filter_by_MScorr_evidence_combined"]:
-        filtering_columns.append("Mass.Evidence")
-    file_columns = [input_sample_col] + ids + [values_col] + filtering_columns    
-    return(file_columns)
+    filtering_columns_list=list()
+    if filters_dict["filter_proteotypic"]:
+        filtering_columns_list.append("Proteotypic")
+    if filters_dict["filter_by_qvalue"]:
+        filtering_columns_list.append("Q.Value")
+    if filters_dict["filter_by_global_qvalue"]:
+        filtering_columns_list.append("Global.Q.Value")
+    if filters_dict["filter_by_gg_qvalue"]:
+        filtering_columns_list.append("GG.Q.Value")
+    if filters_dict["filter_by_pg_qvalue"]:
+        filtering_columns_list.append("PG.Q.Value")
+    if filters_dict["filter_by_global_pg_qvalue"]:
+        filtering_columns_list.append("Global.PG.Q.Value")
+    if filters_dict["filter_by_p_qvalue"]:
+        filtering_columns_list.append("Protein.Q.Value")
+    if filters_dict["filter_by_lib_qvalue"]:
+        filtering_columns_list.append("Lib.Q.Value")
+    if filters_dict["filter_by_lib_pg_qvalue"]:
+        filtering_columns_list.append("Lib.PG.Q.Value")
+    if filters_dict["filter_by_PEP"]:
+        filtering_columns_list.append("PEP")
+    if filters_dict["filter_by_MScorr"] or filters_dict["filter_by_MScorr_evidence_combined"]:
+        filtering_columns_list.append("Ms1.Profile.Corr")
+    if filters_dict["filter_by_evidence"] or filters_dict["filter_by_MScorr_evidence_combined"]:
+        filtering_columns_list.append("Mass.Evidence")
+    file_columns_list = [input_filename_col] + ids_list + [values_col] + filtering_columns_list
+    return(file_columns_list)
 
 
 
@@ -257,281 +131,269 @@ def select_filtering_columns(filters,ids=["Precursor.Id", "Stripped.Sequence", "
 ##############################################################################
 
 # filter DIA-NN output (except on number of peptides), by default all filters set to False (no filtering)
-def filtering(file, filters, ids=["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"], profile_annotation_df=None, mask=None, mask_description=None, keep_track=True, values="Precursor.Quantity", filename_col="filename", diann_sample_column="File.Name", logfilename=None):
+def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=None, mask_df=None, mask_description_df=None, keep_track=True, values_col="Precursor.Quantity", filename_col="filename", diann_sample_column="File.Name"):
     """
-    Filters rows in DIA-NN output report.tsv on filters as specified in filters by True.
+    Filters rows in DIA-NN output report.tsv on filters as specified in filters_dict by True.
     Number of filtered precursors in every step are saved to logfile.
     
     author: BZ
     
     Parameters
     ----------
-    file : pd.DataFrame
-        DIA-NN output report.tsv.
-    filters : dict
+    input_df : pd.DataFrame
+        E.g. DIA-NN output report.tsv, long format.
+    filters_dict : dict
         dictionary containing the used filters and filtering parameters.
-    ids : list
-        list of ids extracted from DIA-NN report.tsv. The default is ["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"].
-    profile_annotation_df : pd.DataFrame
+    input_id_col : str
+        name of column with IDs extracted from DIA-NN report.tsv. The default is "Precursor.Id".
+    metadata_df : pd.DataFrame
         Metadata mapping File.Name to shorter run names. The default is None. 
-    mask : pd.DataFrame.
+    mask_df : pd.DataFrame.
         dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, calling creating_filtering_matrix() to create this variable.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters. The default is None, calling creating_filtering_matrix() to create this variable.
+    mask_description_df: pd.DataFrame.
+        mapping numbers in mask_df to filters. The default is None, calling creating_filtering_matrix() to create this variable.
     keep_track : bool, optional
-        Flag to activate/deactivate tracking of filtered values in mask. The default is True.
-    values : str
+        Flag to activate/deactivate tracking of filtered values in mask_df. The default is True.
+    values_col : str
         values extracted from DIA-NN report.tsv. The default is "Precursor.Quantity".
     filename_col : str
-        name of the column in profile_annotation_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
+        name of the column in metadata_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
     diann_sample_column : str, optional
         name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
-    logfilename : str or None, optional
-        if not None, writes progress to this string specifying the name of the file for logging. The default is None, disabling logging of progress. 
     Returns
     -------
-    file : pd.DataFrame
+    input_df : pd.DataFrame
         filtered DIA-NN output report.tsv.
-    mask : pd.DataFrame.
+    mask_df : pd.DataFrame.
         dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters.
-
+    mask_description_df : pd.DataFrame.
+        mapping numbers in mask_df to filters.
+    log : str
+        string containing messages for report log.
 
     """
-    len_file_before=len(file)
-    #Exclude runs from file not present in metadata
-    if profile_annotation_df is not None:
-        intersect_files=file[diann_sample_column].isin(profile_annotation_df[filename_col])
-        if intersect_files.sum()==0:
-            intersect_files=file[diann_sample_column].isin(profile_annotation_df.index)
-        if intersect_files.sum()==0:
-            print("WARNING: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
-            return
-        file=file[intersect_files]
-        if len_file_before>len(file):
-            print("Not all files in DIA-NN output are found in metadata. Analysis performed only on files present in metadata.")
-            if logfilename is not None:
-                logfile=open(logfilename,"a")
-                logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNot all files in DIA-NN output are found in metadata. Analysis performed only on files present in metadata.\n")
-                logfile.close()
+    log = ""
+    len_input_df_before = len(input_df)
+    #Exclude runs from input_df not present in metadata
+    if metadata_df is not None:
+        intersect_files = input_df[diann_sample_column].isin(metadata_df[filename_col])
+        if intersect_files.sum() == 0:
+            intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
+        if intersect_files.sum() == 0:
+            log += "WARNING: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
+            #sys.exit("WARNING: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
+            return([None,None,None,log])
+        input_df = input_df[intersect_files]
+        if len_input_df_before > len(input_df):
+            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tWARNING: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
         if keep_track:
-            if mask is None or mask_description is None:
-                mask,mask_description=module_helper.create_filtering_matrix(file,profile_annotation_df,min_peptides=filters["min_peptides"],values=values,ids=ids,filename_col=filename_col,diann_sample_column=diann_sample_column)
+            if mask_df is None or mask_description_df is None:
+                mask_df,mask_description_df,log_create = module_helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
+                log += log_create
     # FILTERING
+    filtering_tracker_df = pd.DataFrame(index={key:value for key,value in filters_dict.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
+    len_input_df_before = len(input_df)
+    len_input_df_after = len(input_df)
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tBegin Filtering\n"
     # FILTER BY PROTEOTYPIC
     # exclude non-proteotypic
-    print("Filtering...")
-    filtering_tracker_df=pd.DataFrame(index={key:value for key,value in filters.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
-    len_file_before=len(file)
-    len_file_after=len(file)
-    if logfilename is not None:
-        logfile=open(logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tBegin Filtering...\n")
-        logfile.close()
-    if filters["filter_proteotypic"]:
-        if "Proteotypic" in file.columns:
+    if filters_dict["filter_proteotypic"]:
+        if "Proteotypic" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Proteotypic"]!=1][ids].itertuples(index=False))
-                cols=file[file["Proteotypic"]!=1][diann_sample_column].tolist()
+                rows = input_df[input_df["Proteotypic"]!=1][input_id_col].tolist()
+                cols = input_df[input_df["Proteotypic"]!=1][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Proteotypic","value"]
-            file = file[file["Proteotypic"] == 1]
-            filtering_tracker_df.loc["filter_proteotypic","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_proteotypic","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Proteotypic","value"]
+            input_df = input_df[input_df["Proteotypic"] == 1]
+            filtering_tracker_df.loc["filter_proteotypic","number of excluded precursors"] = len_input_df_after-len(input_df)
+            filtering_tracker_df.loc["filter_proteotypic","number of remaining precursors"] = len(input_df)
+            len_input_df_after=len(input_df)
         else:
-            print("Column 'Proteotypic' not in DIA-NN output, filter skipped")
+            log += "\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
     # FILTER BY Q-VALUE
     # exclude by q-value threshold for gene group AND precursor
-    if filters["filter_by_qvalue"]:
-        if "Q.Value" in file.columns:
-            # replace xx,xxE+xx wich are seen as strings
-            #file["Q.Value"]=list(map(lambda x: eval(x),file["Q.Value"]))
+    if filters_dict["filter_by_qvalue"]:
+        if "Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Q.Value","value"]
-            file = file[file["Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_q_value","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_q_value","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Q.Value","value"]
+            input_df = input_df[input_df["Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_q_value","number of excluded precursors"] = len_input_df_after-len(input_df)
+            filtering_tracker_df.loc["filter_by_q_value","number of remaining precursors"] = len(input_df)
+            len_input_df_after=len(input_df)
         else:
-            print("Column 'Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_global_qvalue"]:
-        if "Global.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_global_qvalue"]:
+        if "Global.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Global.Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Global.Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Global.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Global.Q.Value"]>filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Global.Q.Value","value"]
-            file = file[file["Global.Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_global_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_global_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Global.Q.Value","value"]
+            input_df = input_df[input_df["Global.Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_global_qvalue","number of excluded precursors"] = len_input_df_after-len(input_df)
+            filtering_tracker_df.loc["filter_by_global_qvalue","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Column 'Global.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_gg_qvalue"]:
-        if "GG.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_gg_qvalue"]:
+        if "GG.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["GG.Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["GG.Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["GG.Q.Value"]>filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["GG.Q.Value"]>filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["GG.Q.Value","value"]
-            file = file[file["GG.Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_gg_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_gg_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["GG.Q.Value","value"]
+            input_df = input_df[input_df["GG.Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_gg_qvalue","number of excluded precursors"]=len_input_df_after-len(input_df)
+            filtering_tracker_df.loc["filter_by_gg_qvalue","number of remaining precursors"]=len(input_df)
+            len_input_df_after=len(input_df)
         else:
-            print("Column 'GG.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_pg_qvalue"]:
-        if "PG.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_pg_qvalue"]:
+        if "PG.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["PG.Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["PG.Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["PG.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["PG.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["PG.Q.Value","value"]
-            file = file[file["PG.Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_pg_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_pg_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["PG.Q.Value","value"]
+            input_df = input_df[input_df["PG.Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_pg_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_pg_qvalue","number of remaining precursors"] = len(input_df)
+            len_input_df_after=len(input_df)
         else:
-            print("Column 'PG.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_p_qvalue"]:
-        if "Protein.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_p_qvalue"]:
+        if "Protein.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Protein.Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Protein.Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Protein.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Protein.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Protein.Q.Value","value"]
-            file = file[file["Protein.Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_p_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_p_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Protein.Q.Value","value"]
+            input_df = input_df[input_df["Protein.Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_p_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_p_qvalue","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Column 'Protein.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_global_pg_qvalue"]:
-        if "Global.PG.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_global_pg_qvalue"]:
+        if "Global.PG.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Global.PG.Q.Value"]>filters["qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Global.PG.Q.Value"]>filters["qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Global.PG.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Global.PG.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Global.PG.Q.Value","value"]
-            file = file[file["Global.PG.Q.Value"] <= filters["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Global.PG.Q.Value","value"]
+            input_df = input_df[input_df["Global.PG.Q.Value"] <= filters_dict["qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of excluded precursors"]=len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of remaining precursors"]=len(input_df)
+            len_input_df_after=len(input_df)
         else:
-            print("Column 'Global.PG.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_lib_qvalue"]:
-        if "Lib.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_lib_qvalue"]:
+        if "Lib.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Lib.Q.Value"]>filters["lib_qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Lib.Q.Value"]>filters["lib_qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Lib.Q.Value"] > filters_dict["lib_qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Lib.Q.Value"] > filters_dict["lib_qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Lib.Q.Value","value"]
-            file = file[file["Lib.Q.Value"] <= filters["lib_qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_lib_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_lib_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Lib.Q.Value","value"]
+            input_df = input_df[input_df["Lib.Q.Value"] <= filters_dict["lib_qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_lib_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_lib_qvalue","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Column 'Lib.Q.Value' not in DIA-NN output, filter skipped")
-    if filters["filter_by_lib_pg_qvalue"]:
-        if "Lib.PG.Q.Value" in file.columns:
+            log += "\t\t\tColumn 'Lib.Q.Value' not in input_df, filter skipped\n"
+    if filters_dict["filter_by_lib_pg_qvalue"]:
+        if "Lib.PG.Q.Value" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Lib.PG.Q.Value"]>filters["lib_qvalue_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Lib.PG.Q.Value"]>filters["lib_qvalue_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Lib.PG.Q.Value"] > filters_dict["lib_qvalue_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Lib.PG.Q.Value"] > filters_dict["lib_qvalue_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Lib.PG.Q.Value","value"]
-            file = file[file["Lib.PG.Q.Value"] <= filters["lib_qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Lib.PG.Q.Value","value"]
+            input_df = input_df[input_df["Lib.PG.Q.Value"] <= filters_dict["lib_qvalue_thresh"]]
+            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Column 'Lib.PG.Q.Value' not in DIA-NN output, filter skipped")
+            log += "\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
 
     # FILTER BY PEP
     # exclude rows with posterior error probability (PEP) for precursor identification exceeding pep_thresh
-    if filters["filter_by_PEP"]:  # NOT CHECKED
-        if "PEP" in file.columns:
+    if filters_dict["filter_by_PEP"]:  # NOT CHECKED
+        if "PEP" in input_df.columns:
             if keep_track:
-                rows=list(file[file["PEP"]>filters["pep_thresh"]][ids].itertuples(index=False))
-                cols=file[file["PEP"]>filters["pep_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["PEP"] > filters_dict["pep_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["PEP"] > filters_dict["pep_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["PEP","value"]
-            file = file[file["PEP"] <= filters["pep_thresh"]]
-            filtering_tracker_df.loc["filter_by_PEP","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_PEP","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["PEP","value"]
+            input_df = input_df[input_df["PEP"] <= filters_dict["pep_thresh"]]
+            filtering_tracker_df.loc["filter_by_PEP","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_PEP","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Column 'PEP' not in DIA-NN output, filter skipped")
+            log += "\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
     # FILTER ON MS-LEVEL
     # exclude rows with correlation between MS1 and MS2 chromatograms below MScorr_thresh
-    if filters["filter_by_MScorr"]:
-        if "Ms1.Profile.Corr" in file.columns:
+    if filters_dict["filter_by_MScorr"]:
+        if "Ms1.Profile.Corr" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Ms1.Profile.Corr"] < filters["MScorr_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Ms1.Profile.Corr"] < filters["MScorr_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][input_id_col].itertuples(index=False).tolist()
+                cols = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Ms1.Profile.Corr","value"]
-            file = file[file["Ms1.Profile.Corr"] >= filters["MScorr_thresh"]]
-            filtering_tracker_df.loc["filter_by_MScorr","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_MScorr","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Ms1.Profile.Corr","value"]
+            input_df = input_df[input_df["Ms1.Profile.Corr"] >= filters_dict["MScorr_thresh"]]
+            filtering_tracker_df.loc["filter_by_MScorr","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_MScorr","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Ms1.Profile.Corr not in DIA-NN output, filter skipped")
+            log += "\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
     # exclude rows with MS2 evidence below evidence_thresh
-    if filters["filter_by_evidence"]:
-        if "Mass.Evidence" in file.columns:
+    if filters_dict["filter_by_evidence"]:
+        if "Mass.Evidence" in input_df.columns:
             if keep_track:
-                rows=list(file[file["Mass.Evidence"] < filters["evidence_thresh"]][ids].itertuples(index=False))
-                cols=file[file["Mass.Evidence"] < filters["evidence_thresh"]][diann_sample_column].tolist()
+                rows = input_df[input_df["Mass.Evidence"] < filters_dict["evidence_thresh"]][input_id_col].tolist()
+                cols = input_df[input_df["Mass.Evidence"] < filters_dict["evidence_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
-                    mask.loc[rows[r],cols[r]]=mask_description.loc["Mass.Evidence","value"]
-            file = file[file["Mass.Evidence"] >= filters["evidence_thresh"]]
-            filtering_tracker_df.loc["filter_by_evidence","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_evidence","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Mass.Evidence","value"]
+            input_df = input_df[input_df["Mass.Evidence"] >= filters_dict["evidence_thresh"]]
+            filtering_tracker_df.loc["filter_by_evidence","number of excluded precursors"] = len_input_df_after-len(input_df)
+            filtering_tracker_df.loc["filter_by_evidence","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Mass.Evidence not in DIA-NN output, filter skipped")
-    if filters["filter_by_MScorr_evidence_combined"]:  # NOT CHECKED
-        if "Ms1.Profile.Corr" in file.columns and "Mass.Evidence" in file.columns:
+            log += "\t\t\tMass.Evidence not in input_df, filter skipped\n"
+    if filters_dict["filter_by_MScorr_evidence_combined"]:
+        if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
                 print("WARNING: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet")#IMPLEMENT IF NECCESSARY
-            file = file[file["Ms1.Profile.Corr"]+0.5 *
-                        file["Mass.Evidence"] >= filters["MScorr_evidence_combined_thresh"]]
-            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"]=len_file_after-len(file)
-            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"]=len(file)
-            len_file_after=len(file)
+            input_df = input_df[input_df["Ms1.Profile_df.Corr"] + 0.5 *
+                        input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
+            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
+            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"] = len(input_df)
+            len_input_df_after = len(input_df)
         else:
-            print("Ms1.Profile.Corr and/or Mass.Evidence not in DIA-NN output, filter skipped")
+            log += "\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
     #filter out precursors with zero value
-    if filters["filter_by_zero_values"]:
+    if filters_dict["filter_by_zero_values"]:
         if keep_track:
-            rows=list(file[file[values] == 0][ids].itertuples(index=False))
-            cols=file[file[values] == 0][diann_sample_column].tolist()
+            rows = input_df[input_df[values_col] == 0][input_id_col].tolist()
+            cols = input_df[input_df[values_col] == 0][diann_sample_column].tolist()
             for r in range(len(rows)):
-                mask.loc[rows[r],cols[r]]=mask_description.loc["Zero "+values,"value"]
-        file=file[file[values] > 0]
-        filtering_tracker_df.loc["filter_by_zero_values","number of excluded precursors"]=len_file_after-len(file)
-        filtering_tracker_df.loc["filter_by_zero_values","number of remaining precursors"]=len(file)
-        len_file_after=len(file)
-    print("Filtering Completed")
-    len_file_after=len(file)
+                mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Zero "+values_col,"value"]
+        input_df=input_df[input_df[values_col] > 0]
+        filtering_tracker_df.loc["filter_by_zero_values","number of excluded precursors"] = len_input_df_after - len(input_df)
+        filtering_tracker_df.loc["filter_by_zero_values","number of remaining precursors"] = len(input_df)
+        len_input_df_after = len(input_df)
+    len_input_df_after = len(input_df)
     filtering_tracker_df.dropna(inplace=True)
-    if logfilename is not None:
-        logfile=open(logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_file_before-len_file_after)+"("+str(np.round(100-len_file_after/len_file_before*100,2))+"%) Peptides were excluded during filtering of DIA-NN output\n\n")
-        logfile.write(filtering_tracker_df.to_string().replace("\n","\n\t"))
-        logfile.write("\n")
-        logfile.close()
-    if file.index.tolist() == []:
-        print("Filtered file is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.")
-    return([file,mask,mask_description])
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during filtering of input_df\n\n"
+    log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
+    if input_df.index.tolist() == []:
+        log += "\t\t\tFiltered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
+    return([input_df,mask_df,mask_description_df,log])
 
 
 #Construction site, improve if needed
+'''
 # filtering filters already peptide and thus protein specific, this function adds filters solely on peptide features
 def filtering_peptide_specific(file, filter_mask, mask_description, filter_by_precursorcharge=False, preccharge_min=2, preccharge_max=42):
     """
@@ -571,10 +433,11 @@ def filtering_peptide_specific(file, filter_mask, mask_description, filter_by_pr
     # e.g. remove low MS2 signal peptides
     # e.g. one could filter by parameters obtained with PeptideCalculations.py, such as GRAVY, InstabilityIndex etc.
     return(file)
+'''
 
 
-
-
+#DEPRECATED
+'''
 #error in "Assigning measured proteins [...]" ff during function call if ids in profile_df does not match ids in filter_mask
 def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, savefilename, filter_mask=None, mask_description=None, min_peptides=1, count_peptides=True, filename_col="filename", sample_col="name on x-axis", sample_group_col="sample group", diann_sample_column="File.Name",logfilename=None):
     """
@@ -682,12 +545,12 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
         #                                                        [sample_col,sample_group_col]].tolist())] = file.loc[index, values]#[0]
     else:
         for index in file.index:
-            '''
-            ID=index[1]
-            xvalue=index[0]
-            if np.round(file.loc[(xvalue, ID), values][0],0)!=np.round(file.loc[(xvalue, ID), values].mean(),0): 
-                print("oh-oh, different values over peptides encountered")
-            '''
+            
+            #ID=index[1]
+            #xvalue=index[0]
+            #if np.round(file.loc[(xvalue, ID), values][0],0)!=np.round(file.loc[(xvalue, ID), values].mean(),0): 
+            #    print("oh-oh, different values over peptides encountered")
+            
             profile_df.loc[index[1:],tuple(profile_annotation_df.loc[index[0],
                                                                 [sample_col,sample_group_col]].tolist())] = file.loc[index, values][0]  # [0] because maxLFQ.Unique s same over all peptides
     profile_df.replace(np.nan, 0, inplace=True)
@@ -729,107 +592,177 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
     filter_mask.to_csv(analysis_folder+savefilename+"_filtermask.tsv",sep="\t") #saved as backup, will be overwritten in peptide-centric approach
     mask_description.to_csv(analysis_folder+savefilename+"_filtermask_description.tsv",sep="\t")
     return([profile_df, num_peptide_df, filter_mask, mask_description])
+'''
 
 
 
-def load_profiles(ids, values=None, profiles_filename=None, raw_filename=None, filters=dict(), profile_annotation_file=None, profile_order=None, raw_data_folder="raw_data", profile_annotation="", filename2run_pattern=None, filename2samplegroup_pattern="1", overwrite_filename_annotations=False, filename_col="filename", encoding="utf-8", diann_sample_column="File.Name"):
+def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="Precursor.Id",value_col="Precursor.Quantity",input_filename_col="File.Name",metadata_filename_col="File.Name",metadata_sample_col="Sample.Name"):
     """
-    tries to load the wide-format pd.DataFrame with ids' intensities, and if not found calls create_profiles to create the wide-format file.
-    
-    author: BZ
-    
+    Transforms long format data frame to wide format. 
+
     Parameters
     ----------
-    ids : list
-        list of ids extracted from DIA-NN report.tsv.
-    values : str
-        values extracted from DIA-NN report.tsv.
-    profiles_filename : str, optional
-        name of the wide-format profiles pd.DataFrame created by create_profiles(). The default is None, calling a GUI to select the file.
-    raw_filename : str, optional
-        name of the DIA-NN output report.tsv file. The default is None, calling a GUI to select the file.
-    filters : dict
-        dictionary containing the used filters and filtering parameters. The default is dict().
-    profile_annotation_file : str
-        name of metadata file. The default is None, getting the 
-    profile_order : list, optional
-        list of File.Names/Runs how they should be ordered in metadata and thus in wide format profiles. The default is None.
-    raw_data_folder : str, optional
-        path to *.quant files, if provided for all files metadata will be generated, even if no proteins were detected in file. The default is None.
-    profile_annotation : str, optional
-        profile_annotation is one of ["manual","IEF","SEC","numbers","from_file",""]. "manual" requests input via console, "Excel" saves filenames from folder "raw" to a tsv file for further manual annotation, "IEF" requests input pH range and calculates according pH distribution, "SEC" requests input size range and calculates according distribution, "numbers" assigns integers starting from 1, "from file" opens GUI to select TSV file with annotated names, any other string leaves the filenames. The default is "", corresponding to copying the File.Name.
-        Used in previous versions, not necessary anymore
-    filename2run_pattern : str
-        A with eval evaluable string to get a substring as shorter sample name from diann_sample_column, x is the iterable over all entities. The default is None, using the File.Name
-    filename2samplegroup_pattern : str
-        A with eval evaluable string to get a substring as shorter sample group from diann_sample_column, x is the iterable over all entities. The default is "1", assigning group 1 to every sample.
-    overwrite_filename_annotations : bool, optional
-        flag to activate/deactivate overwriting of existent automatically generated metadata. The default is False.
-    filename_col : str
-        name of the column in profile_annotation_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
-    encoding : str, optional
-        encoding for metadata file passed to pandas.read_csv. The default is "utf-8".
-    diann_sample_column : str, optional
-        name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
-    
+    long_df : pd.DataFrame
+        (filtered) DIA-NN output report.tsv.
+    metadata_df : pd.DataFrame
+        etadata mapping diann_sample_column (File.Name/Run) to shorter run names.
+    mask_df : pd.DataFrame
+        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
+    mask_description_df : pd.DataFrame
+        mapping numbers in mask to filters
+    id_col : str, optional
+        column name in long_df with precursor ids. The default is "Precursor.Id".
+    value_col : str, optional
+        column name in long_df with quantities. The default is "Precursor.Quantity".
+    input_filename_col : str, optional
+        column name in long_df with file/sample names. The default is "File.Name".
+    metadata_filename_col : str, optional
+        column name with complete filenames in metadata, which match file names in long_df[input_filename_col]. The default is "File.Name".
+    metadata_sample_col : str, optional
+        column name with (shorter) sample names in metadata. The default is "Sample.Name".
+
     Returns
     -------
-    profiles_file : pd.DataFrame.
-        wide format intensities, rows correspond to ids, columns to filenames and intensities to values.
-    profiles_file_numpeptides : pd.DataFrame or None
-        wide format dataframe as profile_df with number of precursors for every id in ids and filenames, num_peptide_df is None if count_peptides=False.
-    filter_mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, calling creating_filtering_matrix() to create this variable.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters. The default is None, calling creating_filtering_matrix() to create this variable.
-
-
+    wide_df : pd.DataFrame
+        wide format dataframe, rows contain IDs as described by id_col, columns contain samples as described by metdata_sample_col and values are values from the column value_col in long_df.
+    mask_df : pd.DataFrame
+        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered and which were measured.
     """
-    if profiles_filename is None:
-        print("Please select filtered profiles from DIA-NN output:")
-        root = Tk()
-        root.withdraw()
-        profiles_filename = askopenfilename(initialdir="../")
-        root.destroy()
-    analysis_folder = "/".join(profiles_filename.split("/")[:-1])+"/"
-    savefilename = profiles_filename.split("/")[-1]
+    #Sort index
+    long_df.sort_index(inplace=True)
+    #transform to wide format
+    wide_df = pd.pivot_table(long_df.reset_index(),index=id_col,columns=input_filename_col,values=value_col)
+    #rename columns from file names to sample names
+    wide_df.columns = metadata_df.reset_index().set_index(metadata_filename_col).loc[wide_df.columns,metadata_sample_col]
+    wide_df.sort_index(inplace=True,axis=1)
+    #assign measured values in mask_df
+    for col in wide_df.columns:
+        mask_df.loc[wide_df[wide_df[col]>0].index,col] = mask_description_df.loc["measured and kept","value"]
+    return([wide_df,mask_df])
+    
+    
+# %%
+
+if __name__ == "__main__":
+    
+    
+    # Get data from wrapper
+    param_fp = sys.argv[0]
+    out_dir_fp = sys.argv[1]
+    
+    # Load parameters #TODO
+    parameters_dict = module_helper.load_parameters(param_fp) # json.load 
+    
+    #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
+    '''
+    parameters_dict_raw = pd.read_csv("../01_Filtering/parameters.txt",sep="\t",index_col=0,header=None)[1].to_dict()
+    parameters_dict = dict()
+    for x in parameters_dict_raw.items():
+        try: #if type != str
+            parameters_dict[x[0]] = eval(x[1])
+        except (SyntaxError, NameError): #if type==str
+            parameters_dict[x[0]] = x[1]
+    '''
+    
+    # Load metadata
+    metadata_df,log = module_helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
+                                              metadata_sheet=parameters_dict["metadata_sheet"], 
+                                              filename_col=parameters_dict["metadata_filename_column"], 
+                                              encoding=parameters_dict["metadata_encoding"])
+    module_helper.logger(log)
+    
+    
+    # Extract variables from parameters, which need adjustment
+    ids_list = parameters_dict["input_ids_columns"].split(";")
+    input_id_col = ids_list[0]
+    
+    # Select columns which will be read from DIA-NN output (reading only used columns saves RAM and speeds up analysis)
+    file_columns_list = select_filtering_columns(filters_dict=parameters_dict, 
+                                                 ids_list=ids_list, 
+                                                 values_col=parameters_dict["input_values_column"],
+                                                 input_filename_col=parameters_dict["input_filename_column"])
+
+
+    # Load input file
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
+    module_helper.logger(log)
     try:
-        profiles_file = pd.read_csv(profiles_filename, sep="\t", index_col=list(range(len(ids))),header=[0,1])
-        #profiles_file.set_index(ids, inplace=True)
-        if "Precursor" not in ",".join(ids) or "Stripped" not in ",".join(ids):
-            profiles_file_numpeptides = pd.read_csv(
-                profiles_filename[:-4]+"_num_peptides.tsv", sep="\t",index_col=list(range(len(ids))),header=[0,1])
+        input_df = read_input(filename=parameters_dict["input_fp"], 
+                              file_columns_list=file_columns_list)
+    except KeyError:
+        #read complete input
+        input_df = read_input(filename=parameters_dict["input_fp"], 
+                              file_columns_list=None)
+        #identify missing columns which lead to KeyError; DIA-NN specific!
+        missing_cols_set = set(file_columns_list) - set(input_df.columns)
+        columns_filter_dict = {"Proteotypic":"filter_proteotypic",
+                               "Q.Value":"filter_by_qvalue",
+                               "Global.Q.Value":"filter_by_global_qvalue",
+                               "GG.Q.Value":"filter_by_gg_qvalue","PG.Q.Value":"filter_by_pg_qvalue",
+                               "Global.PG.Q.Value":"filter_by_global_pg_qvalue",
+                               "Protein.Q.Value":"filter_by_p_qvalue",
+                               "Lib.Q.Value":"filter_by_lib_qvalue",
+                               "Lib.PG.Q.Value":"filter_by_lib_pg_qvalue",
+                               "PEP":"filter_by_PEP",
+                               "Ms1.Profile.Corr":"filter_by_MScorr",
+                               "Mass.Evidence":"filter_by_evidence"}
+        if missing_cols_set - set(parameters_dict.keys()) == set():
+            #switch off filters linked to missing columns 
+            parameters_dict[columns_filter_dict[missing_cols_set]] = False
+            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "WARNING"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
+        if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
+            parameters_dict["filter_by_MScorr_evidence_combined"]=False
         else:
-            profiles_file_numpeptides = None
-        filter_mask=pd.read_csv(analysis_folder+savefilename[:-4]+"_filtermask.tsv",sep="\t",index_col=list(range(len(ids))),header=[0,1])
-        mask_description=pd.read_csv(analysis_folder+savefilename[:-4]+"_filtermask_description.tsv",sep="\t").set_index("filter")
-        print("Existing profiles found and loaded.")
-    except (FileNotFoundError, KeyError):
-        print("Loading raw DIA-NN output, filtering and creating profiles")
-        if filters == dict():
-            print("No 'filters' dictionary provided, analysis run without any filtering")
-            filters = {"filter_proteotypic": False, "filter_by_qvalue": False, "filter_by_global_qvalue": False, "filter_by_gg_qvalue": False, "filter_by_pg_qvalue": False, "filter_by_p_qvalue": False, "filter_by_lib_qvalue": False, "filter_by_PEP": False, "filter_by_MScorr": False,
-                       "filter_by_evidence": False, "filter_by_MScorr_evidence_combined": False, "qvalue_thresh": 0.01, "lib_qvalue_thresh": 0.01, "pep_thresh": 0.05, "MScorr_thresh": 0.9, "evidence_thresh": 1, "MScorr_evidence_combined_thresh": 0.9, "min_peptides": 2}
-        if profile_annotation_file is None:
-            profile_annotation_file = savefilename[:-4] + \
-                "_filename_annotations.tsv"
-        # load raw file
-        file, path, filename = read_input(filename=raw_filename)
-        #file = filtering(file=file, filter_proteotypic=filters["filter_proteotypic"], filter_by_qvalue=filters["filter_by_qvalue"], filter_by_global_qvalue=filters["filter_by_global_qvalue"], filter_by_gg_qvalue=filters["filter_by_gg_qvalue"], filter_by_pg_qvalue=filters["filter_by_pg_qvalue"], filter_by_p_qvalue=filters["filter_by_p_qvalue"], filter_by_lib_qvalue=filters["filter_by_lib_qvalue"], filter_by_PEP=filters["filter_by_PEP"],filter_by_MScorr=filters["filter_by_MScorr"], filter_by_evidence=filters["filter_by_evidence"], filter_by_MScorr_evidence_combined=filters["filter_by_MScorr_evidence_combined"], qvalue_thresh=filters["qvalue_thresh"], lib_qvalue_thresh=filters["lib_qvalue_thresh"], pep_thresh=filters["pep_thresh"], MScorr_thresh=filters["MScorr_thresh"], evidence_thresh=filters["evidence_thresh"], MScorr_evidence_combined_thresh=filters["MScorr_evidence_combined_thresh"])
-        module_helper.create_analysis_folder(analysis_folder)
-        # filering on peptide level
-        # file=filtering_peptide_specific(file=file) #UNDER CONSTRUCTION
-        profile_annotation_df = module_helper.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
-                                                                 profile_order=profile_order, raw_data_folder=raw_data_folder, profile_annotation=profile_annotation, filename2run_pattern=filename2run_pattern, filename2samplegroup_pattern=filename2samplegroup_pattern, overwrite_filename_annotations=overwrite_filename_annotations,encoding=encoding, diann_sample_column=diann_sample_column)
-        print("If wanted, annotate names of runs in "+analysis_folder+profile_annotation_file +
-              " in column name on x-axis.\n You can reorder the runs as well.")
-        input("Press enter when finished annotations (saved and closed file) or to skip...")
-        profile_annotation_df = module_helper.create_filename_annotations_file(path=path, file=file, profile_annotation_file=profile_annotation_file,
-                                                                 profile_order=profile_order, raw_data_folder=raw_data_folder, profile_annotation=profile_annotation, filename2run_pattern=filename2run_pattern, filename2samplegroup_pattern=filename2samplegroup_pattern, overwrite_filename_annotations=overwrite_filename_annotations,encoding=encoding,diann_sample_column=diann_sample_column)
-        file,filter_mask,mask_description = filtering(file=file, filters=filters, ids=ids, profile_annotation_df=profile_annotation_df, values=values, filename_col=filename_col, diann_sample_column=diann_sample_column)
-        profiles_file, profiles_file_numpeptides, filter_mask, mask_description = create_profiles(file=file, ids=ids, values=values, profile_annotation_df=profile_annotation_df,
-                                                                   analysis_folder=analysis_folder, savefilename=savefilename[:-4], filter_mask=filter_mask,mask_description=mask_description,min_peptides=filters["min_peptides"], count_peptides=filters["count_peptides"], diann_sample_column=diann_sample_column)
-    return([profiles_file, profiles_file_numpeptides, filter_mask, mask_description])
+            #if missing columns are linked to ids, values, or sample columns raise a KeyError and return
+            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t"+", ".join(missing_cols_set) + " not in the selected input file.\n"
+            module_helper.logger(log)
+            raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
+            sys.exit(", ".join(missing_cols_set) + " not in the selected input file.")
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
+    module_helper.logger(log)
+    
+    
+    # Precursor filtering (DIA-NN specific)
+    filtered_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
+                                                              input_id_col=input_id_col, 
+                                                              metadata_df=metadata_df, 
+                                                              filters_dict=parameters_dict, 
+                                                              values_col=parameters_dict["input_values_column"], 
+                                                              filename_col=parameters_dict["metadata_filename_column"], 
+                                                              diann_sample_column=parameters_dict["input_filename_column"])
+    if filtered_df:
+        log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
+        module_helper.logger(log)
+    else:
+        module_helper.logger(log)
+        sys.exit("ERROR: Long format Filtering failed.")
+        
+    
+    # Rename filter_mask columns
+    mask_df = module_helper.rename_filter_mask_columns(mask_df, 
+                                                       metadata_df, 
+                                                       filename_col=parameters_dict["metadata_filename_column"], 
+                                                       sample_col=parameters_dict["metadata_sample_column"])
+    
+    # Long to wide format
+    wide_df = long_to_wide_format(input_df,
+                                  metadata_df,
+                                  mask_df, 
+                                  mask_description_df,
+                                  id_col=input_id_col,
+                                  value_col=parameters_dict["input_values_column"],
+                                  input_filename_col=parameters_dict["input_filename_column"],
+                                  metadata_filename_col=parameters_dict["metadata_filename_column"],
+                                  metadata_sample_col=parameters_dict["metadata_sample_column"])
+
+
+    
+    # Save data #TODO
+    wide_df.to_csv(out_dir_fp + "",sep="\t")
+    # save data_processed -> out_dir_fp
+    # save mask, log -> parent_dir_fp
+    
+
 
 
 
