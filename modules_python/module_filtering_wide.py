@@ -22,6 +22,124 @@ import time
 from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 from modules_python import module_helper
 
+##############################################################################
+# Sample thresholding based on statistical inference on detection proportion
+# Author: SB
+##############################################################################
+
+def condition_on_missingness(data_in):
+    """
+    Calculates the percentage of missing values for each precursor (column) in the input DataFrame.
+    Adds a 'missingness' attribute sorted by missing percentage.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Input DataFrame with samples as rows and precursors as columns.
+
+    Returns
+    -------
+    missingness : pd.Series
+        Series indexed by precursor names, indicating percentage of missing values.
+    """
+    missing = data_in.isna().mean(axis=0) * 100
+    missingness = missing.sort_values()
+    return missingness
+
+
+def calculate_optimum_threshold(data_in, alpha = .95):
+    """
+    Calculates the optimal missingness threshold based on a parametric (normal distribution)
+    statistical approach. Provides visualizations (KDE and pseudo CDF plots) to assist threshold 
+    determination.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Input DataFrame containing missing values.
+    alpha : float, optional
+        Confidence interval alpha level for threshold calculation (default 0.95).
+
+    Returns
+    -------
+    missingness : pd.Series
+        Series indicating percentage of missing values per precursor.
+    upper_bound : float
+        Calculated threshold value (upper bound) for missingness percentage.
+    """
+
+    missingness = condition_on_missingness(data_in)
+
+    # Parametric stats
+    mu = np.mean(missingness)
+    sigma = np.std(missingness, ddof=1)
+    z = stats.norm.ppf(alpha)  # One-sided Z value
+    upper_bound = mu + z * sigma
+
+    # Plot empirical KDE with normal overlay
+    plt.figure(figsize=(6,5))
+    sns.kdeplot(missingness, fill=True, label='Empirical KDE')
+
+    # Plot normal PDF with same mean and std
+    x_vals = np.linspace(min(missingness), max(missingness), 1000)
+    normal_pdf = stats.norm.pdf(x_vals, mu, sigma)
+    plt.plot(x_vals, normal_pdf, linestyle='--', label='Normal PDF', color='black')
+    # Add vertical line at upper bound
+    plt.axvline(upper_bound, color='red', linestyle='--', label=f'{int(alpha*100)}% Upper Bound = {upper_bound:.2f}%')
+    # Labels and legend
+    plt.xlabel('Sample Missingness (%)')
+    plt.title(f'Missingness PDF with Parametric CI (alpha = {alpha})')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    
+    # Plot pseudo CDF using cumulative retention of samples (not %)
+    thresholds = np.linspace(0, 100, 21)
+    recovered_counts = (missingness.values[None, :] <= thresholds[:, None]).sum(axis=1)
+    plt.figure(figsize = (6,5))
+    plt.plot(thresholds, recovered_counts)
+    plt.title(f'Pseudo CDF using sample retention (alpha = {alpha})')
+    plt.xlabel('Sample Missingness Threshold %')
+    plt.axvline(upper_bound, linestyle = '--', color = 'red')
+    plt.show()
+
+    return missingness, upper_bound
+
+def detection_control(data_in, optimum = 'Auto'):
+    """
+    Integrated pipeline that filters precursors from the dataset based on a calculated or 
+    user-defined optimal missingness threshold.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Input DataFrame.
+    optimum : str or float, optional
+        Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame retaining precursors below missingness threshold.
+    """
+    
+    missingness, optimal_threshold = calculate_optimum_threshold(data_in)
+
+         ## Check this bit as dtype might not work as intended
+         ## Parsing of alpha might be included (missing)
+         
+    if optimum != 'Auto':
+        optimal_threshold = optimum 
+
+    data_in = data_in.loc[:,missingness<optimal_threshold]
+
+    return data_in
 
 
 def remove_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
