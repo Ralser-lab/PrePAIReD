@@ -118,7 +118,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
     out_dir_fp : str
         File path of the output directory to save the normalization factors.
     module_output: str
-        Log file to be filled
+        Log file to be filled.
     normalization_on_intersecting_precs : bool, optional
         if True, performs normalization only on precursors present in nan_intersect_thresh samples.
     nan_intersect_thresh : float, optional
@@ -140,9 +140,10 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
     -------
     df_norm : pandas.DataFrame
         A DataFrame containing the median scaled data
+    module_output, str
+        Filled log file.
 
-    """
-    
+    """ 
     if normalization_on_intersecting_precs:
         #extract precursors present over all samples
         abs_nan_intersect_thresh=int(nan_intersect_thresh*df.shape[1])
@@ -181,7 +182,7 @@ def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_outpu
     out_dir_fp : str
         name of directory where analysis (pre-processed file), logfile, metadata are stored.
     module_output: str
-        Log file to be filled
+        Log file to be filled.
     rel_threshold : float, optional
         defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
     on_mad : bool, optional
@@ -195,7 +196,9 @@ def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_outpu
     -------
     profiles_group : pd.DataFrame
         rows equal protein groups, multi columns correspond to samples and values in the dataframe to intensities, samples with normalization factors out of range excluded.
-
+    module_output, str
+        Filled log file.
+        
     """
     normalization_factors=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
     normalization_factors.set_index("sample",inplace=True)
@@ -225,9 +228,9 @@ def get_normalization_factors(df, axis:int=0):
     Returns
     -------
     np.array
-        normalization factors for all samples
+        Normalization factors for all samples.
+        
     """
-
     # Throw a ValueError if axis is not 1 or 0
     if axis not in [0, 1]:
         raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
@@ -397,7 +400,7 @@ def Hsum(x, arr):
         [Hp(x, pept, arr) for pept in range(arr.shape[0])])
 
 
-def normalize_delayed(arr, method="trf", bounds=(0,np.inf)):
+def get_normalization_factors_delayed(arr, method="trf", bounds=(0,np.inf)):
     """
     calculate delayed normalization coefficients for given matrix of intensities 
     as introduced by Cox et al., DOI: 10.1074/mcp.M113.031591 
@@ -406,7 +409,7 @@ def normalize_delayed(arr, method="trf", bounds=(0,np.inf)):
     
     Parameters
     ----------
-    df : np.array
+    arr : np.array
         matrix of intensities 
         (1st dim peptides, 2nd dim samples, 3rd dim fractions).
     method : str, optional
@@ -445,7 +448,42 @@ def normalize_delayed(arr, method="trf", bounds=(0,np.inf)):
         fun=H,x0=x0,method="lm",max_nfev=2,ftol=10000,args=[arr]) 
     #Levenberg-Marquardt
     return(res.x)
+
+
+def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
+    """
+    Parameters
+    ----------
+    arr : np.array
+        matrix of intensities 
+        (1st dim peptides, 2nd dim samples, 3rd dim fractions).
+    module_output: str
+        Log file to be filled.
+    method : str, optional
+        Algorithm for least squares minimization 
+        (see scipy.optimize.least_squares), 
+        one of {‘trf’, ‘dogbox’, ‘lm’}. The default is "trf".
+    bounds : tuple, optional
+        Upper and lower bound for minimization algorithm. 
+        The default is (0,np.inf).
+
+    Returns
+    -------
+    norm_arr : np.array
+        Normalized array.
+    module_output, str
+        Filled log file.
+    """
     
+    x0= np.ones(arr.shape[1:]).flatten()
+    normalization_factors = get_normalization_factors_delayed(arr,bounds=bounds,method=method)
+    if (normalization_factors==x0).sum()==len(normalization_factors): #no result found
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNormalizing using delayed normalization.\n"
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tMinimization to determine normalization factors ended at initial values\n"
+    norm_arr = arr*normalization_factors.T
+    return norm_arr, module_output
+
+
 if __name__ == "__main__":
     
     # Get data from wrapper
@@ -514,9 +552,9 @@ if __name__ == "__main__":
         data_processed_df = normalize_mean(data_df)
 
     elif parameters_dict["normalization_method"] == "delayed":
+        #### Not properly tested
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
-        data_processed_arr = normalize_delayed(data_arr, parameters_dict["method"], parameters_dict["bounds"])
-        ### logger
+        data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
     
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
 
