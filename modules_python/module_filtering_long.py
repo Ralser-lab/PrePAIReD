@@ -180,12 +180,12 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if intersect_files.sum() == 0:
             intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
         if intersect_files.sum() == 0:
-            log += "WARNING: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
-            #sys.exit("WARNING: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
+            log += "###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
+            #sys.exit("###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
             return([None,None,None,log])
         input_df = input_df[intersect_files]
         if len_input_df_before > len(input_df):
-            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tWARNING: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
+            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
         if keep_track:
             if mask_df is None or mask_description_df is None:
                 mask_df,mask_description_df,log_create = module_helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
@@ -364,7 +364,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     if filters_dict["filter_by_MScorr_evidence_combined"]:
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
-                print("WARNING: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet")#IMPLEMENT IF NECCESSARY
+                log += "###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet")#IMPLEMENT IF NECCESSARY
             input_df = input_df[input_df["Ms1.Profile_df.Corr"] + 0.5 *
                         input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
@@ -526,7 +526,7 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
     file.sort_index(inplace=True)
     # check if provided ids column has unique entries (obligatory)
     if len(file.index.unique()) < len(file.index):
-        print("WARNING: Multiple times occuring IDs found (ok on protein level)")
+        print("###WARNING###: Multiple times occuring IDs found (ok on protein level)")
     print("Creating profiles...")
     #profile_df = pd.DataFrame(index=file.index.droplevel(0).unique(), columns=profile_annotation_df["name on x-axis"])
     profile_df = pd.DataFrame(index=file.index.droplevel(
@@ -709,15 +709,15 @@ if __name__ == "__main__":
         if missing_cols_set - set(parameters_dict.keys()) == set():
             #switch off filters linked to missing columns 
             parameters_dict[columns_filter_dict[missing_cols_set]] = False
-            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "WARNING"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
+            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
         if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
             parameters_dict["filter_by_MScorr_evidence_combined"]=False
         else:
-            #if missing columns are linked to ids, values, or sample columns raise a KeyError and return
-            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t"+", ".join(missing_cols_set) + " not in the selected input file.\n"
+            #if missing columns are linked to ids, values, or sample columns raise a KeyError and exit
+            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(missing_cols_set) + " not in the selected input file.\n"
             module_helper.logger(log)
-            raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
-            sys.exit(", ".join(missing_cols_set) + " not in the selected input file.")
+            #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
+            sys.exit("###ERROR###" + ", ".join(missing_cols_set) + " not in the selected input file.")
     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
     module_helper.logger(log)
     
@@ -735,7 +735,7 @@ if __name__ == "__main__":
         module_helper.logger(log)
     else:
         module_helper.logger(log)
-        sys.exit("ERROR: Long format Filtering failed.")
+        sys.exit("###ERROR###: Long format Filtering failed.")
         
     
     # Rename filter_mask columns
