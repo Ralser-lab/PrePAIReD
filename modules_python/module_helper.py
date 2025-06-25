@@ -419,8 +419,7 @@ def create_logfile(logfilename,ids,savefilename,analysis_folder,profile_annotati
     return
     
 
-#create a matrix with precursors as rows and files/runs/samples/fractions as columns to keep track of filtered and imputed precursors
-def create_filtering_matrix(file,metadata_df,min_peptides,values,ids=["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"],filename_col="filename",diann_sample_column="File.Name",logfilename=None):
+def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
     """
     Creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
     
@@ -442,50 +441,42 @@ def create_filtering_matrix(file,metadata_df,min_peptides,values,ids=["Precursor
         column name with complete filenames in metadata. The default is "filename".
     diann_sample_column : str, optional
         name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
-    logfilename : str
-        name (path + filename) of the logfile. The default is None, disabling logging.
         
     Returns
     -------
-    mask : pd.DataFrame.
+    mask_df : pd.DataFrame.
         dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered
-    mask_description: pd.DataFrame.
+    mask_description_df: pd.DataFrame.
         mapping numbers in mask to filters
 
     """
-    print("Creating filtering matrix...")
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tCreating filtering matrix\n"
     #get sorted File.Names
     samples=[x.replace("\\","/").split("/")[-1] for x in file[diann_sample_column].unique()]
     if len(set(samples)) > len(set(metadata_df.index)):
-        print("WARNING: Not all samples in DIA-NN output annotated in metadata")
+        log += "\t\t\tWARNING: Not all samples in DIA-NN output annotated in metadata\n"
     elif len(set(samples)) < len(set(metadata_df.index)):
-        print("WARNING: Not all samples in metadata found in DIA-NN output")
+        log += "\t\t\tWARNING: Not all samples in metadata found in DIA-NN output\n"
     #get intersection between filenames and metadata
     samples=list(set(samples) & set(metadata_df.index))
     #sort File.Names
     samples.sort()
     columns_filenames=metadata_df.loc[samples,filename_col]
-    mask = pd.DataFrame(index=file.set_index(ids).index.unique(), columns=columns_filenames,data=0)
+    mask_df = pd.DataFrame(index=file.set_index(ids).index.unique(), columns=columns_filenames,data=0)
     # dataframe explaining reasons why peptide was excluded
-    mask_description = pd.DataFrame(columns=["filter","value"])
+    mask_description_df = pd.DataFrame(columns=["filter","value"])
     #mask_description["filter"] = ["not measured","measured and kept", "excessing_NaNs","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","Precursor.Charge","Proteotypic","Min. "+str(min_peptides)+" Peptides","Zero "+values,"Imputed"]
     #reordered to same order as filtering steps
-    mask_description["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence","Zero "+values,"Precursor.Charge","excessing_NaNs","Min. "+str(min_peptides)+" Peptides","missing not at random","Imputed"]
-    mask_description["value"]=range(0,len(mask_description))
+    mask_description_df["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence","Zero "+values,"Precursor.Charge","excessing_NaNs","Min. "+str(min_peptides)+" Peptides","missing not at random","Imputed"]
+    mask_description_df["value"]=range(0,len(mask_description_df))
     #write mask description into logfile
-    if logfilename is not None:
-        logfile=open(logfilename,"a")
-        logfile.write("\nFiltering matrix to keep track over excluded precursors and proteins created.")
-        logfile.write("\nReasons for exclusion of precursors as specified in filter mask\n")
-        logfile.write(mask_description.to_string(index=False))
-        logfile.write("\n-----------------------------------------------\n\n")
-        logfile.close()
-    mask_description.set_index("filter",inplace=True)
-    mask_description.loc["Imputed","value"]=99
-    return([mask,mask_description])
+    log += "\nFiltering matrix to keep track over excluded precursors and proteins created.\nReasons for exclusion of precursors as specified in filter mask\n" + mask_description_df.to_string(index=False) +"\n-----------------------------------------------\n\n"
+    mask_description_df.set_index("filter",inplace=True)
+    mask_description_df.loc["Imputed","value"]=99
+    return([mask_df,mask_description_df,log])
 
 
-def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",sample_col="sample",sample_group_col="sample group"):
+def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",sample_col="sample"):
     """
     Renames diann_sample_column ("File.Name" or "Run") in filter mask columns to shorter names
     
@@ -501,8 +492,6 @@ def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",s
         column name with complete filenames in metadata. The default is "filename".
     sample_col : str, optional
         column name with sample names in metadata. The default is "name on x-axis"
-    sample_group_col: str, optional
-        column name with sample group names in metadata. The default is "sample group". 
 
     Returns
     -------
@@ -517,8 +506,8 @@ def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",s
     #trim filter_mask on samples present in metadata
     samples=list(set(metadata_df[filename_col]) & set(filter_mask.columns))
     filter_mask=filter_mask[samples]
-    filter_mask.columns=[metadata_df.set_index(filename_col,drop=False).loc[filter_mask.columns,sample_col],metadata_df.set_index(filename_col,drop=False).loc[filter_mask.columns,sample_group_col]]
-    filter_mask.columns.names=["sample","group"] ### added 
+    filter_mask.columns=metadata_df.set_index(filename_col,drop=False).loc[filter_mask.columns,sample_col]
+    #filter_mask.columns.names=["sample","group"] ### added 
     #sorting columns
     filter_mask.sort_index(axis=1,level=[1,0],inplace=True)
     if summarized is not None:
