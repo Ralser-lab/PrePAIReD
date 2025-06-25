@@ -703,11 +703,7 @@ def check_filename_annotations_on_unique_indices(profile_annotation_file, sample
     return
 
 
-#load metadata file and assign columns as present in metadata_df (output from create_filename_annotations_file)
-# metafilename is name including path of metadata file
-# if metadata file is an excel file, metadatasheet is the excel sheet in the file providing the annotations
-# ending is file-ending of files in dia-nn output, e.g. ".d", ".rawIdx.wiff.dia"
-def load_metadata(metafilename=None,metadata_sheet="Sheet1",ending="",sample_column="Sample Name",group_column="PatID",label_column=None, filename_col="filename", encoding="utf-8", logfilename=None):
+def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name", encoding="utf-8"):
     """
     load the metadata file
     
@@ -715,64 +711,46 @@ def load_metadata(metafilename=None,metadata_sheet="Sheet1",ending="",sample_col
     
     Parameters
     ----------
-    metafilename : str, optional
-        name of the metadata file. The default is None, if None a GUI opens to select the file.
+    metadata_fp : str
+        name of the metadata file. (The default is None, if None a GUI opens to select the file.)
     metadata_sheet : str, optional
         if metadata is an excel file, metadata_sheet specifies the sheetname. The default is "Sheet1".
-    ending : str, optional
-        file names in metadata may have capped file endings compared to DIA-NN output report, ending specifies the file ending to match report.tsv["File.Name"]. The default is "".
-    group_column : str, optional
-        name of column in metadata specifying the sample group, used for e.g. separate plots per group. The default is "PatID".
-    label_column : str, optional
-        name of column in metadata specifying a label, used for e.g. coloring in plots. The default is None.
     filename_col : str, optional
         column name with complete filenames in metadata. The default is "filename".
     encoding : str, optional
         encoding passed to pandas read_csv
-    logfilename : str
-        name (path + filename) of the logfile. The default is None, disabling logging.
+
         
     Returns
     -------
-    metafilename : str, optional
+    metadata_fp : str, optional
         name of the metadata file.
     metadata_df : pd.DataFrame
         the metadata file as dataframe
 
     """
-    if metafilename is None:
+    '''
+    if metadata_fp is None:
         print("Please select file containing meta data.")
         root = Tk()
         root.withdraw()
-        metafilename = askopenfilename(
+        metadata_fp = askopenfilename(
             initialdir="S:/AG/AG-CF-HTMS/CoreFacility/")
         root.destroy()
+    '''
+    log = ""
     # read tsv file
-    if metafilename[-4:] in [".txt",".tsv"]:
-        metadata_df = pd.read_csv(metafilename, sep="\t", encoding=encoding)
-    elif metafilename[-4:]==".csv":
-        metadata_df = pd.read_csv(metafilename, sep=",", encoding=encoding)
+    if metadata_fp[-4:] in [".txt",".tsv"]:
+        metadata_df = pd.read_csv(metadata_fp, sep="\t", encoding=encoding)
+    elif metadata_fp[-4:]==".csv":
+        metadata_df = pd.read_csv(metadata_fp, sep=",", encoding=encoding)
     #read xlsx file
-    elif metafilename[-5:]==".xlsx":
-        metadata_excel=pd.ExcelFile(metafilename)
+    elif metadata_fp[-5:]==".xlsx":
+        metadata_excel=pd.ExcelFile(metadata_fp)
         metadata_df=metadata_excel.parse(metadata_sheet)
         metadata_excel.close()
-        #add columns
-        if "Path" in metadata_df.columns and "File.Name" in metadata_df.columns:
-            metadata_df[filename_col]=metadata_df["Path"]+metadata_df["File.Name"]+ending
-        '''
-        #add sample name, e.g. ??
-        if sample_column is not None:
-            metadata_df["name on x-axis"]=metadata_df[sample_column]
-        #add group for separate plots in QC
-        if group_column is not None:
-            metadata_df["sample group"]=metadata_df[group_column]
-        '''
-        #add label, for colouring
-        if label_column is not None:
-            metadata_df["label"]=metadata_df[label_column]
     else:
-        print("Please implement how how to read metadata of filetype "+metafilename[-5:])
+        log += "Please implement how how to read metadata of filetype "+metadata_fp[-5:]
     #exclude all annotations without filename (e.g. not measured yet)
     if filename_col in metadata_df.columns:
         metadata_df=metadata_df.dropna(subset=[filename_col])
@@ -782,14 +760,9 @@ def load_metadata(metafilename=None,metadata_sheet="Sheet1",ending="",sample_col
         metadata_df.set_index("FileName_trimmed", inplace=True)
     # drop duplicated indices
     if sum(metadata_df.index.duplicated())>0:
-        print(str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.")
-        if logfilename is not None:
-            logfile=open(logfilename,"a")
-            logfile.write(str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n")
-            logfile.close()
+        log += str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped."
         metadata_df=metadata_df.drop_duplicates() 
-    print("Meta-data/Profile Annotations loaded successfully.")
-    return([metafilename,metadata_df])
+    return([metadata_fp,metadata_df, log])
 
 
 
