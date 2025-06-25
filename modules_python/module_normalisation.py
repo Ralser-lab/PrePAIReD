@@ -7,11 +7,11 @@ Output: Normalized wide-format data
 import warnings
 import numpy as np
 import pandas as pd
-import sys
 import json
 import os
 from scipy.optimize import least_squares, minimize
 import time
+import argparse
 
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
@@ -486,14 +486,38 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 
 if __name__ == "__main__":
     
-    # Get data from wrapper
-    #### We should include flags here
-    df_fp = sys.argv[0] #-d
-    param_fp = sys.argv[1] #-p
-    out_dir_fp = sys.argv[2] #-o
-    log_file = sys.argv[3] #-l
-    #meta_data = sys.argv[4] #-md ### not needed here
-    #mask_fp = sys.argv[5] # -mask ### not implemented yet and not needed here
+    # Get data from wrapper by parsing flags
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-d", "--datapath", required=True, 
+        help="Filepath to datafile that will be processed") 
+    parser.add_argument(
+        "-p", "--parampath", required=True, 
+        help="Filepath to parameter json") 
+    parser.add_argument(
+        "-o", "--outpath", required=True, 
+        help="Filepath for outputfile") 
+    parser.add_argument(
+        "-md", "--metapath", required=True, 
+        help="Filepath to metadatafile") 
+    parser.add_argument(
+        "-ma", "--maskpath", required=True, 
+        help="Filepath to maskfile") 
+    parser.add_argument(
+        "-l", "--log_file", required=True, 
+        help="Filepath to logfile") 
+    parser.add_argument(
+        "-c", "--counter", required=True, 
+        help="Module counter") 
+    args = parser.parse_args()
+    data_df_fp = args.datapath
+    param_fp = args.parampath
+    out_dir_fp = args.outpath
+    meta_df_fp = args.metapath
+    mask_fp = args.maskpath
+    log_file = args.log_file
+    meta_df_fp = args.metapath
+    counter = args.counter
     
     ###### To be modified
     outname = "data_imputed"
@@ -503,9 +527,9 @@ if __name__ == "__main__":
         parameters_dict = json.load(f)
     # Load data
     if parameters_dict["normalization_method"] not in ["delayed"]:
-        data_df = pd.read_csv(df_fp,sep="\t",index_col=0)
+        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
     else:
-        data_arr = np.load(df_fp)
+        data_arr = np.load(data_df_fp)
         
     # Load mask and log file
     """
@@ -565,7 +589,7 @@ if __name__ == "__main__":
     log = helper.update_log(module_output)
     """
     
-    helper.logger(log_file, module_output=str)
+    helper.logger(log_file, module_output=module_output)
     
     # Save data
     if parameters_dict["normalization_method"] not in ["delayed"]:
