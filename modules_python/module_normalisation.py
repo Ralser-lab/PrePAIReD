@@ -12,6 +12,7 @@ import os
 from scipy.optimize import least_squares, minimize
 import time
 import argparse
+import sys
 
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
@@ -198,7 +199,7 @@ def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_outpu
         
     """
         
-    normalization_factors_df=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
+    normalization_factors_df=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"NormalizationFactor":float})
     normalization_factors_df.set_index("sample",inplace=True)
     if on_mad:
         max_nf=normalization_factors_df["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
@@ -512,20 +513,22 @@ if __name__ == "__main__":
     counter = args.counter
     
     ###### To be modified
-    outname = "data_imputed"
+    outname = "data_"+str(counter)
     
     # Load parameter_file
     with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
         parameters_dict = json.load(f)
     # Load data
     if parameters_dict["normalization_method"] not in ["delayed"]:
-        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0) # counter-1
     else:
         data_arr = np.load(data_df_fp)
         
     # Define seed
     seed = parameters_dict["seed"] + counter
-        
+    
+    ### Conversion to boolean
+    
     # Load mask and log file
     """
     mask = load_mask() # load mask (in parent directory)
@@ -537,45 +540,54 @@ if __name__ == "__main__":
         module_output += str(key)+"\t\t\t"+str(value)+"\n"
     module_output += "------------\n"  
     
+    helper.logger(log_file, module_output=module_output)
+    module_output = ""
+    
+    #### Implement error catch to write it to the logger!!!!!! sys
+    
     """
     # Helper DataFrames -> Maybe automate upper bit?
     log = helper.logger_add_parameters(log_file, parameters_dict)
     """
     
-    # Process data
-    if parameters_dict["normalization_method"] == "quantile":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
-        data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
-        
-    elif parameters_dict["normalization_method"] == "quantile_ranked":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = normalize_quantile_ranked(data_df)
-    elif parameters_dict["normalization_method"] == "median_scaling":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization.\n"
-        data_processed_df, module_output = normalize_median_scaling(data_df, out_dir_fp, module_output,
-                                                               normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
-                                                               nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
-                                                               exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
-                                                               rel_threshold=parameters_dict["rel_threshold"],
-                                                               on_mad=parameters_dict["on_mad"],
-                                                               min_nf=parameters_dict["min_nf"],
-                                                               max_nf=parameters_dict["max_nf"],
-                                                               axis=parameters_dict["axis"])
-
-    elif parameters_dict["normalization_method"] == "median":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
-        data_processed_df = normalize_median(data_df)
-        
-    elif parameters_dict["normalization_method"] == "mean":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
-        data_processed_df = normalize_mean(data_df)
-
-    elif parameters_dict["normalization_method"] == "delayed":
-        #### Not properly tested
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
-        data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+    try:
+        # Process data
+        if parameters_dict["normalization_method"] == "quantile":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
+            data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
+            
+        elif parameters_dict["normalization_method"] == "quantile_ranked":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
+            data_processed_df = normalize_quantile_ranked(data_df)
+        elif parameters_dict["normalization_method"] == "median_scaling":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization.\n"
+            data_processed_df, module_output = normalize_median_scaling(data_df, out_dir_fp, module_output,
+                                                                   normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
+                                                                   nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
+                                                                   exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
+                                                                   rel_threshold=parameters_dict["rel_threshold"],
+                                                                   on_mad=parameters_dict["on_mad"],
+                                                                   min_nf=parameters_dict["min_nf"],
+                                                                   max_nf=parameters_dict["max_nf"],
+                                                                   axis=parameters_dict["axis_median_scaling"])
     
-    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+        elif parameters_dict["normalization_method"] == "median":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
+            data_processed_df = normalize_median(data_df)
+            
+        elif parameters_dict["normalization_method"] == "mean":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
+            data_processed_df = normalize_mean(data_df)
+    
+        elif parameters_dict["normalization_method"] == "delayed":
+            #### Not properly tested
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
+            data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+        
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+    except:
+        helper.logger(log_file, "ERROR: Module ran into an error.")
+        sys.exit(0)
 
     # Comparison for mask and logger what changed between both files
     """
@@ -591,5 +603,8 @@ if __name__ == "__main__":
         data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
     else:
         np.save(os.path.join(out_dir_fp,out_dir_fp+".npy"),data_processed_arr)
+    
+    helper.logger(log_file, "Module finished as expected.")
+    sys.exit(0)
     
     
