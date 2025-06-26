@@ -364,7 +364,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     if filters_dict["filter_by_MScorr_evidence_combined"]:
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
-                log += "###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet")#IMPLEMENT IF NECCESSARY
+                log += "###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet"#IMPLEMENT IF NECCESSARY
             input_df = input_df[input_df["Ms1.Profile_df.Corr"] + 0.5 *
                         input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
@@ -633,7 +633,7 @@ def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="
     #transform to wide format
     wide_df = pd.pivot_table(long_df.reset_index(),index=id_col,columns=input_filename_col,values=value_col)
     #rename columns from file names to sample names
-    wide_df.columns = metadata_df.reset_index().set_index(metadata_filename_col).loc[wide_df.columns,metadata_sample_col]
+    wide_df.columns = metadata_df.reset_index().set_index(metadata_filename_col,drop=False).loc[wide_df.columns,metadata_sample_col]
     wide_df.sort_index(inplace=True,axis=1)
     #assign measured values in mask_df
     for col in wide_df.columns:
@@ -745,7 +745,7 @@ if __name__ == "__main__":
                                                        sample_col=parameters_dict["metadata_sample_column"])
     
     # Long to wide format
-    wide_df = long_to_wide_format(input_df,
+    wide_df, mask_df = long_to_wide_format(input_df,
                                   metadata_df,
                                   mask_df, 
                                   mask_description_df,
@@ -758,9 +758,12 @@ if __name__ == "__main__":
 
     
     # Save data #TODO
-    wide_df.to_csv(out_dir_fp + "",sep="\t")
-    # save data_processed -> out_dir_fp
-    # save mask, log -> parent_dir_fp
+    wide_df.to_csv(out_dir_fp + "data_1.tsv", sep="\t")
+    mask_df.to_csv(out_dir_fp + "data_mask_1.tsv", sep="\t")
+    
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix and mask are saved successfully.\n\t\t\tmodule_filtering_long ends without errors.\n"
+    module_helper.logger(log)
+    sys.exit(0)
     
 
 
