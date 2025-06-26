@@ -643,18 +643,21 @@ def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="
     
 # %%
 
+
 if __name__ == "__main__":
     
     
     # Get data from wrapper
     param_fp = sys.argv[0]
     out_dir_fp = sys.argv[1]
+    counter = sys.argv[2]
     
     # Load parameters #TODO
     parameters_dict = module_helper.load_parameters(param_fp) # json.load 
     
     #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
     '''
+    out_dir_fp = "../01_Filtering/"
     parameters_dict_raw = pd.read_csv("../01_Filtering/parameters.txt",sep="\t",index_col=0,header=None)[1].to_dict()
     parameters_dict = dict()
     for x in parameters_dict_raw.items():
@@ -669,67 +672,83 @@ if __name__ == "__main__":
                                               metadata_sheet=parameters_dict["metadata_sheet"], 
                                               filename_col=parameters_dict["metadata_filename_column"], 
                                               encoding=parameters_dict["metadata_encoding"])
+    # Check if loading was successful, else pass error to log and exit   
     module_helper.logger(log)
-    
+    if not metadata_df:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in log:
+        module_helper.logger("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        
     
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
     input_id_col = ids_list[0]
     
-    # Select columns which will be read from DIA-NN output (reading only used columns saves RAM and speeds up analysis)
-    file_columns_list = select_filtering_columns(filters_dict=parameters_dict, 
-                                                 ids_list=ids_list, 
-                                                 values_col=parameters_dict["input_values_column"],
-                                                 input_filename_col=parameters_dict["input_filename_column"])
-
-
-    # Load input file
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
-    module_helper.logger(log)
-    try:
-        input_df = read_input(filename=parameters_dict["input_fp"], 
-                              file_columns_list=file_columns_list)
-    except KeyError:
-        #read complete input
-        input_df = read_input(filename=parameters_dict["input_fp"], 
-                              file_columns_list=None)
-        #identify missing columns which lead to KeyError; DIA-NN specific!
-        missing_cols_set = set(file_columns_list) - set(input_df.columns)
-        columns_filter_dict = {"Proteotypic":"filter_proteotypic",
-                               "Q.Value":"filter_by_qvalue",
-                               "Global.Q.Value":"filter_by_global_qvalue",
-                               "GG.Q.Value":"filter_by_gg_qvalue","PG.Q.Value":"filter_by_pg_qvalue",
-                               "Global.PG.Q.Value":"filter_by_global_pg_qvalue",
-                               "Protein.Q.Value":"filter_by_p_qvalue",
-                               "Lib.Q.Value":"filter_by_lib_qvalue",
-                               "Lib.PG.Q.Value":"filter_by_lib_pg_qvalue",
-                               "PEP":"filter_by_PEP",
-                               "Ms1.Profile.Corr":"filter_by_MScorr",
-                               "Mass.Evidence":"filter_by_evidence"}
-        if missing_cols_set - set(parameters_dict.keys()) == set():
-            #switch off filters linked to missing columns 
-            parameters_dict[columns_filter_dict[missing_cols_set]] = False
-            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
-        if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
-            parameters_dict["filter_by_MScorr_evidence_combined"]=False
-        else:
-            #if missing columns are linked to ids, values, or sample columns raise a KeyError and exit
-            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(missing_cols_set) + " not in the selected input file.\n"
-            module_helper.logger(log)
-            #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
-            sys.exit("###ERROR###" + ", ".join(missing_cols_set) + " not in the selected input file.")
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
-    module_helper.logger(log)
+    
+    #DIA-NN
+    if parameters_dict["input_origin"]=="diann":
+        # Select columns which will be read from DIA-NN output (reading only used columns saves RAM and speeds up analysis)
+        file_columns_list = select_filtering_columns(filters_dict=parameters_dict, 
+                                                     ids_list=ids_list, 
+                                                     values_col=parameters_dict["input_values_column"],
+                                                     input_filename_col=parameters_dict["input_filename_column"])
     
     
-    # Precursor filtering (DIA-NN specific)
-    filtered_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
-                                                              input_id_col=input_id_col, 
-                                                              metadata_df=metadata_df, 
-                                                              filters_dict=parameters_dict, 
-                                                              values_col=parameters_dict["input_values_column"], 
-                                                              filename_col=parameters_dict["metadata_filename_column"], 
-                                                              diann_sample_column=parameters_dict["input_filename_column"])
+        # Load input file
+        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
+        module_helper.logger(log)
+        try:
+            input_df = read_input(filename=parameters_dict["input_fp"], 
+                                  file_columns_list=file_columns_list)
+        except KeyError:
+            #read complete input
+            input_df = read_input(filename=parameters_dict["input_fp"], 
+                                  file_columns_list=None)
+            #identify missing columns which lead to KeyError; DIA-NN specific!
+            missing_cols_set = set(file_columns_list) - set(input_df.columns)
+            columns_filter_dict = {"Proteotypic":"filter_proteotypic",
+                                   "Q.Value":"filter_by_qvalue",
+                                   "Global.Q.Value":"filter_by_global_qvalue",
+                                   "GG.Q.Value":"filter_by_gg_qvalue","PG.Q.Value":"filter_by_pg_qvalue",
+                                   "Global.PG.Q.Value":"filter_by_global_pg_qvalue",
+                                   "Protein.Q.Value":"filter_by_p_qvalue",
+                                   "Lib.Q.Value":"filter_by_lib_qvalue",
+                                   "Lib.PG.Q.Value":"filter_by_lib_pg_qvalue",
+                                   "PEP":"filter_by_PEP",
+                                   "Ms1.Profile.Corr":"filter_by_MScorr",
+                                   "Mass.Evidence":"filter_by_evidence"}
+            if missing_cols_set - set(parameters_dict.keys()) == set():
+                #switch off filters linked to missing columns 
+                parameters_dict[columns_filter_dict[missing_cols_set]] = False
+                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
+            if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
+                parameters_dict["filter_by_MScorr_evidence_combined"]=False
+            else:
+                #if missing columns are linked to ids, values, or sample columns raise a KeyError and exit
+                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(missing_cols_set) + " not in the selected input file.\n"
+                module_helper.logger(log)
+                #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
+                sys.exit("###ERROR###" + ", ".join(missing_cols_set) + " not in the selected input file.")
+        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
+        module_helper.logger(log)
+        
+        
+        # Extract ID mapping
+        id_mapping_df = input_df[ids_list].drop_duplicates()
+        
+        # Precursor filtering (DIA-NN specific)
+        filtered_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
+                                                                  input_id_col=input_id_col, 
+                                                                  metadata_df=metadata_df, 
+                                                                  filters_dict=parameters_dict, 
+                                                                  values_col=parameters_dict["input_values_column"], 
+                                                                  filename_col=parameters_dict["metadata_filename_column"], 
+                                                                  diann_sample_column=parameters_dict["input_filename_column"])
+    elif parameters_dict["input_origin"]=="msfragger":
+        pass # adjust here for other programs
+        
+    # Check if filtering was successful, else pass error to log and exit    
     if filtered_df:
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
         module_helper.logger(log)
@@ -757,14 +776,19 @@ if __name__ == "__main__":
 
 
     
-    # Save data #TODO
-    wide_df.to_csv(out_dir_fp + "data_1.tsv", sep="\t")
-    mask_df.to_csv(out_dir_fp + "data_mask_1.tsv", sep="\t")
+    # Save data
+    id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t")
+    wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
+    mask_df.to_csv(out_dir_fp + "data_mask_" + str(counter) + ".tsv", sep="\t")
     
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix and mask are saved successfully.\n\t\t\tmodule_filtering_long ends without errors.\n"
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + out_dir_fp + "data_" + str(counter) + ".tsv\n\t\t\tmask saved successfully to " + out_dir_fp + "data_mask_" + str(counter) + ".tsv\n\t\t\tand table for ID mapping saved to " + out_dir_fp + "id_mapping.tsv\n"
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
     module_helper.logger(log)
     sys.exit(0)
-    
+
+
+
+
 
 
 
