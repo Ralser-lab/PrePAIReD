@@ -8,25 +8,26 @@ source("~/Documents/Science/Projects/RalserLabPreprocessing/helper_functions_R.R
 #' The imputation process is wrapped in a logging function to capture console output
 #' and messages to a log file.
 #'
-#' @param quant_file Path to a tab-delimited file containing the quantitative 
+#' @param datapath Path to a tab-delimited file containing the quantitative 
 #' data with missing values. Columns correspond to variables and rows to
 #' observations.
-#' @param parameter_file Path to a JSON parameter file.
-#' @param method A string indicating the imputation method to use.
-#'   Supported values: `"missforest"`, `"bpca"`, `"ppca"`, `"ppm"`, `"mnar"`.
+#' @param parampath Path to a JSON parameter file. Has to complete a element 
+#' /code{method} indicating the imputation method to use. Supported values:
+#' `"missforest"`, `"bpca"`, `"ppca"`, `"ppm"`, `"mnar"`.
 #' @param log_file Path to a file where logs  will be written.
-impute <- function(quant_file, parameter_file, method, log_file){
+#' @param counter Step of the preprocessing pupeline currently run
+impute <- function(datapath, parampath, log_file, counter){
     
     ## read in data
-    quant_df <- as.data.frame(read.table(file = quant_file,
+    quant_df <- as.data.frame(read.table(file = datapath,
                                          sep = '\t',
                                          header = TRUE))
-    parameter_list <- read_JSON(parameter_file)
+    parameter_list <- read_JSON(parampath)
+    #method <- parameter_list[["method"]]
     
     ## setting seed
-    #set.seed(parameter_list[["seed"]]+parameter_list[["step"]])
-    set.seed(42)
-    
+    set.seed(parameter_list[["seed"]]+counter)
+
     ## call imputation function
     main_impute <- switch(tolower(method),
                           "missforest" = function() impute_missForest(quant_df, parameter_list),
@@ -62,16 +63,25 @@ impute_missForest <- function(quant_df, parameter){
     library(missForest)
     
     ## perform random forest based imputation
-    cat(sprintf("\n\n Starting missForest imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\n\nStarting missforest imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+    
+    ## optional: add parallelization, on my WS not faster
+    #library(doParallel)
+    #cl <- makeCluster(4)
+    #registerDoParallel(cl)
     
     imputed_list <- missForest::missForest(xmis = quant_df,
                                            maxiter = parameter[["maxiter"]],
                                            ntree = parameter[["ntree"]],
-                                           verbose = TRUE) # add parallelization option?
+                                           #parallelize = "forests",
+                                           #maxnodes = 4,
+                                           verbose = TRUE)
     
-    cat(sprintf("\n\n Finished missForest imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    #stopCluster(cl)
+    
+    cat("\nFinished missforest imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
     
     imputed_df <- as.data.frame(imputed_list$ximp)  # ensures output is a data.frame
     
@@ -99,33 +109,36 @@ impute_pca <- function(quant_df, parameter, method){
     
     ## if number of PCs is not defined: sets number of PCs to 15,
     ## if nSamples <15, set nPCs = nSamples
+
     if(is.null(parameter[["nPCs_imputeR"]])){
-        nPCs <- if (ncol(mat) > 15) {
+        nPCs <- if (ncol(quant_df) > 15) {
             15
         } else {
-            ncol(mat)
+            ncol(quant_df)
         }
     } else{
         nPCs <- parameter[["nPCs_imputeR"]]
     }
     
     ## perform Bayesian PCA
-    cat(sprintf("\n\n Starting ", method, " imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\n\nStarting ", method, " imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
     
-    imputed_list <- pcaMethods::pca(xmis = t(quant_df),
+    imputed_list <- pcaMethods::pca(object = t(quant_df),
                                     method = method,
                                     nPcs = nPCs)
     
-    cat(sprintf("\n\n Finished ", method, " imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\nFinished ", method, " imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
     
     ## get the estimated complete observations
-    imputed_df <- mice::completeObs(imputed_list)
+    imputed_df <- pcaMethods::completeObs(imputed_list)
     imputed_df <- as.data.frame(t(imputed_df))
     
     return(imputed_df)
 }
+
+
 #' @description
 #' Imputation function using \code{ppm} from the \code{mice} package.
 #'
@@ -141,17 +154,43 @@ impute_ppm <- function(quant_df, parameter){
     
     ## load package, throws error if package is not installed
     library(mice)
+    library(parallel)
+    
+    # ## define numnber of cores
+    # ncores_num <- min(parallel::detectCores() - 1, 
+    #                   parameter[["n_multi_impute"]]) 
+    # 
+    # if(ncores_num == 0){
+    #     ncores_num <- 1
+    # }
+    # if(ncores_num == 1){
+    #     message("Running ppm imputation without parallelization as not enough
+    #             cores exist on the machine you are running this script on./n")
+    # }
+    # else{
+    #     message("Running ppm imputation with parallelization.")
+    # }
     
     ## ppm imputation run in the mice package -- slow
-    cat(sprintf("\n\n Starting ppm imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\n\nStarting ppm imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
     
-    imputed_list <- mice::mice(quant_df,
-                               method = "pmm",
-                               m = parameter[["n_multi_impute"]])
+    ## Option with parall - on my WS did not increase speed, neet to test this
+    ## in the final setup and maybe adjust some parameters
+    # imputed_list <- mice::futuremice(quant_df,
+    #                                  method = "pmm",
+    #                                  m = parameter[["n_multi_impute"]],
+    #                                  parallelseed = parameter[["seed"]],
+    #                                  n.core = ncores_num)
+    invisible(capture.output({
+        imputed_list <- mice::mice(quant_df,
+                                   method = "pmm",
+                                   m = parameter[["n_multi_impute"]])
+    }))
+
     
-    cat(sprintf("\n\n Finished ppm imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\nFinished ppm imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
     
     imputed_df <- as.data.frame(complete(imputed_list))
     
@@ -189,8 +228,8 @@ impute_ppm <- function(quant_df, parameter){
 ### imputation function for MNAR
 impute_MNAR <- function(quant_df, parameter){
     
-    cat(sprintf("\n\n Starting missForest imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\n\nFinished MNAR imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
     
     nSamp <- ncol(quant_df)
     probObserved <- rowSums(!is.na(quant_df))/nSamp
@@ -223,8 +262,8 @@ impute_MNAR <- function(quant_df, parameter){
     imputed_df <- rbind(impute_subset_df,
                         nonimpute_subset_df)[row.names(quant_df),]
     
-    cat(sprintf("\n\n Finished MNAR imputation. [%s] \n",
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    cat("\nFinished MNAR imputation. ",
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
     
     return(imputed_df)
 }
