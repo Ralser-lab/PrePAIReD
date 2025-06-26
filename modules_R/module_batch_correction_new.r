@@ -83,7 +83,7 @@ batchcorrect_harmony <- function(Data, batchER) {
 #' @param log_file_fp filepath to write logs
 #' @param counter     integer module counter
 #' @export
-run_batch_correction <- function(data_df_fp, meta_df_fp, param_fp,
+batchcorrect <- function(data_df_fp, meta_df_fp, param_fp,
                                  out_dir_fp, mask_fp, log_file_fp,
                                  counter) {
   # Setup logging environment
