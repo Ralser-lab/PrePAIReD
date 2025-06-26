@@ -81,11 +81,14 @@ batchcorrect_harmony <- function(Data, batchER) {
 #' @param out_dir_fp  directory for output files
 #' @param mask_fp     filepath to mask file (currently unused)
 #' @param log_file_fp filepath to write logs
-#' @param counter     integer module counter
 #' @export
 batchcorrect <- function(data_df_fp, meta_df_fp, param_fp,
-                                 out_dir_fp, mask_fp, log_file_fp,
-                                 counter) {
+                                 out_dir_fp, mask_fp, log_file_fp) {
+  # generate run suffix from timestamp
+  suffix <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  # Setup logging environment
+  assign("log_file_fp", log_file_fp, envir = environment(log_info))
+  log_info(sprintf("### MODULE %s START ###", suffix))
   # Setup logging environment
   assign("log_file_fp", log_file_fp, envir = environment(log_info))
   log_info(sprintf("### MODULE %s START ###", counter))
