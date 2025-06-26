@@ -10,6 +10,7 @@ library(jsonlite)
 #'
 #' @return The result of evaluating \code{expr}, or stops if an error occurs.
 run_with_logging <- function(expr, log_path) {
+    
     con <- file(log_path, open = "at")  # append mode
     on.exit({
         sink(type = "message")
@@ -26,9 +27,23 @@ run_with_logging <- function(expr, log_path) {
     sink(con, type = "output")
     sink(con, type = "message")
     
-    # Evaluate the expression (e.g. main())
-    result <- expr()
-    
+    result <- tryCatch(
+        withCallingHandlers(
+            expr(),
+            warning = function(w) {
+                message("### WARNING: ", conditionMessage(w))
+                invokeRestart("muffleWarning")
+            },
+            message = function(m) {
+                message("### MESSAGE: ", conditionMessage(m))
+                invokeRestart("muffleMessage")
+            }
+        ),
+        error = function(e) {
+            message("### ERROR: ", conditionMessage(e))
+            return(NULL)  # safely continue execution
+        }
+    )
     
     ## Mark end of block
     cat(sprintf("\n--- Module in R -- END [%s] ---\n", 
@@ -67,5 +82,5 @@ read_JSON <- function(parameter_file){
     
     return(parameter_list)
 } 
-    
+
 
