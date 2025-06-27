@@ -151,7 +151,9 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
         Input DataFrame.
     optimum : str or float, optional
         Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
-
+    alpha : float, optional
+        Confidence interval alpha level for threshold calculation (default 0.95).
+        
     Returns
     -------
     pd.DataFrame
@@ -159,16 +161,11 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
     """
     
     missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
-
-         ## Check this bit as dtype might not work as intended
-         ## Parsing of alpha might be included (missing)
          
     if optimum != -3.14:
         optimal_threshold = optimum 
 
-    data_in = data_in.loc[:,missingness<optimal_threshold]
-
-    return data_in
+    return data_df.loc[:,missingness<optimal_threshold]
 
 def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
     """
@@ -575,7 +572,7 @@ if __name__ == "__main__":
     #counter = args.counter
     
     ###### To be modified
-    outname = "data_imputed"
+    outname = "data_filtered_wide"
     
     # Load parameter_file
     parameters_dict = {
@@ -614,12 +611,14 @@ if __name__ == "__main__":
     log = helper.logger_add_parameters(log_file, parameters_dict)
     """
     
+    data_processed_df = data_df.copy()
+
     # Process data
     if parameters_dict['filtering_wide_method1'] == "metadata":
         #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
         data_processed_df = filter_samples_based_on_metadata(data_df, meta_df)
         
-    elif parameters_dict['filtering_wide_method2'] == "sample_detection":
+    if parameters_dict['filtering_wide_method2'] == "sample_detection":
         #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
         data_processed_df = filter_samples_on_detection_proportion(data_df)
 
