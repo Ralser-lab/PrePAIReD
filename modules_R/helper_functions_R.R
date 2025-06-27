@@ -31,16 +31,16 @@ run_with_logging <- function(expr, log_path) {
         withCallingHandlers(
             expr(),
             warning = function(w) {
-                message("### WARNING: ", conditionMessage(w))
+                message("###WARNING### : ", conditionMessage(w))
                 invokeRestart("muffleWarning")
             },
             message = function(m) {
-                message("### MESSAGE: ", conditionMessage(m))
+                message("MESSAGE: ", conditionMessage(m))
                 invokeRestart("muffleMessage")
             }
         ),
         error = function(e) {
-            message("### ERROR: ", conditionMessage(e))
+            message("###ERROR###: ", conditionMessage(e))
             return(NULL)  # safely continue execution
         }
     )
@@ -82,5 +82,3 @@ read_JSON <- function(parameter_file){
     
     return(parameter_list)
 } 
-
-
