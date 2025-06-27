@@ -153,7 +153,7 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
         Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
     alpha : float, optional
         Confidence interval alpha level for threshold calculation (default 0.95).
-        
+
     Returns
     -------
     pd.DataFrame
@@ -163,7 +163,7 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
     missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
          
     if optimum != -3.14:
-        optimal_threshold = optimum 
+        optimal_threshold = optimum/100 
 
     return data_df.loc[:,missingness<optimal_threshold]
 
@@ -578,11 +578,13 @@ if __name__ == "__main__":
     parameters_dict = {
             'filtering_wide_method1': 'metadata',
             'filtering_wide_method2': 'sample_detection',
-            'filtering_wide_method3': 'precursor_detection'
+            'filtering_wide_method3': ''
             }
-    #with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
-    #    parameters_dict = json.load(f)
+    with open(os.path.join(out_dir_fp, 'parameters.json'), 'w') as f:
+        json.dump(parameters_dict, f, indent = 4)
 
+    with open(os.path.join(out_dir_fp, 'parameters.json')) as f:
+        parameters_dict = json.load(f)
 
     # Load data
     data_df = pd.read_csv(data_df_fp, sep = '\t', index_col = 0)
