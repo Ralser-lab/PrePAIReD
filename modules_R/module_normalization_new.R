@@ -9,6 +9,7 @@
 
 # Packages
 library(roxygen2)
+source("~/MyStuff/preprocessing/Code/Common/Preprocessing/modules_R/helper_functions_R.R")
 
 
 
@@ -27,6 +28,10 @@ library(roxygen2)
 #' @return A \code{data.frame} with the normalized, glog2-transformed data.
 #' 
 normalize_vsn <- function(DM_df){
+  # Print message informing the user that normalization is starting, with time stamp
+  cat(sprintf("\n\n Starting VSN normalization. [%s] \n",
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  
   # The data provided is log2 transformed, need to be transformed back to 
   # raw intensities for VSN normalization
   DM_df <- 2^DM_df
@@ -34,6 +39,10 @@ normalize_vsn <- function(DM_df){
   # Perform the normalization
   library(limma)
   DM_df <- limma::normalizeVSN(DM_df)
+  
+  # Print message informing the user that normalization has ended, with time stamp
+  cat(sprintf("\n\n Finished VSN normalization. [%s] \n",
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   
   # Return output
   return(as.data.frame(DM_df))
@@ -67,18 +76,24 @@ normalize_vsn <- function(DM_df){
 #' 
 #' @return A \code{data.frame} with the normalized, log2-transformed data.
 normalize_cyclic_loess <- function(DM_df,
-                                   span = 0.7,
-                                   method_str = c("fast", "affy", "pairs"),
-                                   iter_int = 3) {
+                                   parameters) {
+  # Print message informing the user that normalization is starting, with time stamp
+  cat(sprintf("\n\n Starting cyclic LOESS normalization. [%s] \n",
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  
   # Make sure the method chosen is a valid option
   method_str <- match.arg(method_str)
   
   # Perform the normalization
   library(limma)
   DM_df <- limma::normalizeCyclicLoess(DM_df, 
-                                span = 0.7, 
-                                iterations = iter_int, 
-                                method = method_str)
+                                       span = parameters[["span_cyclic_loess_fl"]], 
+                                       method = parameters[["method_cyclic_loess_str"]],
+                                       iterations = parameters[["iter_cyclic_loess_int"]])
+  
+  # Print message informing the user that normalization has ended, with time stamp
+  cat(sprintf("\n\n Finished cyclic LOESS normalization. [%s] \n",
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   
   # Return output
   return(as.data.frame(DM_df))
@@ -103,28 +118,32 @@ normalize_cyclic_loess <- function(DM_df,
 #'    Can be "vsn" or "cyclic_loess"
 #'    \item Parameters passed to the function normalize_cyclic_loess
 #' }
+#' #' @param log_file Path to a file where logs  will be written.
 #' 
 #' @return Returns \code{NULL}. Writes the normalized version of the dataframe,
 #' as a .tsv file, to the location where the original data was located
-main_normalize <- function(data_path,
-                           out_dir_path,
-                           parameters_path) {
-  # First of all we make sure the method chosen is one of the options we provide
-  method_str <- match.arg(method_str, choices = c("vsn", "cyclic_loess"))
-  
+normalize <- function(data_path,
+                      out_dir_path,
+                      parameters_path, 
+                      log_file) {
   # Read the data 
   DM_df <- as.data.frame(fread(data_path))
   
   # Read the parameters
   library(jsonlite)
-  parameter_list <- jsonlite::fromJSON(parameters_path)
+  parameter_list <- readJSON(parameters_path)
   
-  # Depending on which method was chosen, perform that normalization
-  normalized_df <- switch(
-    tolower(parameter_list[["method"]]),
-    "vsn" = normalize_vsn(DM_df),
-    "cyclic_loess" = normalize_cyclic_loess(DM_df, parameter_list)
-  )
+  # Set seed
+  set.seed(42)
+  
+  # Depending on which method was chosen, call the corresponding normalization function
+  main_normalize <- switch(tolower(parameter_list[["method_normalization_R_str"]]),
+                          "vsn" = function() normalize_vsn(DM_df),
+                          "cyclic_loess" = function() normalize_cyclic_loess(DM_df, 
+                                                                             parameter_list)
+    
+  # Perform the normalization
+  normalized_df <- run_with_logging(main_normalize, log_file)
   
   # OLD  VERSION - SUBSTITUTED BY THE "SWITCH" ABOVE
   ## Depending on which method was chosen, perform that normalization
@@ -182,6 +201,9 @@ rownames(DM_wide) <- DM_wide$Precursor.Id
 DM_wide <- DM_wide %>%
   dplyr::select(-Precursor.Id) %>%
   log2()
+
+DM_wide <- as.data.frame(fread("~/MyStuff/preprocessing/Data/data_1.tsv"))
+params <- 
 
 # Normalize VSN
 normalized_test_vsn <- main_normalize(DM_df = DM_wide,
