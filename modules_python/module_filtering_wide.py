@@ -27,9 +27,34 @@ import module_helper as helper
 # Sample Thresholding
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, column):
+def filter_samples_based_on_metadata(data_df, meta_df, column='none'):
+    """
+    Filters rows from the input data DataFrame based on missing values in a specific metadata column.
 
-    return data_df.iloc[meta_df[column].isna()]
+    If the specified metadata column does not exist, returns the original data DataFrame unchanged.
+
+    Author: SB
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        DataFrame containing the data, with samples as rows and features/precursors as columns.
+
+    meta_df : pd.DataFrame
+        DataFrame containing metadata, indexed the same way as data_df.
+
+    column : str, optional
+        Column name in meta_df to check for missing values. Default is 'none'.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered version of data_df where corresponding rows in meta_df[column] are missing (NaN).
+    """
+    if column not in meta_df.columns:
+        return data_df
+
+    return data_df.loc[meta_df[column].isna()]
 
 def condition_on_detection_proportion(data_df):
     """
@@ -113,7 +138,7 @@ def calculate_optimum_threshold(data_df, alpha = .95):
 
     return missingness, upper_bound
 
-def filter_samples_on_detection_proportion(data_df, optimum = -3.14):
+def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -133,7 +158,7 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14):
         Filtered DataFrame retaining precursors below missingness threshold.
     """
     
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df)
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
 
          ## Check this bit as dtype might not work as intended
          ## Parsing of alpha might be included (missing)
@@ -520,58 +545,69 @@ if __name__ == "__main__":
         "-d", "--datapath", required=True, 
         help="Filepath to datafile that will be processed") 
     parser.add_argument(
-        "-p", "--parampath", required=True, 
-        help="Filepath to parameter json") 
-    parser.add_argument(
-        "-o", "--outpath", required=True, 
-        help="Filepath for outputfile") 
-    parser.add_argument(
         "-md", "--metapath", required=True, 
         help="Filepath to metadatafile") 
     parser.add_argument(
-        "-ma", "--maskpath", required=True, 
-        help="Filepath to maskfile") 
-    parser.add_argument(
-        "-l", "--log_file", required=True, 
-        help="Filepath to logfile") 
-    parser.add_argument(
-        "-c", "--counter", required=True, 
-        help="Module counter") 
+        "-o", "--outpath", required=True, 
+        help="Filepath for outputfile") 
+    #parser.add_argument(
+    #    "-p", "--parampath", required=True, 
+    #    help="Filepath to parameter json") 
+    #parser.add_argument(
+    #    "-md", "--metapath", required=True, 
+    #    help="Filepath to metadatafile") 
+    #parser.add_argument(
+    #    "-ma", "--maskpath", required=True, 
+    #    help="Filepath to maskfile") 
+    #parser.add_argument(
+    #    "-l", "--log_file", required=True, 
+    #    help="Filepath to logfile") 
+    #parser.add_argument(
+    #    "-c", "--counter", required=True, 
+    #    help="Module counter") 
     args = parser.parse_args()
     data_df_fp = args.datapath
-    param_fp = args.parampath
+    meta_df_fp = args.metapath
     out_dir_fp = args.outpath
-    meta_df_fp = args.metapath
-    mask_fp = args.maskpath
-    log_file = args.log_file
-    meta_df_fp = args.metapath
-    counter = args.counter
+    #param_fp = args.parampath
+    #mask_fp = args.maskpath
+    #log_file = args.log_file
+    #counter = args.counter
     
     ###### To be modified
     outname = "data_imputed"
     
     # Load parameter_file
-    with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
-        parameters_dict = json.load(f)
+    parameters_dict = {
+            'filtering_wide_method1': 'metadata',
+            'filtering_wide_method2': 'sample_detection',
+            'filtering_wide_method3': 'precursor_detection'
+            }
+    #with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
+    #    parameters_dict = json.load(f)
+
+
     # Load data
-    if parameters_dict["normalization_method"] not in ["delayed"]:
-        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
-    else:
-        data_arr = np.load(data_df_fp)
+    data_df = pd.read_csv(data_df_fp, sep = '\t', index_col = 0)
+    meta_df = pd.read_csv(meta_df_fp, sep = '\t', index_col = 0)
+    #if parameters_dict["normalization_method"] not in ["delayed"]:
+    #   data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+    #else:
+    #    data_arr = np.load(data_df_fp)
         
     # Define seed
-    seed = parameters_dict["seed"] + counter
+    #seed = parameters_dict["seed"] + counter
         
     # Load mask and log file
     """
     mask = load_mask() # load mask (in parent directory)
     """
     
-    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization\n"
-    module_output += "Parameters\n------------\n"
-    for key,value in parameters_dict.items():
-        module_output += str(key)+"\t\t\t"+str(value)+"\n"
-    module_output += "------------\n"  
+    #module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization\n"
+    #module_output += "Parameters\n------------\n"
+    #for key,value in parameters_dict.items():
+    #    module_output += str(key)+"\t\t\t"+str(value)+"\n"
+    #module_output += "------------\n"  
     
     """
     # Helper DataFrames -> Maybe automate upper bit?
@@ -579,30 +615,20 @@ if __name__ == "__main__":
     """
     
     # Process data
-    if parameters_dict["filtering_method"] == "metadata":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
-        data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
+    if parameters_dict['filtering_wide_method1'] == "metadata":
+        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
+        data_processed_df = filter_samples_based_on_metadata(data_df, meta_df)
         
-    elif parameters_dict["filtering_method"] == "quantile_ranked":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = normalize_quantile_ranked(data_df)
+    elif parameters_dict['filtering_wide_method2'] == "sample_detection":
+        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
+        data_processed_df = filter_samples_on_detection_proportion(data_df)
 
-    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+    #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
 
-    # Comparison for mask and logger what changed between both files
-    """
-    # Helper DataFrames
-    mask = helper.update_mask(mask)
-    log = helper.update_log(module_output)
-    """
-    
-    helper.logger(log_file, module_output=module_output)
-    
     # Save data
-    if parameters_dict["normalization_method"] not in ["delayed"]:
-        data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
-    else:
-        np.save(os.path.join(out_dir_fp,out_dir_fp+".npy"),data_processed_arr)
+
+    data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
+
     
     
 
