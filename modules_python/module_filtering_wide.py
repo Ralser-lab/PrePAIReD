@@ -138,7 +138,7 @@ def calculate_optimum_threshold(data_df, alpha = .95):
 
     return missingness, upper_bound
 
-def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
+def filter_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95, how = 'samples'):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -153,6 +153,8 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
         Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
     alpha : float, optional
         Confidence interval alpha level for threshold calculation (default 0.95).
+    how: str
+        Filter on sample or precursor
 
     Returns
     -------
@@ -160,6 +162,9 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
         Filtered DataFrame retaining precursors below missingness threshold.
     """
     
+    if how == 'precursors':
+        data_df = data_df.T
+        
     missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
          
     if optimum != -3.14:
@@ -578,7 +583,7 @@ if __name__ == "__main__":
     parameters_dict = {
             'filtering_wide_method1': 'metadata',
             'filtering_wide_method2': 'sample_detection',
-            'filtering_wide_method3': ''
+            'filtering_wide_method3': 'precursor_detection'
             }
     with open(os.path.join(out_dir_fp, 'parameters.json'), 'w') as f:
         json.dump(parameters_dict, f, indent = 4)
@@ -587,7 +592,7 @@ if __name__ == "__main__":
         parameters_dict = json.load(f)
 
     # Load data
-    data_df = pd.read_csv(data_df_fp, sep = '\t', index_col = 0)
+    data_df = pd.read_csv(data_df_fp, sep = '\t', index_col = 0).T #Transpose to match metadata indexing [index = sample names]
     meta_df = pd.read_csv(meta_df_fp, sep = '\t', index_col = 0)
     #if parameters_dict["normalization_method"] not in ["delayed"]:
     #   data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
@@ -622,8 +627,12 @@ if __name__ == "__main__":
         
     if parameters_dict['filtering_wide_method2'] == "sample_detection":
         #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = filter_samples_on_detection_proportion(data_df)
+        data_processed_df = filter_on_detection_proportion(data_df, how = 'samples')
 
+    if parameters_dict['filtering_wide_method3'] == "precursor_detection":
+        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
+        data_processed_df = filter_on_detection_proportion(data_df, how = 'precursors')
+    
     #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
 
     # Save data
