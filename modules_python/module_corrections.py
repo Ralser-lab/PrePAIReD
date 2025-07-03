@@ -530,14 +530,14 @@ def batchcorrect_harmony(
 
 # %%
 
-## remove before pushing!
+## remove before final pushing!
 data_df_fp = "data/Test_data/Reduced_set/Test_data_reduced.tsv"
 param_fp = ""
 out_dir_fp = ""
 meta_df_fp = "data/Test_data/Additional_Information/Metadata.tsv"
 
 parameters_dict = {
-    "batchcorrect_method" : "combat" , # string, options "harmony"
+    "correct_method" : "combat" , # string, options "harmony"
     "batch_cols_meta" : ["MS.Batch"], # list os strings for harmony, combat only allows one
     "random_seed" : 42,
     # "harmony_n_clusters": None,
@@ -609,22 +609,6 @@ if __name__ == "__main__":
     data_df = data_df.reset_index()[["File.Name", "Protein.Group", "PG.Quantity"]].drop_duplicates() # remove in final version
     data_df = data_df.pivot(index="File.Name", columns="Protein.Group", values="PG.Quantity")
     
-
-    # remove before 
-    # data_df = data_df.fillna(0)
-    print(data_df.shape)
-    # 
-
-    data_df = data_df.loc[:, data_df.isna().mean()<0.99]
-    print(data_df.shape)
-    # data_df = data_df.loc[:, data_df.var()>1]
-    data_df = data_df.fillna(0)
-    
-
-    # drop wenn pushing
-    # from sklearn.impute import KNNImputer
-    # data_df.iloc[:,:] = KNNImputer().fit_transform(data_df)
-    
     # remove in final version
     # Load metadata
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load meta data!\n")
@@ -645,10 +629,6 @@ if __name__ == "__main__":
     for batch_col in parameters_dict["batch_cols_meta"]:
         if batch_col not in meta_df.columns:
             raise ValueError(f"###ERROR###: Batch Column {batch_col} not in metafile columns!")
-
-    # remove before pushing
-    meta_df = meta_df[meta_df["MS.Batch"]!=8]
-    meta_df["Injection"] = meta_df["Injection"].sample(frac=1)
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
@@ -726,7 +706,7 @@ if __name__ == "__main__":
     # Perform Batch Correction                                                 #
     # -------------------------------------------------------------------------#
 
-    if parameters_dict["batchcorrect_method"] == "harmony":
+    if parameters_dict["correct_method"] == "harmony":
 
         # translate harmony parameter from dict 
         harmony_kwargs_dict = {
@@ -741,8 +721,7 @@ if __name__ == "__main__":
         )
         log_string += log_string_harmony
 
-    
-    elif parameters_dict["batchcorrect_method"] == "combat":
+    elif parameters_dict["correct_method"] == "combat":
 
         # Check if only one batch col is defined!
         if len(parameters_dict["batch_cols_meta"]) > 1:
@@ -885,7 +864,7 @@ if __name__ == "__main__":
 
                 log_list.append(
                         time.strftime(
-                            "%Y-%m-%d%t%H:%M:%S: "+"Transform samples."))
+                            "%Y-%m-%d%t%H:%M:%S: "+"Transform data."))
 
                 data_processed_arr = c_fit.transform(
                     Y=data_df.to_numpy(),
@@ -910,7 +889,7 @@ if __name__ == "__main__":
                 else:
                     log_list.append(time.strftime(
                         "%Y-%m-%d%t%H:%M:%S: "\
-                        +"Finished HARMONY batch correction successfully."))
+                        +"Finished COMBAT batch correction successfully."))
                     log_string = "\n".join(log_list)
                     return data_processed_df, log_string
         
@@ -925,39 +904,23 @@ if __name__ == "__main__":
             cov_adjust_list = parameters_dict["combat_cols_adjust_meta"],
         )
         if isinstance(out, str) and "ERROR" in out:
+            log_string_combat = out 
+            log_string += log_string_combat
             print(log_string)
             sys.exit(0)
+        else:
             
+            (data_processed_df, log_string_combat) = out
+            log_string += log_string_combat
 
-        
-    # elif parameters_dict["normalization_method"] == "median_scaling_intensity":
-    #     data_processed_df = normalize_median_scaling_intensity(data_df, parameters_dict["axis"])
-        
-    # elif parameters_dict["normalization_method"] == "median":
-    #     data_processed_df = normalize_median(data_df)
-        
-    # elif parameters_dict["normalization_method"] == "mean":
-    #     data_processed_df = normalize_mean(data_df)
-        
-    # elif parameters_dict["normalization_method"] == "delayed":
-    #     data_processed_arr = normalize_delayed(data_arr, parameters_dict["method"], parameters_dict["bounds"])
-
-    # # Comparison for mask and logger what changed between both files
-    # """
-    # # Helper DataFrames
-    # mask = helper.update_mask(mask)
-    # log = helper.logger(logf)
-    # """
-    
-    # # Save data
-    # if parameters_dict["normalization_method"] not in ["delayed"]:
-    #     data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
-    # else:
-    #     np.save(os.path.join(out_dir_fp,out_dir_fp+".npy"),data_processed_arr)
+    elif parameters_dict["correct_method"] == "drift":
+        # to be implemented
 
     print(log_string)
+    # # Save data
+    # data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
     # sys.exit(0)
     
-    # Final Method to evaluate processed data df
+    
 
 # %%
