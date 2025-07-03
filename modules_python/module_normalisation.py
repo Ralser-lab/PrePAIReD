@@ -12,6 +12,7 @@ import os
 from scipy.optimize import least_squares, minimize
 import time
 import argparse
+import sys
 
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
@@ -156,11 +157,19 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         df_trim=df
         while True: #as long as normalization factors are not in given range of min_nf and max_nf, exclude outliers and recalculate them
             #exclude samples with outlier normalization factors
-            df_trim,module_output=exclude_outlier_normalization_factors(profiles_group=df_trim,out_dir_fp=out_dir_fp,module_output=module_output,rel_threshold=rel_threshold,on_mad=on_mad,min_nf=min_nf,max_nf=max_nf)
+            df_trim,module_output=exclude_outlier_normalization_factors(profiles_group=df_trim,normalization_factors=normalization_factors,module_output=module_output,rel_threshold=rel_threshold,on_mad=on_mad,min_nf=min_nf,max_nf=max_nf)
+            if normalization_on_intersecting_precs:
+                #extract precursors present over all samples
+                abs_nan_intersect_thresh=int(nan_intersect_thresh*df_trim.shape[1])
+                intersect_precursors=df_trim.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
+                module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
+            else:
+                intersect_precursors=df_trim.index
             #repeat normalization procedure on selected samples
             normalization_factors=get_normalization_factors(df_trim.loc[intersect_precursors],axis=axis)
             if (np.min(normalization_factors)>min_nf) & (np.max(normalization_factors)<max_nf):
                 break
+        #save final 
         normalization_factors_df=pd.DataFrame(index=df_trim.columns,columns=["NormalizationFactor"],data=normalization_factors)
         normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors_trim.tsv"),sep="\t")
         df_norm=df_trim*normalization_factors
@@ -169,15 +178,15 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         
     return df_norm, module_output
 
-def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_output,group,rel_threshold=2,on_mad=True,min_nf=0.5,max_nf=2):
+def exclude_outlier_normalization_factors(profiles_group,normalization_factors,module_output,group,rel_threshold=2,on_mad=True,min_nf=0.5,max_nf=2):
     """
     determine samples with outlier normalization factors by median +- rel_threshold * MAD or by specified normalization factors.    
     Parameters
     ----------
     profiles_group : pd.DataFrame
         rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
-    out_dir_fp : str
-        name of directory where analysis (pre-processed file), logfile, metadata are stored.
+    normalization_factors : pd.Series
+        Series of normalization factors for profiles_group.columns.
     module_output: str
         Log file to be filled.
     rel_threshold : float, optional
@@ -198,17 +207,16 @@ def exclude_outlier_normalization_factors(profiles_group,out_dir_fp,module_outpu
         
     """
         
-    normalization_factors_df=pd.read_csv(os.path.join(out_dir_fp, "Normalization_factors.tsv"),sep="\t",dtype={"sample":str,"group":str,"NormalizationFactor":float})
-    normalization_factors_df.set_index("sample",inplace=True)
+    normalization_factors_df=pd.DataFrame(index=profiles_group.columns,columns=["NormalizationFactor"],data=normalization_factors)
     if on_mad:
-        max_nf=normalization_factors_df["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
+        max_nf=normalization_factors.median() + rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
         min_nf=normalization_factors_df["NormalizationFactor"].median() - rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
     normalization_factors_df["keep"]=normalization_factors_df.applymap(lambda x: min_nf < x < max_nf)
     #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
     module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
-    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.get_level_values("sample").tolist())+"\n\n"
-    return(profiles_group[normalization_factors_df.index[normalization_factors_df["keep"]]]),module_output
+    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n\n"
+    return([profiles_group.loc[normalization_factors_df.index[normalization_factors_df["keep"]]],module_output])
 
 
 def get_normalization_factors(df, axis:int=0):
@@ -234,6 +242,98 @@ def get_normalization_factors(df, axis:int=0):
         raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
 
     return np.nanmedian(np.nanmedian(df, axis=axis))/np.nanmedian(df,axis=axis)
+
+
+def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_dir_fp,normlabel=None,precursor_col="Precursor.Id",peptide_col="Stripped.Sequence",normalization_on_intersecting_precs=True,nan_intersect_thresh=0.9,exclude_outlier_nfs=False,rel_threshold=2,on_mad=False,min_nf=1/2,max_nf=2,axis=0):
+    """
+    Perform median scaling from a subset of peptides, e.g. an internal peptide standard.
+    
+    author: BZ
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    normpeptides_list : list
+        list of peptides selecting subset of peptides used for normalization.
+    id_mapping_df : pd.DataFrame
+        DataFrame containing a column named precursor_col matching index in data_df and a column peptide_col matching peptides in normpeptides_list; index is irrelevant.
+    out_dir_fp : str
+        File path of the output directory to save the normalization factors.
+    normlabel : str or None, optional
+        a substring selecting only precursors containing normlabel and being part of normpeptides_list. E.g. "-H" would select only heavy labelled precursors from normpeptides_list. The default is None.
+    precursor_col : str, optional
+        Column name in id_mapping_df specifying column with precursor ids. The default is "Precursor.Id".
+    peptide_col : str, optional
+        Column name in id_mapping_df specifying column with peptide sequences. The default is "Stripped.Sequence".
+    normalization_on_intersecting_precs : bool, optional
+        if True, performs normalization only on precursors present in nan_intersect_thresh samples.
+    nan_intersect_thresh : float, optional
+        use for normalization all precursors present in at least nan_intersect_thresh samples. The default is 0.8.
+    exclude_outlier_nfs : bool, optional
+        switch to True to exclude samples with outlier normalization factors as defined by rel_threshold, on_mad, min_nf, max_nf. The default is False.
+    rel_threshold : float, optional
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+    on_mad : bool, optional
+        switch True if filter by median +/- rel_threshold * MAD. The default is True.
+    min_nf : float, optional
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+    max_nf : float, optional
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+    axis: int, optional
+        Axis for calculation of the normalization factors. The default is 0.
+
+    Returns
+    -------
+    data_norm_df : pd.DataFrame.
+        dataframe containing normalized intensities
+    log : str.
+        string containing report for logfile.
+
+    """
+    #initialize log
+    log=""
+    # get dataframe with precursors originating from normpeptides_list
+    if normlabel is not None:
+        normprecursors_df = data_df.loc[list(filter(lambda x: normlabel in x, id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]))]
+    else:
+        normprecursors_df = data_df.loc[id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]]
+    # select a subset of IDs which is present in at least nan_intersect_thresh *100% samples
+    if normalization_on_intersecting_precs:
+       #extract precursors present over all samples
+       abs_nan_intersect_thresh = int(nan_intersect_thresh*normprecursors_df.shape[1])
+       intersect_precursors = normprecursors_df.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
+       log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples.\n"
+    else:
+        intersect_precursors = data_df.index
+    nfs = get_normalization_factors(normprecursors_df.loc[intersect_precursors])
+    normalization_factors_df=pd.DataFrame(index=data_df.columns,columns=["NormalizationFactor"],data=nfs)
+    normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors.tsv"),sep="\t")
+
+    if exclude_outlier_nfs: #if normalization factor is np.inf, not sufficient precursors where measured in given sample
+       normprecursors_trim_df = normprecursors_df
+       while True: #as long as normalization factors are not in given range of min_nf and max_nf, exclude outliers and recalculate them
+           #exclude samples with outlier normalization factors
+           normprecursors_trim_df, log = exclude_outlier_normalization_factors(profiles_group=normprecursors_trim_df,normalization_factors=nfs,module_output=log,rel_threshold=rel_threshold,on_mad=on_mad,min_nf=min_nf,max_nf=max_nf)
+           if normalization_on_intersecting_precs:
+              #extract precursors present over all samples
+              abs_nan_intersect_thresh = int(nan_intersect_thresh*normprecursors_trim_df.shape[1])
+              intersect_precursors = normprecursors_trim_df.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
+              log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples.\n"
+           else:
+               intersect_precursors = data_df.index
+           #repeat normalization procedure on selected samples
+           nfs=get_normalization_factors(normprecursors_trim_df.loc[intersect_precursors],axis=axis)
+           if (np.min(nfs)>min_nf) & (np.max(nfs)<max_nf):
+               break
+       #save final normalization factors
+       normalization_factors_df = pd.DataFrame(index=normprecursors_trim_df.columns,columns=["NormalizationFactor"],data=nfs)
+       normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors_trim.tsv"),sep="\t")
+       data_norm_df = data_df[normprecursors_trim_df.coluns] * nfs
+    else:
+       data_norm_df = data_df * nfs
+       
+    return([data_norm_df,log])
 
 def normalize_median(df):
     """
@@ -499,6 +599,9 @@ if __name__ == "__main__":
         "-l", "--log_file", required=True, 
         help="Filepath to logfile") 
     parser.add_argument(
+        "-i", "--idmapping_file", required=True, 
+        help="Filepath to ID mapping file") 
+    parser.add_argument(
         "-c", "--counter", required=True, 
         help="Module counter") 
     args = parser.parse_args()
@@ -508,24 +611,30 @@ if __name__ == "__main__":
     meta_df_fp = args.metapath
     mask_fp = args.maskpath
     log_file = args.log_file
+    idmap_fp = args.idmapping_file
     meta_df_fp = args.metapath
     counter = args.counter
     
     ###### To be modified
-    outname = "data_imputed"
+    outname = "data_"+str(counter)
     
     # Load parameter_file
     with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
         parameters_dict = json.load(f)
     # Load data
     if parameters_dict["normalization_method"] not in ["delayed"]:
-        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+        data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0) # counter-1
     else:
         data_arr = np.load(data_df_fp)
+    
+    # Load ID mapping
+    id_mapping_df = pd.read_csv(idmap_fp,sep="\t")
         
     # Define seed
     seed = parameters_dict["seed"] + counter
-        
+    
+    ### Conversion to boolean
+    
     # Load mask and log file
     """
     mask = load_mask() # load mask (in parent directory)
@@ -537,45 +646,87 @@ if __name__ == "__main__":
         module_output += str(key)+"\t\t\t"+str(value)+"\n"
     module_output += "------------\n"  
     
+    helper.logger(log_file, module_output=module_output)
+    module_output = ""
+    
+    #### Implement error catch to write it to the logger!!!!!! sys
+    
     """
     # Helper DataFrames -> Maybe automate upper bit?
     log = helper.logger_add_parameters(log_file, parameters_dict)
     """
     
-    # Process data
-    if parameters_dict["normalization_method"] == "quantile":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
-        data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
-        
-    elif parameters_dict["normalization_method"] == "quantile_ranked":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = normalize_quantile_ranked(data_df)
-    elif parameters_dict["normalization_method"] == "median_scaling":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization.\n"
-        data_processed_df, module_output = normalize_median_scaling(data_df, out_dir_fp, module_output,
-                                                               normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
-                                                               nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
-                                                               exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
-                                                               rel_threshold=parameters_dict["rel_threshold"],
-                                                               on_mad=parameters_dict["on_mad"],
-                                                               min_nf=parameters_dict["min_nf"],
-                                                               max_nf=parameters_dict["max_nf"],
-                                                               axis=parameters_dict["axis"])
+    try:
+        # Process data
+        if parameters_dict["normalization_method"] == "quantile":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
+            data_processed_df = normalize_quantile(data_df, parameters_dict["distribution"], seed)
+            
+        elif parameters_dict["normalization_method"] == "quantile_ranked":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
+            data_processed_df = normalize_quantile_ranked(data_df)
+        elif parameters_dict["normalization_method"] == "median_scaling":
+            if parameters_dict["on_peptide_list"]:
+                # check if file at peptide_list_fp exists, if not exit with an error
+                if not os.path.exists(parameters_dict["peptide_list_fp"]):
+                    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File path to file containing peptides for normalisation is not existent.\n"
+                    helper.logger(module_output)
+                    sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
+                # read file containing peptide list
+                peptide_df = pd.read_csv(parameters_dict["peptide_list_fp"],sep="\t")
+                # check if column with peptides and precursors are present in peptide_df
+                if parameters_dict["peptide_list_file_peptide_column"] not in peptide_df.columns or parameters_dict["peptide_list_file_precursor_column"] not in peptide_df.columns:
+                    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File containing peptides for normalisation ("+ parameters_dict["peptide_list_fp"] +") does not contain column specified by peptide_list_file_peptide_column or peptide_list_file_precursor_column.\n"
+                    helper.logger(module_output)
+                    sys.exit("Error: File with peptides for normalization does not contain the given column(s).")
+                # extract peptide list
+                peptide_list = peptide_df[parameters_dict["peptide_list_file_peptide_column"]].tolist()
+                module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization from peptides specified in " + parameters_dict["peptide_list_fp"] + ".\n"
+                # perform normalisation
+                data_processed_df, log = normalize_from_peptide_list(data_df, peptide_list, id_mapping_df, out_dir_fp,
+                                                                       normlabel=parameters_dict["normalisation_precursors_label"],
+                                                                       precursor_col=parameters_dict["peptide_list_file_precursor_column"],
+                                                                       peptide_col=parameters_dict["peptide_list_file_peptide_column"],
+                                                                       normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
+                                                                       nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
+                                                                       exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
+                                                                       rel_threshold=parameters_dict["rel_threshold"],
+                                                                       on_mad=parameters_dict["on_mad"],
+                                                                       min_nf=parameters_dict["min_nf"],
+                                                                       max_nf=parameters_dict["max_nf"],
+                                                                       axis=parameters_dict["axis_median_scaling"])
+                module_output += log
 
-    elif parameters_dict["normalization_method"] == "median":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
-        data_processed_df = normalize_median(data_df)
-        
-    elif parameters_dict["normalization_method"] == "mean":
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
-        data_processed_df = normalize_mean(data_df)
 
-    elif parameters_dict["normalization_method"] == "delayed":
-        #### Not properly tested
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
-        data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+            else:
+                module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization.\n"
+                data_processed_df, module_output = normalize_median_scaling(data_df, out_dir_fp, module_output,
+                                                                       normalization_on_intersecting_precs=parameters_dict["normalization_on_intersecting_precs"],
+                                                                       nan_intersect_thresh=parameters_dict["nan_intersect_thresh"],
+                                                                       exclude_outlier_nfs=parameters_dict["exclude_outlier_nfs"],
+                                                                       rel_threshold=parameters_dict["rel_threshold"],
+                                                                       on_mad=parameters_dict["on_mad"],
+                                                                       min_nf=parameters_dict["min_nf"],
+                                                                       max_nf=parameters_dict["max_nf"],
+                                                                       axis=parameters_dict["axis_median_scaling"])
+
+        elif parameters_dict["normalization_method"] == "median":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
+            data_processed_df = normalize_median(data_df)
+            
+        elif parameters_dict["normalization_method"] == "mean":
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
+            data_processed_df = normalize_mean(data_df)
     
-    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+        elif parameters_dict["normalization_method"] == "delayed":
+            #### Not properly tested
+            module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
+            data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+        
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+    except:
+        helper.logger(log_file, "ERROR: Module ran into an error.")
+        sys.exit(0)
 
     # Comparison for mask and logger what changed between both files
     """
@@ -591,5 +742,8 @@ if __name__ == "__main__":
         data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
     else:
         np.save(os.path.join(out_dir_fp,out_dir_fp+".npy"),data_processed_arr)
+    
+    helper.logger(log_file, "Module finished as expected.")
+    sys.exit(0)
     
     

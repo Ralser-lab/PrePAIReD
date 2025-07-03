@@ -708,15 +708,13 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
     metadata_sheet : str, optional
         if metadata is an excel file, metadata_sheet specifies the sheetname. The default is "Sheet1".
     filename_col : str, optional
-        column name with complete filenames in metadata. The default is "filename".
+        column name with complete filenames in metadata. The default is "File.Name".
     encoding : str, optional
         encoding passed to pandas read_csv
 
         
     Returns
     -------
-    metadata_fp : str, optional
-        name of the metadata file.
     metadata_df : pd.DataFrame
         the metadata file as dataframe
     log : str
@@ -741,23 +739,31 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
     #read xlsx file
     elif metadata_fp[-5:]==".xlsx":
         metadata_excel=pd.ExcelFile(metadata_fp)
+        #get sheets, check if sheet in there
+        if metadata_sheet not in metadata_excel.sheet_names:
+            log += "###ERROR### Metadata file " + metadata_fp + " does not contain provided metadata_sheet " + metadata_sheet
+            return([None,log])
         metadata_df=metadata_excel.parse(metadata_sheet)
         metadata_excel.close()
     else:
-        log += "\t\t\tPlease implement how how to read metadata of filetype "+metadata_fp[-5:] + "\n"
+        log += "\t\t\t###ERROR### Please implement how how to read metadata of filetype "+metadata_fp[-5:] + "\n"
+        return([None,log])
     #exclude all annotations without filename (e.g. not measured yet)
     if filename_col in metadata_df.columns:
         metadata_df=metadata_df.dropna(subset=[filename_col])
+    else:
+        log += "\t\t\t###WARNING### Column " + filename_col +" not found in metadata columns."
     if "FileName_trimmed" not in metadata_df.columns and filename_col in metadata_df.columns:
         metadata_df["FileName_trimmed"] = list(map(lambda x: x.replace("/", "\\").split("\\")[-1], metadata_df[filename_col].tolist()))
     if "FileName_trimmed" in metadata_df.columns:
         metadata_df.set_index("FileName_trimmed", inplace=True)
     # drop duplicated indices
     if sum(metadata_df.index.duplicated())>0:
-        log += "\t\t\t" + str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n"
+        log += "\t\t\t###WARNING### " + str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n"
         metadata_df=metadata_df.drop_duplicates()
     log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMetadata loaded successfully.\n"
     return([metadata_df, log])
+
 
 
 
