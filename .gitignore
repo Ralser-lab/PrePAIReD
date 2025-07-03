@@ -72,3 +72,6 @@ __pypackages__/
 
 # Ignore Poetry virtual environments
 .poetry/
+
+# Ignore Test data
+data/
