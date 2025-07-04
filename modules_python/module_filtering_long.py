@@ -779,7 +779,7 @@ if __name__ == "__main__":
     # Save data
     id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t")
     wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
-    mask_df.to_csv(out_dir_fp + "data_mask_" + str(counter) + ".tsv", sep="\t")
+    mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
     
     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + out_dir_fp + "data_" + str(counter) + ".tsv\n\t\t\tmask saved successfully to " + out_dir_fp + "data_mask_" + str(counter) + ".tsv\n\t\t\tand table for ID mapping saved to " + out_dir_fp + "id_mapping.tsv\n"
     log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
