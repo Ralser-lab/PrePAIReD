@@ -921,3 +921,96 @@ def annotate_metadata_to_profiles(profiles, metadata_df, sample_col="Sample.ID")
       profiles.columns=pd.MultiIndex.from_arrays(profiles.columns.to_frame().join(metadata_df.loc[profiles.columns],rsuffix="_metadata").T.values,names=profiles.columns.names + metadata_df.columns.tolist())
     metadata_df.set_index(metadata_index_orig,inplace=True)
     return(profiles)
+
+
+def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_values,default_impu_method="knn",data_df=None,metadata_sample_column="Sample.Name"):
+    """
+    Create a template for an involved table to define different impuation methods across sample and precursor hierarchies.
+
+    Parameters
+    ----------
+    metadata_df : pd.DataFrame
+        Metadata dataframe mapping hierarchies to samples.
+    sample_hierarchies : list
+        list with names of columns in metadata_df to do hierarchical imputation across.
+    precursor_hierarchy_values : list
+        list with thresholds for precursor missingness.
+    default_impu_method : str, optional
+        a default imputation method. The default is "knn".
+    data_df : pd.DataFrame or None, optional
+        wide format dataframe with IDs as rows and samples as columns, used to obtain samples in experiment; if None, all samples from metadata_df are taken into account. The default is None.
+    metadata_sample_column : str, optional
+        Name of the column containing sample names matching to columns in data_df. The default is "Sample.Name".
+
+    Returns
+    -------
+    pd.DataFrame.
+
+    """
+    
+    if data_df:
+        samples = data_df.columns
+    else:
+        samples = metadata_df[metadata_sample_column]
+    impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["precursor_hierarchy_values","missingness_type","missingness_type_int","imputation_method","k"]) #TODO #add parameters for imputation methods
+    #create dataframe storing classes (integers) for different missingness types
+    missingness_types_df = pd.DataFrame(data=range(4),index=["Missing","MAR","MNAR","MCAR"], columns=["missingness_type_int"])
+    missingness_types_df.index.name="missingness_type" 
+
+    #generate list with dictionaries through hierarchies
+    all_sample_hierarchy_values_dicts_list = list()
+    sample_hierarchies_stack = np.copy(sample_hierarchies)
+    while len(sample_hierarchies_stack)>1:
+        sample_hierarchy = sample_hierarchies_stack[0]
+        lower_sample_hierarchy = sample_hierarchies_stack[1]
+        sample_hierarchies_stack = sample_hierarchies_stack[1:]
+        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].unique()
+        sample_hierarchy_values = np.sort(sample_hierarchy_values)
+        sample_hierarchy_value_dict = dict()
+        for sample_hierarchy_value in sample_hierarchy_values:
+            lower_sample_hierarchy_values = metadata_df.loc[(metadata_df[metadata_sample_column].isin(samples)) & (metadata_df[sample_hierarchy]==sample_hierarchy_value)][lower_sample_hierarchy].unique()
+            lower_sample_hierarchy_values = np.sort(lower_sample_hierarchy_values)
+            sample_hierarchy_value_dict[sample_hierarchy_value] = lower_sample_hierarchy_values
+        all_sample_hierarchy_values_dicts_list.append(sample_hierarchy_value_dict)
+    all_sample_hierarchy_values_dicts_list = [{"":list(all_sample_hierarchy_values_dicts_list[0].keys())}] + all_sample_hierarchy_values_dicts_list
+        
+    # with help of dictionaries fill impu_table_df
+    k = [0] * len(sample_hierarchies) #indexes for dictionaries
+    i = 0
+    while True:
+        	#set new keys
+        keys = [""]
+        #fill keys over hierarchies
+        for s in range(len(sample_hierarchies)):
+            '''
+            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-1]]):
+                k[s] = 0
+                k[s-1] +=1
+            '''
+            keys.append(all_sample_hierarchy_values_dicts_list[s][keys[-1]][k[s]])
+            if s == len(sample_hierarchies)-1:
+                k[s] += 1
+            '''
+            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-2]]):
+                k[s] = 0
+                k[s-1] +=1
+            '''
+        for precursor_hierarchy_value in precursor_hierarchy_values:
+            for missingness_type in missingness_types_df.index:
+                impu_table_df.loc[i,sample_hierarchies] = keys[1:]
+                impu_table_df.loc[i,"precursor_hierarchy_values"] = precursor_hierarchy_value
+                impu_table_df.loc[i,"missingness_type"] = missingness_type
+                impu_table_df.loc[i,"missingness_type_int"] = missingness_types_df.loc[missingness_type,"missingness_type_int"]
+                i += 1
+        #update k
+        for s in range(len(sample_hierarchies)-1,-1,-1):
+            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[s]]):
+                k[s] = 0
+                k[s-1] +=1
+        #break while loop if covered all values from highest hierarchy
+        if keys[1] == len(all_sample_hierarchy_values_dicts_list[0][keys[0]]):
+            break
+    #set default parameters
+    impu_table_df["imputation_method"] = default_impu_method
+    #TODO
+    return(impu_table_df)
