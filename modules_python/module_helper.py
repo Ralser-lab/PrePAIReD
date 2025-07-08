@@ -15,6 +15,7 @@ functions:
     - weighted_nanmedian: calculate the weighted median for an array with given weights ignoring NaNs
     - insert_column_level: inserts a new level to MultiIndex columns
     - annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles
+    - logger: adds function-log to existing logfile
 
 """
 
@@ -1014,3 +1015,16 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
     impu_table_df["imputation_method"] = default_impu_method
     #TODO
     return(impu_table_df)
+
+def logger(log_file, module_output=str):
+    """
+    Iteratively callable function to add information to the existing logfile of the current preprocessing run
+    :param log_file: str,
+    path to existing logfile to append module information
+    :param module_output: str,
+    log_output from module to update the log file with module specific information like date, time, parameter values etc.
+    """
+    logfile = open(log_file, "a")  # open logfile
+    logfile.write(module_output)  # append logfile
+    logfile.close()  # clos logfile
+# Initialize Mask file
