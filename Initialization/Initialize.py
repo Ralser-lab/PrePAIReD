@@ -8,6 +8,7 @@ import json
 import os
 import ast
 import re
+import time
 
 def read_parameters_file(txt_file, path_to_project_directory, module_order):
     """Read parameter file, extract the modules and create a sub folder for every module. 
@@ -73,4 +74,40 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
 
 # Initialize Logger
 
+def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str, 
+                   preprocessed_filename=str, username=str):
+    """
+    Function to create the logfile of a preprocessing run. Contains some general information like user, project, date, 
+    time amd files. This file will be called by the function logger to append module specific information
+    :param project_folder: str, path to project folder, where the logfile will be created
+    :param run_id: str or int, the unique name or number of the preprocessing run
+    :param mass_spec_data_filename: str, source data name (DIA-NN or Spectronaut output e.g.), this file will be preprocessed
+    :param preprocessed_filename: str, name of the file where the results will be stored
+    :param username: str, name of user
+    """
+    project_folder_name = os.path.basename(os.path.normpath(project_folder))  # get the project folder name
+    logfile = open(f"{project_folder}/logfile_{run_id}.txt", "w")  # create file
+    logfile.write(f"\n-----------------------------------------------\n"
+                  f"GENERAL INFORMATION"
+                  f"\n-----------------------------------------------\n"
+                  f"Logfile creation for project {project_folder_name}, run {run_id}, generated on {time.strftime('%Y-%m-%d %H:%M:%S')} by {username}\n"
+                  f"Data used from mass spectrometry analysis file: {mass_spec_data_filename}\n"
+                  f"Preprocessing results are stored in file: {preprocessed_filename}\n")  # add some general information about the run
+    logfile.write("\n-----------------------------------------------\n"
+                  "INDIVIDUAL MODULE INFORMATION"
+                  "\n-----------------------------------------------\n")
+    logfile.close()
+
+
+def logger(log_file, module_output=str):
+    """
+    Iteratively callable function to add information to the existing logfile of the current preprocessing run
+    :param log_file: str,
+    path to existing logfile to append module information
+    :param module_output: str,
+    log_output from module to update the log file with module specific information like date, time, parameter values etc.
+    """
+    logfile = open(log_file, "a")  # open logfile
+    logfile.write(module_output)  # append logfile
+    logfile.close()  # clos logfile
 # Initialize Mask file
