@@ -11,23 +11,22 @@ functions:
     
 """
 
-# Imports
+#%% Imports
 import numpy as np
 import pandas as pd
 import json
 import os
-import time
+from datetime import datetime
 import argparse
 import scipy.stats as stats
-import module_helper as helper
 
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
 ##############################################################################
-# Sample Thresholding
+# Sample Thresholding, need to add error handling & logging
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, column='none'):
+def filter_samples_based_on_metadata(data_df, meta_df, column='Corrupted'):
     """
     Filters rows from the input data DataFrame based on missing values in a specific metadata column.
 
@@ -38,49 +37,49 @@ def filter_samples_based_on_metadata(data_df, meta_df, column='none'):
     Parameters
     ----------
     data_df : pd.DataFrame
-        DataFrame containing the data, with samples as rows and features/precursors as columns.
+        DataFrame containing the data, indexed by features/precursors, with columns as samples
 
     meta_df : pd.DataFrame
-        DataFrame containing metadata, indexed the same way as data_df.
+        DataFrame containing metadata, indexed by sample
 
     column : str, optional
-        Column name in meta_df to check for missing values. Default is 'none'.
+        Column name in meta_df to check for corrupted samples due to MS aquisition operator 
+        technicalities. Default is 'Corrupted'. The column should be boolean. 
 
     Returns
     -------
     pd.DataFrame
-        Filtered version of data_df where corresponding rows in meta_df[column] are missing (NaN).
+        Filtered version of data_df where only samples that lack corruption in metadata are retained 
+        (i.e. Corrupt != True)
     """
-    if column not in meta_df.columns:
-        return data_df
-
-    return data_df.loc[meta_df[column].isna()]
+    
+    return data_df.loc[:,~meta_df[column]]
 
 def condition_on_detection_proportion(data_df):
+
     """
-    Calculates the percentage of missing values for each precursor (column) in the input DataFrame.
-    Adds a 'missingness' attribute sorted by missing percentage.
+    Calculates the percentage of missing values for each sample in the input DataFrame.
 
     author: SB
 
     Parameters
     ----------
-    input_df : pd.DataFrame
-        Input DataFrame with samples as rows and precursors as columns.
+    data_df : pd.DataFrame
+        Wide format DataFrame indexed by features/precursors
 
     Returns
     -------
     missingness : pd.Series
-        Series indexed by precursor names, indicating percentage of missing values.
+        Series indexed by samples, indicating percentage of missing values.
     """
     missing = data_df.isna().mean(axis=0) * 100
     missingness = missing.sort_values()
     return missingness
 
-def calculate_optimum_threshold(data_df, alpha = .95):
+def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric'):
     """
-    Calculates the optimal missingness threshold based on a parametric (normal distribution)
-    statistical approach. 
+    Calculates the optimal missingness threshold based on a statistical approach, 
+    parametric (normal distribution), by default.
 
     author: SB
 
@@ -90,6 +89,7 @@ def calculate_optimum_threshold(data_df, alpha = .95):
         Input DataFrame containing missing values.
     alpha : float, optional
         Confidence interval alpha level for threshold calculation (default 0.95).
+    
 
     Returns
     -------
@@ -101,46 +101,20 @@ def calculate_optimum_threshold(data_df, alpha = .95):
 
     missingness = condition_on_detection_proportion(data_df)
 
-    # Parametric stats
-    mu = np.mean(missingness)
-    sigma = np.std(missingness, ddof=1)
-    z = stats.norm.ppf(alpha)  # One-sided Z value
-    upper_bound = mu + z * sigma
+    if statistics == 'parametric':
+        mu = np.mean(missingness)
+        sigma = np.std(missingness, ddof=1)
+        z = stats.norm.ppf(alpha)  
+        upper_bound = mu + z * sigma
 
-    # Plot empirical KDE with normal overlay
-    #plt.figure(figsize=(6,5))
-    #sns.kdeplot(missingness, fill=True, label='Empirical KDE')
-
-    # Plot normal PDF with same mean and std
-    #x_vals = np.linspace(min(missingness), max(missingness), 1000)
-    #normal_pdf = stats.norm.pdf(x_vals, mu, sigma)
-    #plt.plot(x_vals, normal_pdf, linestyle='--', label='Normal PDF', color='black')
-    # Add vertical line at upper bound
-    #plt.axvline(upper_bound, color='red', linestyle='--', label=f'{int(alpha*100)}% Upper Bound = {upper_bound:.2f}%')
-    # Labels and legend
-    #plt.xlabel('Sample Missingness (%)')
-    #plt.title(f'{data_in.projectname}\nMissingness PDF with Parametric CI (alpha = {alpha})')
-    #plt.legend()
-    #plt.tight_layout()
-    #plt.savefig(os.path.join(data_in.outer_path, data_in.projectname + str(alpha) + '_recovery_PDF.pdf'))
-    #plt.show()
-    
-    # Plot pseudo CDF using cumulative retention of samples (not %)
-    #thresholds = np.linspace(0, 100, 21)
-    #recovered_counts = (missingness.values[None, :] <= thresholds[:, None]).sum(axis=1)
-    #plt.figure(figsize = (6,5))
-    #plt.plot(thresholds, recovered_counts)
-    #plt.title(f'{data_in.projectname}\nPseudo CDF using sample retention (alpha = {alpha})')
-    #plt.xlabel('Sample Missingness Threshold %')
-    #plt.axvline(upper_bound, linestyle = '--', color = 'red')
-    #plt.savefig(os.path.join(data_in.outer_path, data_in.projectname + str(alpha) + '_recovery_pseudoCDF.pdf'))
-    #plt.show()
+    elif statistics == 'non-parametric':
+        upper_bound = missingness.quantile(alpha)
 
     return missingness, upper_bound
 
-def filter_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95, how = 'samples'):
+def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
     """
-    Integrated pipeline that filters precursors from the dataset based on a calculated or 
+    Integrated pipeline that filters samples from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
 
     author: SB
@@ -148,34 +122,31 @@ def filter_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95, how =
     Parameters
     ----------
     data_in : pd.DataFrame
-        Input DataFrame.
+        Input DataFrame (indexed on precursors)
     optimum : str or float, optional
-        Missingness threshold to use; 'Auto' calculates using `calculate_optimum_threshold`.
+        Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
+        default (optimum = -3.14) for automated thresholding using `calculate_optimum_threshold`.
     alpha : float, optional
-        Confidence interval alpha level for threshold calculation (default 0.95).
-    how: str
-        Filter on sample or precursor
-
+        Alpha (significance) level for threshold calculation (default 0.95).
+    
     Returns
     -------
     pd.DataFrame
-        Filtered DataFrame retaining precursors below missingness threshold.
+        Filtered DataFrame retaining samples below the missingness threshold.
     """
     
-    if how == 'precursors':
-        data_df = data_df.T
-        
     missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
-         
     if optimum != -3.14:
-        optimal_threshold = optimum/100 
+        optimal_threshold = optimum / 100 
 
-    return data_df.loc[:,missingness<optimal_threshold]
+    return data_df.loc[:, missingness < optimal_threshold]
 
 def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
     """
     Excludes samples (columns in profiles) with too many missing values.
     #thresh determines how many measured values have to be at least in data 
+
+    # this works with data_df
     
     Parameters
     ----------
@@ -211,6 +182,8 @@ def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
     """
     Excludes samples (columns in profiles) with too few IDs.
 
+        # this works with data_df
+
     Parameters
     ----------
     profiles : pd.DataFrame
@@ -237,7 +210,7 @@ def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
     profiles_trimmed=profiles.copy().replace(0,np.nan).dropna(axis=1,thresh=int(min_precs))
     profiles_trimmed.replace(np.nan,0,inplace=True)
     num_samples_after=profiles_trimmed.shape[1]
-    if on_mad:
+    if on_mad: # print statements into log file as one string
         print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).")
         print("Median number of precursors/proteins: "+str(np.median(num_precs)))
         print("Minimum number of precursors/proteins: "+str(np.median(num_precs)-(thresh*mad(num_precs))))
@@ -256,6 +229,8 @@ def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
 def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.nan):
     """
     exclude samples based on a value in a certain column in metadata, e.g. dropout/excl., keep is the value in that column to keep values
+
+        # this works with data_df
 
     Parameters
     ----------
@@ -289,10 +264,41 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
 # Precursor Thresholding
 ##############################################################################
 
+def filter_precursors_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
+    """
+    Integrated pipeline that filters precursors from the dataset based on a calculated or 
+    user-defined optimal missingness threshold.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_in : pd.DataFrame
+        Input DataFrame (indexed on precursors)
+    optimum : str or float, optional
+        Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
+        default (optimum = -3.14) for automated thresholding using `calculate_optimum_threshold`.
+    alpha : float, optional
+        Alpha (significance) level for threshold calculation (default 0.95).
+    
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame retaining precursors below the missingness threshold.
+    """
+    
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha, statistics = 'non-parametric')
+    if optimum != -3.14:
+        optimal_threshold = optimum / 100 
+
+    return data_df.loc[missingness < optimal_threshold]
+
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
     """
     Remove precursors with too many missing values in given peptide_profiles.
     author: BZ
+
+    # should work without multi-index 
 
     Parameters
     ----------
@@ -371,6 +377,8 @@ def filter_proteins_with_too_few_precursors(profiles,mask,mask_description,min_p
     """
     Remove proteins identified by less precursors than specified with min_peptides.
     author: BZ
+
+    #needs refactoring with id mapping .tsv
     
     Parameters
     ----------
@@ -423,6 +431,8 @@ def assign_missingness(peptide_profiles,mask,mask_description,protein_col="Prote
     Determines whether no precursor of the proteins is measured and if so sets its value to zero.
     author: BZ
     
+    #Not need in this module
+
     Parameters
     ----------
     peptide_profiles : pd.DataFrame
@@ -489,10 +499,10 @@ def filter_labelled_peptides(peptide_profiles,remove_label,index_level="Precurso
         wide-format profiles, columns are samples, index is a pd.MultiIndex with Precursor IDs.
 
     """
-    i=peptide_profiles.index.names.index(index_level)
+    #i=peptide_profiles.index.names.index(index_level) remove all i 
     all_exclude_precs=set()
     for rlabel in remove_label:
-        exclude_precs=set(filter(lambda x: rlabel in x[i], peptide_profiles.index))
+        exclude_precs=set(filter(lambda x: rlabel in x, peptide_profiles.index))
         all_exclude_precs=all_exclude_precs | exclude_precs
     print(str(len(all_exclude_precs)) + " Precursors excluded, because they contained following label: " + "; ".join(remove_label))
     if global_variables.logfilename is not None:
@@ -524,8 +534,8 @@ def replace_labelled_peptides(peptide_profiles,replace_label,to_be_replaced_with
 
     """
    
-    i=peptide_profiles.index.names.index(index_level)
-    peptide_profiles.index=peptide_profiles.index.set_levels(peptide_profiles.index.levels[i].str.replace(replace_label,to_be_replaced_with,regex=True),level=i)
+    #i=peptide_profiles.index.names.index(index_level)
+    peptide_profiles.index=peptide_profiles.index.set_levels(peptide_profiles.index.str.replace(replace_label,to_be_replaced_with,regex=True),level=i)
     #precursors = peptide_profiles.index.get_level_values(index_level)
     #precursors = [re.sub(replace_label,to_be_replaced_with,precursor) for precursor in precursors]
     #duplicates = [i for i in set(precursors) if precursors.count(i) > 1]
@@ -536,7 +546,7 @@ def replace_labelled_peptides(peptide_profiles,replace_label,to_be_replaced_with
     return(peptide_profiles)
 
 ##############################################################################
-# MAIN
+# %% MAIN
 ##############################################################################
 
 if __name__ == "__main__":
@@ -576,69 +586,47 @@ if __name__ == "__main__":
     #log_file = args.log_file
     #counter = args.counter
     
-    ###### To be modified
-    outname = "data_filtered_wide"
-    
-    # Load parameter_file
-    parameters_dict = {
-            'filtering_wide_method1': 'metadata',
-            'filtering_wide_method2': 'sample_detection',
-            'filtering_wide_method3': 'precursor_detection'
-            }
-    with open(os.path.join(out_dir_fp, 'parameters.json'), 'w') as f:
-        json.dump(parameters_dict, f, indent = 4)
+    # Load parameters (from JSON later)
+    pipeline_string = "metadata;sample;precursor"
+    methods = pipeline_string.split(";")
 
-    with open(os.path.join(out_dir_fp, 'parameters.json')) as f:
-        parameters_dict = json.load(f)
+    # Load data (always in wide format: rows = precursors, columns = samples)
+    data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
+    meta_df = pd.read_csv(meta_df_fp, sep='\t', index_col=0)
 
-    # Load data
-    data_df = pd.read_csv(data_df_fp, sep = '\t', index_col = 0).T #Transpose to match metadata indexing [index = sample names]
-    meta_df = pd.read_csv(meta_df_fp, sep = '\t', index_col = 0)
-    #if parameters_dict["normalization_method"] not in ["delayed"]:
-    #   data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
-    #else:
-    #    data_arr = np.load(data_df_fp)
-        
-    # Define seed
-    #seed = parameters_dict["seed"] + counter
-        
-    # Load mask and log file
-    """
-    mask = load_mask() # load mask (in parent directory)
-    """
-    
-    #module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization\n"
-    #module_output += "Parameters\n------------\n"
-    #for key,value in parameters_dict.items():
-    #    module_output += str(key)+"\t\t\t"+str(value)+"\n"
-    #module_output += "------------\n"  
-    
-    """
-    # Helper DataFrames -> Maybe automate upper bit?
-    log = helper.logger_add_parameters(log_file, parameters_dict)
-    """
-    
+    # Initialize the working DataFrame
     data_processed_df = data_df.copy()
 
-    # Process data
-    if parameters_dict['filtering_wide_method1'] == "metadata":
-        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile normalization.\n"
-        data_processed_df = filter_samples_based_on_metadata(data_df, meta_df)
+    # Minimal filtering pipeline in methods order (metadata corruptions + sample filtering)
+    # TO DO: streamline the params (for now using defaults), add logging, add warnings
+
+    for method in methods:
+        if method == "metadata":
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...") # shift to logger
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}")
+            data_processed_df = filter_samples_based_on_metadata(data_processed_df, meta_df) 
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}")
+
+        elif method == "sample": # shift to logger
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
+            data_processed_df = filter_samples_on_detection_proportion(data_processed_df) 
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
+
+        elif method == "precursor": # shift to logger
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}") 
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
+            data_processed_df = filter_precursors_on_detection_proportion(data_processed_df)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}")
+
+        else:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Unknown filtering method: {method} — skipping.") # shift to logger
+
+    # Save the final processed data
+    output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
+    data_processed_df.to_csv(output_path, sep='\t')
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") # shift to logger
         
-    if parameters_dict['filtering_wide_method2'] == "sample_detection":
-        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = filter_on_detection_proportion(data_df, how = 'samples')
-
-    if parameters_dict['filtering_wide_method3'] == "precursor_detection":
-        #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing quantile ranked normalization.\n"
-        data_processed_df = filter_on_detection_proportion(data_df, how = 'precursors')
-    
-    #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
-
-    # Save data
-
-    data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
-
-    
     
 
+# %%
