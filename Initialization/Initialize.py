@@ -97,17 +97,3 @@ def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str,
                   "INDIVIDUAL MODULE INFORMATION"
                   "\n-----------------------------------------------\n")
     logfile.close()
-
-
-def logger(log_file, module_output=str):
-    """
-    Iteratively callable function to add information to the existing logfile of the current preprocessing run
-    :param log_file: str,
-    path to existing logfile to append module information
-    :param module_output: str,
-    log_output from module to update the log file with module specific information like date, time, parameter values etc.
-    """
-    logfile = open(log_file, "a")  # open logfile
-    logfile.write(module_output)  # append logfile
-    logfile.close()  # clos logfile
-# Initialize Mask file
