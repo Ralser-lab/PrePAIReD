@@ -16,6 +16,16 @@ functions:
     - insert_column_level: inserts a new level to MultiIndex columns
     - annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles
     - logger: adds function-log to existing logfile
+    - init_module: initializes module
+    	- get_parser: generates the parser
+     	- get_parser_arguments: define pathes based on parsed arguments
+	- load_data: read in .tsv file
+ 	- load_parameters: read in .-json parameter file
+  	- load_id_mapping: read in precursor to protein mapping
+   	- get_seed: generates the seed based on the counter
+    	- add_parameters_to_log: writes parameters to the log_file
+     - close_module: write data to disk and close the module
+     	- save_data: write data to disk
 
 """
 
@@ -1028,3 +1038,128 @@ def logger(log_file, module_output=str):
     logfile.write(module_output)  # append logfile
     logfile.close()  # clos logfile
 # Initialize Mask file
+
+import argparse
+import os
+import pandas as pd
+import json
+import time
+import sys
+
+def logger(log_file, module_output=str):
+    """
+    Iteratively callable function to add information to the existing logfile of the current preprocessing run
+    :param log_file: str,
+    path to existing logfile to append module information
+    :param module_output: str,
+    log_output from module to update the log file with module specific information like date, time, parameter values etc.
+    """
+    logfile = open(log_file, "a")  # open logfile
+    logfile.write(module_output)  # append logfile
+    logfile.close()  # clos logfile
+
+def get_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-d", "--datapath", required=True, 
+        help="Filepath to datafile that will be processed") 
+    parser.add_argument(
+        "-p", "--parampath", required=True, 
+        help="Filepath to parameter json") 
+    parser.add_argument(
+        "-o", "--outpath", required=True, 
+        help="Filepath for outputfile") 
+    parser.add_argument(
+        "-md", "--metapath", required=False, 
+        help="Filepath to metadatafile") 
+    parser.add_argument(
+        "-ma", "--maskpath", required=False,  #### Change to true once implemented
+        help="Filepath to maskfile") 
+    parser.add_argument(
+        "-l", "--log_file", required=True, 
+        help="Filepath to logfile") 
+    parser.add_argument(
+        "-i", "--idmapping_file", required=False, 
+        help="Filepath to ID mapping file") 
+    parser.add_argument(
+        "-c", "--counter", required=True, 
+        help="Module counter")
+    return parser
+
+def get_parser_arguments(parser):
+    args = parser.parse_args()
+    data_df_fp = args.datapath
+    param_fp = args.parampath
+    out_dir_fp = args.outpath
+    meta_df_fp = args.metapath
+    mask_fp = args.maskpath
+    log_file = args.log_file
+    idmap_fp = args.idmapping_file
+    counter = args.counter
+    outname = "data_"+str(counter)+".tsv"
+    return data_df_fp, param_fp, out_dir_fp, meta_df_fp, mask_fp, log_file, idmap_fp, int(counter), outname
+
+def load_data(data_df_fp):
+    return pd.read_csv(data_df_fp,sep="\t",index_col=0)
+    
+def load_parameters(param_fp,out_dir_fp):
+    with open(os.path.join(param_fp,out_dir_fp.split("/")[-1]+"_parameters.json")) as f:
+            parameters_dict = json.load(f)
+    #### In python: 1==True and 0==False -> No need for conversion here!
+    return parameters_dict
+  
+def load_id_mapping(idmap_fp):
+    return pd.read_csv(idmap_fp,sep="\t")
+    
+def get_seed(parameters_dict, counter):
+    return parameters_dict["seed"] + counter
+
+def add_parameters_to_log(log_file, module, parameters_dict):
+    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+"\n"
+    module_output += "Parameters\n------------\n"
+    for key,value in parameters_dict.items():
+        module_output += str(key)+"\t\t\t"+str(value)+"\n"
+    module_output += "------------\n"  
+    
+    logger(log_file, module_output=module_output)
+    return ""
+    
+def save_data(data_processed_df, out_dir_fp, outname):
+    data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
+
+def init_module(module, load_metadata=False, load_id_mapping=False):
+    # Parser
+    parser = get_parser() 
+    data_df_fp, param_fp, out_dir_fp, meta_df_fp, mask_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
+    # Load data
+    data_df = load_data(data_df_fp)
+    # Load parameters
+    parameters_dict = load_parameters(param_fp,out_dir_fp)
+    # Load ID mapping
+    if load_id_mapping:
+        id_mapping_df = load_id_mapping(idmap_fp)
+    else:
+        id_mapping_df = []
+    # Get seed
+    seed = get_seed(parameters_dict, counter)
+    # Write Parameters to log-file
+    module_output = add_parameters_to_log(log_file, module, parameters_dict)
+    # Load meta data
+    if load_metadata:
+        pass ####### To be added
+    else:
+        metadata_df = []
+    # Load mask
+    ####### To be added later
+    masked_df = []
+    return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter
+
+def close_module(data_processed_df,log_file,module_output,out_dir_fp,outname):
+    # Update log file
+    logger(log_file, module_output=module_output)
+    # Save data
+    save_data(data_processed_df, out_dir_fp, outname)
+    # Save mask
+    # Close function
+    logger(log_file, "Module finished as expected.\n")
+    sys.exit(0)
