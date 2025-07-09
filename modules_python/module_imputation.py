@@ -814,3 +814,191 @@ def bpca_imputation(peptide_profiles,mask=None,mask_description=None,group=None,
         logfile.write("\t\t\t\t"+str(np.round(100-(num_peptides-num_missing_peptides)/(num_peptides-num_missing_peptides_after_imputation)*100,2))+"% of precursors are imputed ("+str(num_peptides-num_missing_peptides)+" Precursors)\n")
         logfile.close()
     return([peptide_profiles, mask, mask_description])
+
+
+
+def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=None,metadata_sample_column="Sample.Name"):
+    if data_df:
+        samples = data_df.columns
+    else:
+        samples = metadata_df[metadata_sample_column]
+    sample_hierarchies = impu_table_df.columns[:impu_table_df.columns.tolist().index("precursor_hierarchy_values")] 
+    #generate list with dictionaries through hierarchies from metadata
+    all_sample_hierarchy_values_dicts_list = list()
+    sample_hierarchies_stack = np.copy(sample_hierarchies)
+    while len(sample_hierarchies_stack)>1:
+        sample_hierarchy = sample_hierarchies_stack[0]
+        lower_sample_hierarchy = sample_hierarchies_stack[1]
+        sample_hierarchies_stack = sample_hierarchies_stack[1:]
+        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].unique()
+        sample_hierarchy_values = np.sort(sample_hierarchy_values)
+        sample_hierarchy_value_dict = dict()
+        for sample_hierarchy_value in sample_hierarchy_values:
+            lower_sample_hierarchy_values = metadata_df.loc[(metadata_df[metadata_sample_column].isin(samples)) & (metadata_df[sample_hierarchy]==sample_hierarchy_value)][lower_sample_hierarchy].unique()
+            lower_sample_hierarchy_values = np.sort(lower_sample_hierarchy_values)
+            sample_hierarchy_value_dict[sample_hierarchy_value] = lower_sample_hierarchy_values
+        all_sample_hierarchy_values_dicts_list.append(sample_hierarchy_value_dict)
+    all_sample_hierarchy_values_dicts_list = [{"":list(all_sample_hierarchy_values_dicts_list[0].keys())}] + all_sample_hierarchy_values_dicts_list
+    #compare list with dictionaries through hierarchies with values in imputation table
+    for h,sample_hierarchy in enumerate(sample_hierarchies):
+        if h == 0:
+            upper_hierarchy = sample_hierarchy
+        lower_hierarchy #TODO
+        
+
+
+
+
+if __name__ == "__main__":
+    
+    # Get data from wrapper by parsing flags
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-d", "--datapath", required=True, 
+        help="Filepath to datafile that will be processed") 
+    parser.add_argument(
+        "-p", "--parampath", required=True, 
+        help="Filepath to parameter json") 
+    parser.add_argument(
+        "-o", "--outpath", required=True, 
+        help="Filepath for outputfile") 
+    parser.add_argument(
+        "-md", "--metapath", required=True, 
+        help="Filepath to metadatafile") 
+    parser.add_argument(
+        "-ma", "--maskpath", required=True, 
+        help="Filepath to maskfile") 
+    parser.add_argument(
+        "-l", "--log_file", required=True, 
+        help="Filepath to logfile") 
+    parser.add_argument(
+        "-c", "--counter", required=True, 
+        help="Module counter") 
+    args = parser.parse_args()
+    data_df_fp = args.datapath
+    param_fp = args.parampath
+    out_dir_fp = args.outpath
+    meta_df_fp = args.metapath
+    mask_fp = args.maskpath
+    log_file = args.log_file
+    meta_df_fp = args.metapath
+    counter = args.counter
+    
+    ###### To be modified
+    outname = "data_"+str(counter)
+    
+    # Load parameter_file
+    with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
+        parameters_dict = json.load(f)
+        
+    #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
+    '''
+    meta_df_fp = "../Metadata.tsv"
+    data_df_fp = "../01_Filtering/data_1.tsv"
+    out_dir_fp = "../03_Imputation/"
+    parameters_dict_raw = pd.read_csv("../03_Imputation/parameters.txt",sep="\t",index_col=0,header=None)[1].to_dict()
+    parameters_dict = dict()
+    for x in parameters_dict_raw.items():
+        try: #if type != str
+            parameters_dict[x[0]] = eval(x[1])
+        except (SyntaxError, NameError): #if type==str
+            parameters_dict[x[0]] = x[1]
+    '''
+    
+    # Define seed
+    seed = parameters_dict["seed"] + counter
+    
+    # Load data
+    data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+    
+    # Load metadata_df
+    metadata_df = pd.read_csv(meta_df_fp,sep="\t")
+        
+    # Load mask and log file
+    mask = pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
+    
+    # Log parameters
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Imputation\n"
+    log += "Parameters\n------------\n"
+    for key,value in parameters_dict.items():
+        log += str(key)+"\t\t\t"+str(value)+"\n"
+    log += "------------\n"  
+    helper.logger(log_file, module_output=log)
+    log = ""
+    
+    
+    # replace zeros with NA
+    if parameters_dict["replace_zeros_with_nan"]:
+        data_df.replace(0,np.nan,inplace=True)
+    # only proceed if any value is missing
+    if data_df.isnull().values.any():
+        #create impu_table template
+        if os.path.exists(out_dir_fp + "imputation_procedures.tsv") and not parameters_dict["overwrite_imputation_procedures"]:
+            # load imputation table
+            impu_table_df = pd.read_csv(out_dir_fp + "imputation_procedures.tsv",sep="\t")
+            # check imputation table on completeness such that every lower hierarchy is defined for every upper hierarchy
+            #TODO
+            check_imputation_table_on_completeness()
+        else:
+            # if none existent, create table with imputation methods
+            sample_hierarchies = parameters_dict["imputation_sample_hierarchies"].split(";")
+            precursor_hierarchy_values = [eval(x) for x in parameters_dict["missingness_imputation_thresholds"].split(";")]
+            impu_table_df = helper.create_imputation_table(metadata_df=metadata_df,
+                                                    sample_hierarchies=sample_hierarchies,
+                                                    precursor_hierarchy_values=precursor_hierarchy_values,
+                                                    default_impu_method=parameters_dict["imputation_method"],
+                                                    data_df=data_df,
+                                                    metadata_sample_column=parameters_dict["metadata_sample_column"])
+            impu_table_df.to_csv(out_dir_fp + "imputation_procedures.tsv",sep="\t",index=False)
+        
+
+        # Process data
+        try:
+            # create a mask to store missingness type (thus imputation approach neccessary)
+            imputation_mask_df = data_df.isna()
+            if parameters_dict["eval_missingness_on_protein_presence"]:
+                # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
+                
+                pass
+            #identify hierarchy to evaluate missingness, evaluate missingness, store in one matrix #TODO
+            if parameters_dict["eval_missingness"]:
+                
+                # remember in mask missingness type (MAR vs. MNAR)
+                pass
+            
+            # hierarchical imputation
+            #IMPORTANT: hierarchy values should be unique, e.g. there cannot be plate "1" in several batches, or name them as "batch1_plate1" and "batch2_plate2" etc. by concatenating hierarchies
+            hierarchies = impu_table_df.columns.tolist()
+            hierarchies = hierarchies[:hierarchies.index("precursor_hierarchy_values")] #sample hierarchy columns must be present before column precursor_hierarchy
+            for hierarchy in hierarchies: #start with lowest sample hierarchy, go up, e.g. plate, batch, superbatch
+                # select hierarchy values
+                hierarchy_values = impu_table_df[hierarchy].unique()
+                for hierarchy_value in hierarchy_values:
+                    samples = list(set(metadata_df[metadata_df[hierarchy]==hierarchy_value][parameters_dict["metadata_sample_column"]]) & set(data_df.columns))
+                    # select precursor_hierarchy (e.g. missingness 0.3, 0.5)
+                    precursor_hierarchies = impu_table_df[impu_table_df[hierarchy]==hierarchy_value]["precursor_hierarchy_values"].unique()
+                    # calculate missingness per precursor
+                    pass
+                    for precursor_hierarchy in precursor_hierarchies:
+                        # select precursors matching hierarchy (with prior calculated missingness)
+                        precursors = list()
+                        # extract missingness types from mask
+                        missingness_types = imputation_mask_df.loc[precursors,samples].replace(0,np.nan).dropna().unique()
+                        for missingness_type in missingness_types:
+                            imputation_method = impu_table_df.set_index(["upper_sample_hierarchy","lower_sample_hierarchy","precursor_hierarchy","missingness_type_int"]).loc[(upper_hierarchy,lower_hierarchy,precursor_hierarchy,missingness_type),"imputation_method"]
+                            if imputation_method == "foo":
+                                foo(data_df.loc[precursors,samples])
+                            elif imputation_method =="bar":
+                                bar(data_df.loc[precursors,samples])
+
+        except:
+            helper.logger(log_file, "###ERROR### Module ran into an error.")
+            sys.exit("Imputation exited with an error.")
+    else:
+        log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped"
+    
+    
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"
+    helper.logger(log)
+    sys.exit(0)
+        
