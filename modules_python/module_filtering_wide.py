@@ -592,7 +592,7 @@ if __name__ == "__main__":
 
     # Load data (always in wide format: rows = precursors, columns = samples)
     data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
-    meta_df = pd.read_csv(meta_df_fp, sep='\t', index_col=0)
+    meta_df = pd.read_csv(meta_df_fp, sep='\t', index_col=0) ####### Change index_col in function
 
     # Initialize the working DataFrame
     data_processed_df = data_df.copy()
