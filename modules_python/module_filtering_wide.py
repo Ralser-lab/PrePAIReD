@@ -112,7 +112,7 @@ def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric')
 
     return missingness, upper_bound
 
-def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
+def filter_samples_on_detection_proportion(data_df, optimum = None, alpha_sample = 0.95):
     """
     Integrated pipeline that filters samples from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -121,22 +121,22 @@ def filter_samples_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.9
 
     Parameters
     ----------
-    data_in : pd.DataFrame
+    data_df : pd.DataFrame
         Input DataFrame (indexed on precursors)
     optimum : str or float, optional
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
-        default (optimum = -3.14) for automated thresholding using `calculate_optimum_threshold`.
-    alpha : float, optional
+        default (optimum = None) for automated thresholding using `calculate_optimum_threshold`.
+    alpha_sample : float, optional
         Alpha (significance) level for threshold calculation (default 0.95).
     
     Returns
     -------
     pd.DataFrame
-        Filtered DataFrame retaining samples below the missingness threshold.
+        Filtered DataFrame retaining samples with missingness below the selected threshold.
     """
     
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha)
-    if optimum != -3.14:
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
+    if optimum is not None:
         optimal_threshold = optimum / 100 
 
     return data_df.loc[:, missingness < optimal_threshold]
@@ -264,7 +264,7 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
 # Precursor Thresholding
 ##############################################################################
 
-def filter_precursors_on_detection_proportion(data_df, optimum = -3.14, alpha = 0.95):
+def filter_precursors_on_detection_proportion(data_df, optimum=None, alpha_pr=0.95):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -273,24 +273,27 @@ def filter_precursors_on_detection_proportion(data_df, optimum = -3.14, alpha = 
 
     Parameters
     ----------
-    data_in : pd.DataFrame
-        Input DataFrame (indexed on precursors)
-    optimum : str or float, optional
-        Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
-        default (optimum = -3.14) for automated thresholding using `calculate_optimum_threshold`.
-    alpha : float, optional
-        Alpha (significance) level for threshold calculation (default 0.95).
+    data_df : pd.DataFrame
+        Input DataFrame (indexed on precursors).
+    optimum : float or None, optional
+        Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
+        `calculate_optimum_threshold`.
+    alpha_pr : float, optional
+        Alpha (significance) level for threshold calculation (default is 0.95).
     
     Returns
     -------
     pd.DataFrame
-        Filtered DataFrame retaining precursors below the missingness threshold.
+        Filtered DataFrame retaining precursors with missingness below the selected threshold.
     """
+    # Calculate missingness and optimal threshold
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_pr, statistics='non-parametric')
     
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha, statistics = 'non-parametric')
-    if optimum != -3.14:
-        optimal_threshold = optimum / 100 
+    # Override with user-specified threshold if provided
+    if optimum is not None:
+        optimal_threshold = optimum / 100
 
+    # Filter and return
     return data_df.loc[missingness < optimal_threshold]
 
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
