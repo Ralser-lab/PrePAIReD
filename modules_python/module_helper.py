@@ -1128,7 +1128,7 @@ def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
 
-def init_module(module, metadata=False, id_mapping=False, mask=False):
+def init_module(module, metadata=False, id_mapping=False, mask=False, return_data_fp=False):
     # Parser
     parser = get_parser() 
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
@@ -1155,8 +1155,11 @@ def init_module(module, metadata=False, id_mapping=False, mask=False):
         masked_df = load_mask(data_df_fp)
     else:
         masked_df = []
-    return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter
-
+    if return_data_fp:
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp
+    else:
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter
+	    
 def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=False):
     # Update log file
     logger(log_file, module_output=module_output)
