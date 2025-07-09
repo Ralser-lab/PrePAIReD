@@ -1127,7 +1127,7 @@ def add_parameters_to_log(log_file, module, parameters_dict):
 def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
 
-def init_module(module, load_metadata=False, load_id_mapping=False):
+def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=False):
     # Parser
     parser = get_parser() 
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, mask_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
