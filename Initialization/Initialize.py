@@ -4,9 +4,10 @@
 
 # %%
 # read packages
+import ast
 import json
 import os
-import ast
+import pandas as pd
 import re
 import time
 
@@ -71,7 +72,152 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                 out_file.close()
 
 # Check parameters
+def error_control(parameter_overview_df=pd.DataFrame, language=str, module=str, flag_values=list, user_input=str, is_flag=1):
+    """
+    This function checks parameters and values from the user input for right datatype, default
+    values and allowed ranges for the called modules.
 
+    :param is_flag: int, 0 or 1 to identify main function per module and needed helper functions
+    :param parameter_overview_df: DataFrame, used as control source for user given values
+    :param language: str, R or Python, calls the module in preferred programming language
+    :param module: str, name of the module to get the main function
+    :param flag_values: list of str, contains the function names to identify
+    corresponding parameters
+    :param user_input: str, file name of the user chosen parameters to check for errors
+    """
+    # check all values
+    if not isinstance(parameter_overview_df, pd.DataFrame): # check if df is really df
+       raise TypeError(f"{parameter_overview_df} is not a Dataframe.")
+    if not isinstance(language, str): # check if language is string
+       raise TypeError(f"{language} is not a string.")
+    if language not in ["Python", "R"]: # check if language is R or Python
+       raise ValueError(f"{language} not found, must be Python or R!")
+    if not isinstance(module, str): # check if module is string
+      raise TypeError(f"{module} is not a string.")
+    if module not in parameter_overview_df["Module"].unique(): # check if module is in df
+      raise ValueError(f"{module} not found!")
+    if not isinstance(flag_values, list): # check if flag_values is a list
+       raise TypeError(f"{flag_values} is not a list.")
+    for flag_value in flag_values:
+        if flag_value not in parameter_overview_df["Flag_value"].unique(): # check if module is in df
+           raise ValueError(f"{flag_value} not found in flag values!")
+        else:
+            pass
+    if not isinstance(user_input, str): # check if user input is string
+        raise TypeError(f"{user_input} is not a string.")
+    if not isinstance(is_flag, int): # check if is_flag is int
+        raise TypeError(f"{is_flag} is not an integer.")
+    if is_flag not in [0, 1]: # check if is_flag is 0 or 1
+       raise ValueError(f"{is_flag} not found, must be 0 or 1!")
+
+    # reduce df to current module and language
+    current_module = parameter_overview_df.loc[(parameter_overview_df["Language"] == language) &
+                                               (parameter_overview_df["Module"] == module) &
+                                               (parameter_overview_df["IsFlag"] == is_flag)]
+
+    # get allowed flag values and check
+    allowed_flags = parameter_overview_df["AllowedValues"].loc[parameter_overview_df["Function"] == "main"].values[0]
+    allowed_flags = allowed_flags.split(";")
+
+    for flag_value in flag_values: # check if flag value is allowed
+        if flag_value in allowed_flags:
+            pass
+        else:
+            raise ValueError(f"{flag_value} not allowed, use one of {allowed_flags}.")
+
+    # get all variables for the desired function to compare to user input
+    variables_of_function = parameter_overview_df[["Variable", "Type", "Default", "Optional", "AllowedValues"]].loc[parameter_overview_df["Flag_value"] == flag_value]
+    # print(variables_of_function)
+    type_map = {'int': int, 'float': float, 'str': str, 'bool': bool, 'tuple': tuple} # map strings back to types
+    variables_of_function["Type"] = variables_of_function["Type"].map(type_map)
+
+    with open(user_input, "r") as ui: # read parameters defined by user
+        adapted_parameters = json.load(ui)
+        # print(adapted_parameters)
+        for variable, value in adapted_parameters.items():
+            if variable in variables_of_function["Variable"].values: # check that given variable is in list of variables for function
+                # print(variable, value)
+                pass
+            else:
+                raise  ValueError(f"{variable} not in variable list for {flag_value}, must be one of {variables_of_function['Variable'].values}.")
+
+            right_type = variables_of_function["Type"].loc[variables_of_function["Variable"] == variable].values[0] # get the right variable type
+            # print(right_type)
+            print(value, type(value))
+            if isinstance(value, float) and value.is_integer(): # check that floats can be accepted as integers
+                value = int(value)
+            if isinstance(value, int):
+                value = float(value)
+            else:
+                if not isinstance(value, right_type): # check if variable has right type
+                    raise TypeError(f"{variable} value is {type(value)}, should be {right_type}.")
+                else:
+                    pass
+
+            # start comparison to Default values
+            default_value = variables_of_function["Default"].loc[variables_of_function["Variable"] == variable].values[0]
+            # print(default_value, type(default_value))
+            # print(value, type(value))
+            if str(value) == default_value: # all entries are strings, check via conversion if value is default
+                # print(f"{value} is default value.")
+                pass
+            else:
+                # print(f"{value} is not a default value, check for allowed values.")
+                allowed_values = variables_of_function["AllowedValues"].loc[variables_of_function["Variable"] == variable].values[0] # get allowed values
+                # print(allowed_values, type(allowed_values))
+
+                if ";" in allowed_values: # ; indicates list of values, either strings or bools
+                    allowed_values = allowed_values.split(";")
+                    if value not in allowed_values:
+                        raise ValueError(f"{value} is not allowed selection!")
+                    else:
+                        pass
+                # ( indicates a range > first value, [ indicates range >= first value, ) indicates a range < last value, ] indicates range <= last value
+                if allowed_values[0] == "(" and allowed_values[-1] == ")":
+                    allowed_values = allowed_values[1:-1]
+                    # print(allowed_values)
+                    allowed_values = allowed_values.split(",")
+                    # print(allowed_values)
+                    if float(allowed_values[0]) < value < float(allowed_values[1]):
+                        # print("Value in range.")
+                        pass
+                    else:
+                        raise ValueError(f"{value} is not in allowed range, must be > {allowed_values[0]} and < {int(allowed_values[1])}.")
+                if allowed_values[0] == "(" and allowed_values[-1] == "]":
+                    allowed_values = allowed_values[1:-1]
+                    # print(allowed_values)
+                    allowed_values = allowed_values.split(",")
+                    # print(allowed_values)
+                    if float(allowed_values[0]) < value <= float(allowed_values[1]):
+                        print("Value in range.")
+                        pass
+                    else:
+                        raise ValueError(f"{value} is not in allowed range, must be > {allowed_values[0]} and <= {int(allowed_values[1])}.")
+
+                if allowed_values[0] == "[" and allowed_values[-1] == ")":
+                    allowed_values = allowed_values[1:-1]
+                    # print(allowed_values)
+                    allowed_values = allowed_values.split(",")
+                    # print(allowed_values)
+                    if float(allowed_values[0]) <= value < float(allowed_values[1]):
+                        # print("Value in range.")
+                        pass
+                    else:
+                        raise ValueError(f"{value} is not in allowed range, must be >= {allowed_values[0]} and < {int(allowed_values[1])}.")
+                if allowed_values[0] == "[" and allowed_values[-1] == "]":
+                    allowed_values = allowed_values[1:-1]
+                    # print(allowed_values)
+                    allowed_values = allowed_values.split(",")
+                    # print(allowed_values)
+                    if float(allowed_values[0]) <= value <= float(allowed_values[1]):
+                        # print("Value in range.")
+                        pass
+                    else:
+                        raise ValueError(f"{value} is not in allowed range, must be >= {allowed_values[0]} and <= {int(allowed_values[1])}.")
+
+                # check for bools: wait for decision how bools will be handled
+
+    print("Works so far")
 # Initialize Logger
 
 def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str, 
