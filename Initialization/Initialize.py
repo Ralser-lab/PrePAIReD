@@ -116,7 +116,7 @@ def error_control(parameter_overview_df=pd.DataFrame, language=str, module=str, 
                                                (parameter_overview_df["IsFlag"] == is_flag)]
 
     # get allowed flag values and check
-    allowed_flags = parameter_overview_df["AllowedValues"].loc[parameter_overview_df["Function"] == "main"].values[0]
+    allowed_flags = current_module["AllowedValues"].loc[current_module["Function"] == "main"].values[0]
     allowed_flags = allowed_flags.split(";")
 
     for flag_value in flag_values: # check if flag value is allowed
@@ -126,7 +126,7 @@ def error_control(parameter_overview_df=pd.DataFrame, language=str, module=str, 
             raise ValueError(f"{flag_value} not allowed, use one of {allowed_flags}.")
 
     # get all variables for the desired function to compare to user input
-    variables_of_function = parameter_overview_df[["Variable", "Type", "Default", "Optional", "AllowedValues"]].loc[parameter_overview_df["Flag_value"] == flag_value]
+    variables_of_function = current_module[["Variable", "Type", "Default", "Optional", "AllowedValues"]].loc[parameter_overview_df["Flag_value"] == flag_value]
     # print(variables_of_function)
     type_map = {'int': int, 'float': float, 'str': str, 'bool': bool, 'tuple': tuple} # map strings back to types
     variables_of_function["Type"] = variables_of_function["Type"].map(type_map)
