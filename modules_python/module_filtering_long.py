@@ -23,7 +23,8 @@ variable names + types
     int/float/bool/str: *
     filenames: *_fp
 
-
+#TODO
+# - rename missing uniProt IDs and Genes
 
 """
 # %%
