@@ -66,12 +66,11 @@ def filter_samples_based_on_metadata(data_df, meta_df, index_column='File.Name',
         return data_df
     
     meta_df_indexed = meta_df.set_index(index_column)
-
-    if key_column not in meta_df_indexed.columns: # TO DO : add warnings to logger
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.")
-        return data_df
-
-    return data_df.loc[:, meta_df_indexed.index[~meta_df_indexed[key_column].fillna(False)]]
+    # Fill NAs in key column with FALSE
+    valid_samples = meta_df_indexed.loc[:, key_column].fillna(False) 
+    # Sample interesection between meta_df and data_df
+    valid_samples = valid_samples[valid_samples.index.isin(data_df.columns)] 
+    return data_df.loc[:, ~valid_samples]
     
 
 
