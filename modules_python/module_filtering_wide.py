@@ -26,34 +26,54 @@ import scipy.stats as stats
 # Sample Thresholding, need to add error handling & logging
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, column='Corrupted'):
+def filter_samples_based_on_metadata(data_df, meta_df, index_column='File.Name', key_column ='Corrupted'):
     """
-    Filters rows from the input data DataFrame based on missing values in a specific metadata column.
+    Indexes metadata on specified column (index_column), then filters rows from the input data DataFrame 
+    based on bool values in a specific metadata column (key_column).
 
-    If the specified metadata column does not exist, returns the original data DataFrame unchanged.
+    If the specified index_column is not found in metadata, logs a WARNING: INDEX KEY ERROR, 
+    and returns unfiltered data.
+
+    If the specified key_column is not found after indexing metadata, logs a WARNING: COLUMN KEY ERROR, 
+    and returns unfiltered data.
 
     Author: SB
 
     Parameters
     ----------
     data_df : pd.DataFrame
-        DataFrame containing the data, indexed by features/precursors, with columns as samples
+        DataFrame containing the data, indexed by features/precursors, with columns as samples.
 
     meta_df : pd.DataFrame
-        DataFrame containing metadata, indexed by sample
+        DataFrame containing metadata, indexed by sample.
 
-    column : str, optional
-        Column name in meta_df to check for corrupted samples due to MS aquisition operator 
-        technicalities. Default is 'Corrupted'. The column should be boolean. 
+    index_column : str
+        Column name in meta_df to set as index to align with data_df.
+
+    key_column : str, optional
+        Column name in meta_df to check for corrupted samples due to MS acquisition operator 
+        technicalities. Default is 'Corrupted'. The column should be boolean.
 
     Returns
     -------
     pd.DataFrame
         Filtered version of data_df where only samples that lack corruption in metadata are retained 
-        (i.e. Corrupt != True)
+        (i.e. Corrupt != True).
     """
+
+    if index_column not in meta_df.columns: # TO DO : add warnings to logger
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.")
+        return data_df
     
-    return data_df.loc[:,~meta_df[column]]
+    meta_df_indexed = meta_df.set_index(index_column)
+
+    if key_column not in meta_df_indexed.columns: # TO DO : add warnings to logger
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.")
+        return data_df
+
+    return data_df.loc[:, meta_df_indexed.index[~meta_df_indexed[key_column].fillna(False)]]
+    
+
 
 def condition_on_detection_proportion(data_df):
 
@@ -595,7 +615,7 @@ if __name__ == "__main__":
 
     # Load data (always in wide format: rows = precursors, columns = samples)
     data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
-    meta_df = pd.read_csv(meta_df_fp, sep='\t', index_col=0) ####### Change index_col in function
+    meta_df = pd.read_csv(meta_df_fp, sep='\t')
 
     # Initialize the working DataFrame
     data_processed_df = data_df.copy()
@@ -612,13 +632,13 @@ if __name__ == "__main__":
 
         elif method == "sample": # shift to logger
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
             data_processed_df = filter_samples_on_detection_proportion(data_processed_df) 
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
 
         elif method == "precursor": # shift to logger
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}") 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
             data_processed_df = filter_precursors_on_detection_proportion(data_processed_df)
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}")
 
