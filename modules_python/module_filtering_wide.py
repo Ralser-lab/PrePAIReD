@@ -589,7 +589,7 @@ if __name__ == "__main__":
     #data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
     #meta_df = pd.read_csv(meta_df_fp, sep='\t')
 
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
 
     # Initialize the working DataFrame
     data_processed_df = data_df.copy()
