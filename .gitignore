@@ -6,6 +6,7 @@
 *.tsv
 modules_python/datasets/
 modules_python/__pycache__/
+modules_python/module_filtering_wide_v2.py
 
 # Python bytecode
 __pycache__/

@@ -19,6 +19,7 @@ import os
 from datetime import datetime
 import argparse
 import scipy.stats as stats
+import module_helper as helper
 
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
@@ -26,15 +27,15 @@ import scipy.stats as stats
 # Sample Thresholding, need to add error handling & logging
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, index_column='File.Name', key_column ='Corrupted'):
+def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column ='Corrupted', ):
     """
     Indexes metadata on specified column (index_column), then filters rows from the input data DataFrame 
     based on bool values in a specific metadata column (key_column).
 
-    If the specified index_column is not found in metadata, logs a WARNING: INDEX KEY ERROR, 
+    If the specified index_column is not found in metadata, logs a ERROR: INDEX KEY ERROR, 
     and returns unfiltered data.
 
-    If the specified key_column is not found after indexing metadata, logs a WARNING: COLUMN KEY ERROR, 
+    If the specified key_column is not found after indexing metadata, logs a ERRPR: COLUMN KEY ERROR, 
     and returns unfiltered data.
 
     Author: SB
@@ -46,6 +47,9 @@ def filter_samples_based_on_metadata(data_df, meta_df, index_column='File.Name',
 
     meta_df : pd.DataFrame
         DataFrame containing metadata, indexed by sample.
+
+    module_output : str
+        Log file to pick up run time comments and warnings
 
     index_column : str
         Column name in meta_df to set as index to align with data_df.
@@ -59,24 +63,27 @@ def filter_samples_based_on_metadata(data_df, meta_df, index_column='File.Name',
     pd.DataFrame
         Filtered version of data_df where only samples that lack corruption in metadata are retained 
         (i.e. Corrupt != True).
+    
+    str
+        Module output, logged with ###ERROR### messages if index and column keys not found in metadata
     """
 
     if index_column not in meta_df.columns:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.")
+        module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df
 
     meta_df_indexed = meta_df.set_index(index_column)
 
     if key_column not in meta_df_indexed.columns:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.")
+        module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###ERROR###: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df
     
+    module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
     # Fill NAs in key column with FALSE
     sample_flags = meta_df_indexed.loc[:, key_column].fillna(False) 
     # Sample interesection between meta_df and data_df
     sample_flags = sample_flags[sample_flags.index.isin(data_df.columns)] 
-    return data_df.loc[:, ~sample_flags]
-    
+    return data_df.loc[:, ~sample_flags], module_output
 
 
 def condition_on_detection_proportion(data_df):
@@ -601,30 +608,30 @@ if __name__ == "__main__":
      
     for method in methods:
         if method == "metadata":
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...") # shift to logger
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}")
-            data_processed_df = filter_samples_based_on_metadata(data_processed_df, metadata_df) 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...\n") 
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}\n")
+            data_processed_df, module_output = filter_samples_based_on_metadata(data_processed_df, metadata_df, module_output) 
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}\n")
 
         elif method == "sample": # shift to logger
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...")
             data_processed_df = filter_samples_on_detection_proportion(data_processed_df) 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
 
         elif method == "precursor": # shift to logger
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}") 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n") 
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") 
             data_processed_df = filter_precursors_on_detection_proportion(data_processed_df)
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n")
 
         else:
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###WARNING### Unknown filtering method: {method} — skipping.") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###WARNING### Unknown filtering method: {method} — skipping.\n")
 
     # Save the final processed data
     #output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
     #data_processed_df.to_csv(output_path, sep='\t')
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") # shift to logger
+    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") 
     helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp, outname, mask=True)
 
     
