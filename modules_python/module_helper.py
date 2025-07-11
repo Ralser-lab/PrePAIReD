@@ -1166,7 +1166,7 @@ def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_
     # Save data
     save_data(data_processed_df, out_dir_fp, outname)
     # Save mask
-    if save_mask:
+    if mask:
         save_mask(masked_df, out_dir_fp, outname)
     # Close function
     logger(log_file, "Module finished as expected.\n")
