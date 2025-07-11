@@ -659,7 +659,7 @@ if __name__ == "__main__":
             parameters_dict[x[0]] = x[1]
     '''
 
-    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=False, id_mapping=False, mask=False, return_data_fp=True)
+    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=False, id_mapping=False, mask=False, return_data_fp=True)
 
     # Load metadata
     metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
