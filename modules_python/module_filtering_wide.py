@@ -578,48 +578,18 @@ def replace_labelled_peptides(peptide_profiles,replace_label,to_be_replaced_with
 
 if __name__ == "__main__":
     
-    # Get data from wrapper by parsing flags
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-d", "--datapath", required=True, 
-        help="Filepath to datafile that will be processed") 
-    parser.add_argument(
-        "-md", "--metapath", required=True, 
-        help="Filepath to metadatafile") 
-    parser.add_argument(
-        "-o", "--outpath", required=True, 
-        help="Filepath for outputfile") 
-    #parser.add_argument(
-    #    "-p", "--parampath", required=True, 
-    #    help="Filepath to parameter json") 
-    #parser.add_argument(
-    #    "-md", "--metapath", required=True, 
-    #    help="Filepath to metadatafile") 
-    #parser.add_argument(
-    #    "-ma", "--maskpath", required=True, 
-    #    help="Filepath to maskfile") 
-    #parser.add_argument(
-    #    "-l", "--log_file", required=True, 
-    #    help="Filepath to logfile") 
-    #parser.add_argument(
-    #    "-c", "--counter", required=True, 
-    #    help="Module counter") 
-    args = parser.parse_args()
-    data_df_fp = args.datapath
-    meta_df_fp = args.metapath
-    out_dir_fp = args.outpath
-    #param_fp = args.parampath
-    #mask_fp = args.maskpath
-    #log_file = args.log_file
-    #counter = args.counter
-    
     # Load parameters (from JSON later)
-    pipeline_string = "metadata;sample;precursor"
-    methods = pipeline_string.split(";")
-
+    # For testing purposes
+    #""""
+    filtering_wide_methods = "metadata;sample;precursor"
+    #"""
+    #filtering_wide_methods = parameters_dict["filtering_wide_methods"]
+     
     # Load data (always in wide format: rows = precursors, columns = samples)
-    data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
-    meta_df = pd.read_csv(meta_df_fp, sep='\t')
+    #data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
+    #meta_df = pd.read_csv(meta_df_fp, sep='\t')
+
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
 
     # Initialize the working DataFrame
     data_processed_df = data_df.copy()
@@ -627,33 +597,36 @@ if __name__ == "__main__":
     # Minimal filtering pipeline in methods order (metadata corruptions + sample filtering)
     # TO DO: streamline the params (for now using defaults), add logging, add warnings
 
+    methods = filtering_wide_methods.split(";")
+     
     for method in methods:
         if method == "metadata":
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...") # shift to logger
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}")
-            data_processed_df = filter_samples_based_on_metadata(data_processed_df, meta_df) 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}")
+            data_processed_df = filter_samples_based_on_metadata(data_processed_df, metadata_df) 
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}")
 
         elif method == "sample": # shift to logger
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...") # shift to logger
             data_processed_df = filter_samples_on_detection_proportion(data_processed_df) 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}")
 
         elif method == "precursor": # shift to logger
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}") 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}") 
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") # shift to logger
             data_processed_df = filter_precursors_on_detection_proportion(data_processed_df)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}")
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}")
 
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Unknown filtering method: {method} — skipping.") # shift to logger
+            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###WARNING### Unknown filtering method: {method} — skipping.") # shift to logger
 
     # Save the final processed data
-    output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
-    data_processed_df.to_csv(output_path, sep='\t')
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") # shift to logger
-        
+    #output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
+    #data_processed_df.to_csv(output_path, sep='\t')
+    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") # shift to logger
+    helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp, outname, mask=True)
+
     
 
 # %%
