@@ -19,7 +19,6 @@ import os
 from datetime import datetime
 import argparse
 import scipy.stats as stats
-import module_helper as helper
 
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
@@ -27,7 +26,7 @@ import module_helper as helper
 # Sample Thresholding, need to add error handling & logging
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column ='Corrupted', ):
+def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column ='Corrupted'):
     """
     Indexes metadata on specified column (index_column), then filters rows from the input data DataFrame 
     based on bool values in a specific metadata column (key_column).
@@ -54,7 +53,7 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     index_column : str
         Column name in meta_df to set as index to align with data_df.
 
-    key_column : str, optional
+    key_column : str
         Column name in meta_df to check for corrupted samples due to MS acquisition operator 
         technicalities. Default is 'Corrupted'. The column should be boolean.
 
@@ -143,7 +142,7 @@ def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric')
 
     return missingness, upper_bound
 
-def filter_samples_on_detection_proportion(data_df, optimum = None, alpha_sample = 0.95):
+def filter_samples_on_detection_proportion(data_df, module_output, optimum_sample = None, alpha_sample = 0.95):
     """
     Integrated pipeline that filters samples from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -154,9 +153,9 @@ def filter_samples_on_detection_proportion(data_df, optimum = None, alpha_sample
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors)
-    optimum : str or float, optional
+    optimum_sample : str or float, optional
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
-        default (optimum = None) for automated thresholding using `calculate_optimum_threshold`.
+        default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
     alpha_sample : float, optional
         Alpha (significance) level for threshold calculation (default 0.95).
     
@@ -165,12 +164,30 @@ def filter_samples_on_detection_proportion(data_df, optimum = None, alpha_sample
     pd.DataFrame
         Filtered DataFrame retaining samples with missingness below the selected threshold.
     """
-    
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
-    if optimum is not None:
-        optimal_threshold = optimum / 100 
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    return data_df.loc[:, missingness < optimal_threshold]
+    # Validate allowed values for optimum_sample
+    if optimum_sample is not None:
+        if not isinstance(optimum_sample, (int, float)):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_sample. Expected int or float, got {type(optimum_sample).__name__}.\n"
+            return data_df, module_output
+        if not (0 <= optimum_sample <= 100):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_sample. Must be between 0 and 100. Got {optimum_sample}.\n"
+            return data_df, module_output
+
+    # Validate allowed values for alpha_sample
+    if not isinstance(alpha_sample, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(alpha_sample).__name__}.\n"
+        return data_df, module_output
+    if not (0 <= alpha_sample <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {alpha_sample}.\n"
+        return data_df, module_output
+
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
+    if optimum_sample is not None:
+        optimal_threshold = optimum_sample / 100 
+
+    return data_df.loc[:, missingness < optimal_threshold], module_output
 
 def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
     """
@@ -295,7 +312,7 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
 # Precursor Thresholding
 ##############################################################################
 
-def filter_precursors_on_detection_proportion(data_df, optimum=None, alpha_pr=0.95):
+def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr=None, alpha_pr=0.95):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -306,7 +323,7 @@ def filter_precursors_on_detection_proportion(data_df, optimum=None, alpha_pr=0.
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors).
-    optimum : float or None, optional
+    optimum_pr : float or None, optional
         Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
         `calculate_optimum_threshold`.
     alpha_pr : float, optional
@@ -317,15 +334,34 @@ def filter_precursors_on_detection_proportion(data_df, optimum=None, alpha_pr=0.
     pd.DataFrame
         Filtered DataFrame retaining precursors with missingness below the selected threshold.
     """
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Validate allowed values for optimum_pr
+    if optimum_pr is not None:
+        if not isinstance(optimum_pr, (int, float)):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_pr. Expected int or float, got {type(optimum_pr).__name__}.\n"
+            return data_df, module_output
+        if not (0 <= optimum_pr <= 100):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_pr. Must be between 0 and 100. Got {optimum_pr}.\n"
+            return data_df, module_output
+
+    # Validate allowed values for alpha_pr
+    if not isinstance(alpha_pr, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_pr).__name__}.\n"
+        return data_df, module_output
+    if not (0 <= alpha_pr <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_pr}.\n"
+        return data_df, module_output
+    
     # Calculate missingness and optimal threshold
     missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_pr, statistics='non-parametric')
     
     # Override with user-specified threshold if provided
-    if optimum is not None:
-        optimal_threshold = optimum / 100
+    if optimum_pr is not None:
+        optimal_threshold = optimum_pr / 100
 
     # Filter and return
-    return data_df.loc[missingness < optimal_threshold]
+    return data_df.loc[missingness < optimal_threshold], module_output
 
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
     """
@@ -616,13 +652,13 @@ if __name__ == "__main__":
         elif method == "sample": # shift to logger
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...")
-            data_processed_df = filter_samples_on_detection_proportion(data_processed_df) 
+            data_processed_df, module_output = filter_samples_on_detection_proportion(data_processed_df, module_output)
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
 
         elif method == "precursor": # shift to logger
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n") 
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") 
-            data_processed_df = filter_precursors_on_detection_proportion(data_processed_df)
+            data_processed_df, module_output = filter_precursors_on_detection_proportion(data_processed_df, module_output)
             module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n")
 
         else:
