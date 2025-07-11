@@ -153,11 +153,16 @@ def filter_samples_on_detection_proportion(data_df, module_output, optimum_sampl
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors)
-    optimum_sample : str or float, optional
+    
+    module_output : str
+        Log file to pick up run time comments and warnings
+
+    optimum_sample : float or None, default None
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
         default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
-    alpha_sample : float, optional
-        Alpha (significance) level for threshold calculation (default 0.95).
+
+    alpha_sample : float 
+        Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
     
     Returns
     -------
@@ -323,11 +328,16 @@ def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors).
-    optimum_pr : float or None, optional
+
+    module_output : str
+        Log file to pick up run time comments and warnings
+
+    optimum_pr : float or None, default None
         Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
         `calculate_optimum_threshold`.
-    alpha_pr : float, optional
-        Alpha (significance) level for threshold calculation (default is 0.95).
+
+    alpha_pr : float
+        Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
     
     Returns
     -------
