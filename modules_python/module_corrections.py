@@ -561,7 +561,7 @@ parameters_dict = {
 
 if __name__ == "__main__":
 
-    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
 
     # Return string for logging from the function
     # for large functions log begfore function state
