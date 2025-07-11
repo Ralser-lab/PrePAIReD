@@ -34,8 +34,8 @@ import sys
 import pandas as pd
 import numpy as np
 import time
-from modules_python import module_helper
-
+#from modules_python import module_helper
+import module_helper as helper
 
 
 
@@ -189,7 +189,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
         if keep_track:
             if mask_df is None or mask_description_df is None:
-                mask_df,mask_description_df,log_create = module_helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
+                mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
                 log += log_create
     # FILTERING
     filtering_tracker_df = pd.DataFrame(index={key:value for key,value in filters_dict.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
@@ -499,7 +499,7 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
         logfile.close()
     # load filter_mask if needed and not provided
     if count_peptides and filter_mask is None:
-        filter_mask,mask_description=module_helper.create_filtering_matrix(file,profile_annotation_df,min_peptides=min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
+        filter_mask,mask_description=helper.create_filtering_matrix(file,profile_annotation_df,min_peptides=min_peptides,values=values,ids=ids,diann_sample_column=diann_sample_column)
     # delete path from diann_sample_column and set index in file (DIA-NN output)
     file["FileName_trimmed"] = list(map(lambda x: x.replace("/", "\\").split("\\")[-1], file[diann_sample_column].tolist()))
     # exclude filenames not present in profile_annotation_df
@@ -647,15 +647,6 @@ def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="
 
 if __name__ == "__main__":
     
-    
-    # Get data from wrapper
-    param_fp = sys.argv[0]
-    out_dir_fp = sys.argv[1]
-    counter = sys.argv[2]
-    
-    # Load parameters #TODO
-    parameters_dict = module_helper.load_parameters(param_fp) # json.load 
-    
     #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
     '''
     out_dir_fp = "../01_Filtering/"
@@ -667,18 +658,20 @@ if __name__ == "__main__":
         except (SyntaxError, NameError): #if type==str
             parameters_dict[x[0]] = x[1]
     '''
-    
+
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=False, id_mapping=False, mask=False, return_data_fp=True)
+
     # Load metadata
-    metadata_df,log = module_helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
+    metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
                                               metadata_sheet=parameters_dict["metadata_sheet"], 
                                               filename_col=parameters_dict["metadata_filename_column"], 
                                               encoding=parameters_dict["metadata_encoding"])
     # Check if loading was successful, else pass error to log and exit   
-    module_helper.logger(log)
+    helper.logger(log_file,log)
     if not metadata_df:
         sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
-        module_helper.logger("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         
     
@@ -698,7 +691,7 @@ if __name__ == "__main__":
     
         # Load input file
         log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
-        module_helper.logger(log)
+        helper.logger(log_file,log)
         try:
             input_df = read_input(filename=parameters_dict["input_fp"], 
                                   file_columns_list=file_columns_list)
@@ -728,11 +721,11 @@ if __name__ == "__main__":
             else:
                 #if missing columns are linked to ids, values, or sample columns raise a KeyError and exit
                 log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(missing_cols_set) + " not in the selected input file.\n"
-                module_helper.logger(log)
+                helper.logger(log_file,log)
                 #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
                 sys.exit("###ERROR###" + ", ".join(missing_cols_set) + " not in the selected input file.")
         log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
-        module_helper.logger(log)
+        helper.logger(log_file,log)
         
         
         # Extract ID mapping
@@ -752,14 +745,14 @@ if __name__ == "__main__":
     # Check if filtering was successful, else pass error to log and exit    
     if filtered_df:
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
-        module_helper.logger(log)
+        helper.logger(log_file,log)
     else:
-        module_helper.logger(log)
+        helper.logger(log_file,log)
         sys.exit("###ERROR###: Long format Filtering failed.")
         
     
     # Rename filter_mask columns
-    mask_df = module_helper.rename_filter_mask_columns(mask_df, 
+    mask_df = helper.rename_filter_mask_columns(mask_df, 
                                                        metadata_df, 
                                                        filename_col=parameters_dict["metadata_filename_column"], 
                                                        sample_col=parameters_dict["metadata_sample_column"])
@@ -779,13 +772,15 @@ if __name__ == "__main__":
     
     # Save data
     id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t")
-    wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
-    mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
+    #wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
+    #mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
     
     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + out_dir_fp + "data_" + str(counter) + ".tsv\n\t\t\tmask saved successfully to " + out_dir_fp + "data_mask_" + str(counter) + ".tsv\n\t\t\tand table for ID mapping saved to " + out_dir_fp + "id_mapping.tsv\n"
     log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
-    module_helper.logger(log)
-    sys.exit(0)
+    #helper.logger(log_file,log)
+    #sys.exit(0)
+    helper.close_module(wide_df, mask_df, log_file, log, out_dir_fp, outname, mask=True)
+
 
 
 
