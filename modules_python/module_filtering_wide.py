@@ -23,7 +23,7 @@ import scipy.stats as stats
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
 ##############################################################################
-# Sample Thresholding, need to add error handling & logging
+# Sample Thresholding
 ##############################################################################
 
 def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column ='Corrupted'):
@@ -43,16 +43,12 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     ----------
     data_df : pd.DataFrame
         DataFrame containing the data, indexed by features/precursors, with columns as samples.
-
     meta_df : pd.DataFrame
         DataFrame containing metadata, indexed by sample.
-
     module_output : str
         Log file to pick up run time comments and warnings
-
     index_column : str
         Column name in meta_df to set as index to align with data_df.
-
     key_column : str
         Column name in meta_df to check for corrupted samples due to MS acquisition operator 
         technicalities. Default is 'Corrupted'. The column should be boolean.
@@ -62,7 +58,6 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     pd.DataFrame
         Filtered version of data_df where only samples that lack corruption in metadata are retained 
         (i.e. Corrupt != True).
-    
     str
         Module output, logged with ###ERROR### messages if index and column keys not found in metadata
     """
@@ -96,7 +91,7 @@ def condition_on_detection_proportion(data_df):
     ----------
     data_df : pd.DataFrame
         Wide format DataFrame indexed by features/precursors
-
+    
     Returns
     -------
     missingness : pd.Series
@@ -153,10 +148,8 @@ def filter_samples_on_detection_proportion(data_df, module_output, optimum_sampl
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors)
-    
     module_output : str
         Log file to pick up run time comments and warnings
-
     optimum_sample : float or None, default None
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
         default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
@@ -328,14 +321,11 @@ def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr
     ----------
     data_df : pd.DataFrame
         Input DataFrame (indexed on precursors).
-
     module_output : str
         Log file to pick up run time comments and warnings
-
     optimum_pr : float or None, default None
         Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
         `calculate_optimum_threshold`.
-
     alpha_pr : float
         Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
     
