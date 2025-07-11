@@ -114,7 +114,6 @@ def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric')
         Input DataFrame containing missing values.
     alpha : float, optional
         Confidence interval alpha level for threshold calculation (default 0.95).
-    
 
     Returns
     -------
@@ -153,7 +152,6 @@ def filter_samples_on_detection_proportion(data_df, module_output, optimum_sampl
     optimum_sample : float or None, default None
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
         default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
-
     alpha_sample : float 
         Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
     
