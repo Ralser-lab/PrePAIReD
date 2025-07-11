@@ -41,6 +41,7 @@ from sklearn import linear_model
 from skmisc import loess
 from sklearn import metrics
 
+import module_helper as helper
 
 os.chdir(r"c:\\Users\\cleme\\OneDrive - Charité - Universitätsmedizin Berlin\\Projects\\11_PREPROCESSING\\Preprocessing")
 
@@ -479,7 +480,7 @@ def batchwise_drift_correction(logprofiles, metadata_df, metadata_metadata, mode
     return([logprofiles_corr, r2_df_final])
     
 def batchcorrect_harmony(
-            data_df:pd.DataFrame, meta_df:pd.DataFrame, 
+            data_df:pd.DataFrame, metadata_df:pd.DataFrame, 
             batch_key:list, random_seed:int, **kwargs): 
 
     """
@@ -497,8 +498,8 @@ def batchcorrect_harmony(
     Parameters
     ----------
         data_df (pd.DataFrame) : The data matrix (e.g., gene expression), with rows as samples and columns as features.
-        meta_df (pd.DataFrame) : Metadata for the samples, must align with `data_df` by index.
-        batch_key (list) : List of column names in `meta_df` that define batch groupings.
+        metadata_df (pd.DataFrame) : Metadata for the samples, must align with `data_df` by index.
+        batch_key (list) : List of column names in `metadata_df` that define batch groupings.
         random_seed (int) : Random seed for reproducibility.
         **kwargs: Additional keyword arguments passed to the `harmonize` function
 
@@ -515,7 +516,7 @@ def batchcorrect_harmony(
     # Apply harmony algorithm
     data_arr = data_df.to_numpy()
     data_processed_arr = harmonize(
-        data_arr, meta_df, batch_key, random_state=random_seed,
+        data_arr, metadata_df, batch_key, random_state=random_seed,
         **kwargs)
     data_processed_df = pd.DataFrame(
         data_processed_arr, 
@@ -531,10 +532,10 @@ def batchcorrect_harmony(
 # %%
 
 ## remove before final pushing!
-data_df_fp = "data/Test_data/Reduced_set/Test_data_reduced.tsv"
-param_fp = ""
-out_dir_fp = ""
-meta_df_fp = "data/Test_data/Additional_Information/Metadata.tsv"
+#data_df_fp = "data/Test_data/Reduced_set/Test_data_reduced.tsv"
+#param_fp = ""
+#out_dir_fp = ""
+#meta_df_fp = "data/Test_data/Additional_Information/Metadata.tsv"
 
 parameters_dict = {
     "correct_method" : "combat" , # string, options "harmony"
@@ -559,6 +560,8 @@ parameters_dict = {
 # %%
 
 if __name__ == "__main__":
+
+    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
 
     # Return string for logging from the function
     # for large functions log begfore function state
@@ -596,23 +599,23 @@ if __name__ == "__main__":
     # mask_df_fp = args.maskpath
     # log_file = args.log_file
     # counter = args.counter
-    counter = 0
+    #counter = 0
 
-    outname_str = "data_batchcorrected"
+    #outname_str = "data_batchcorrected"
 
     log_string = time.strftime("%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
     
-    
     # Load data
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load precusor data!\n")
-    data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
-    data_df = data_df.reset_index()[["File.Name", "Protein.Group", "PG.Quantity"]].drop_duplicates() # remove in final version
-    data_df = data_df.pivot(index="File.Name", columns="Protein.Group", values="PG.Quantity")
+    #data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
+    #data_df = data_df.reset_index()[["File.Name", "Protein.Group", "PG.Quantity"]].drop_duplicates() # remove in final version
+    #data_df = data_df.pivot(index="File.Name", columns="Protein.Group", values="PG.Quantity")
     
     # remove in final version
     # Load metadata
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load meta data!\n")
-    meta_df = pd.read_csv(meta_df_fp,sep="\t",index_col=0)
+    #meta_df = pd.read_csv(meta_df_fp,sep="\t",index_col=0)
+    metadata_df.set_index(metadata_df.columns[0], drop=False)
     # Load parameter file
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load parameter file!\n")
     # with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
@@ -627,19 +630,19 @@ if __name__ == "__main__":
     
     # check if batchcolumns in metafile
     for batch_col in parameters_dict["batch_cols_meta"]:
-        if batch_col not in meta_df.columns:
+        if batch_col not in metadata_df.columns:
             raise ValueError(f"###ERROR###: Batch Column {batch_col} not in metafile columns!")
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
-    common_idx_list = list(set(data_df.index) & set(meta_df.index))
+    common_idx_list = list(set(data_df.index) & set(metadata_df.index))
     n_samples_data_int = data_df.shape[0]
-    n_samples_meta_int = meta_df.shape[0]
-    drop_samples_data_lst = list(set(data_df.index) - set(meta_df.index))
-    drop_samples_meta_lst = list(set(meta_df.index) - set(data_df.index))
+    n_samples_meta_int = metadata_df.shape[0]
+    drop_samples_data_lst = list(set(data_df.index) - set(metadata_df.index))
+    drop_samples_meta_lst = list(set(metadata_df.index) - set(data_df.index))
 
     data_df = data_df.loc[common_idx_list]
-    meta_df = meta_df.loc[common_idx_list]
+    metadata_df = metadata_df.loc[common_idx_list]
     
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
@@ -653,9 +656,9 @@ if __name__ == "__main__":
                 + "\n\t"+'\n\t'.join(drop_samples_data_lst) \
                 + "\n"
         log_string += warning_intersect_samples_str
-    if n_samples_meta_int != meta_df.shape[0]:
+    if n_samples_meta_int != metadata_df.shape[0]:
         flag_sample_intersect_int = True
-        n_final_samples_meta_int = n_samples_meta_int - meta_df.shape[0]
+        n_final_samples_meta_int = n_samples_meta_int - metadata_df.shape[0]
         warning_intersect_samples_str = \
                 time.strftime('%Y-%m-%d\t%H:%M:%S: ') \
                 +f"###WARNING###: {n_final_samples_meta_int} sample(s) did not appear in precursor data:\n"\
@@ -666,17 +669,17 @@ if __name__ == "__main__":
     
     if flag_sample_intersect_int:
         log_string += time.strftime('%Y-%m-%d\t%H:%M:%S ') \
-                +f"{meta_df.shape[0]} remain for analysis.\n"
+                +f"{metadata_df.shape[0]} remain for analysis.\n"
         
 
 
     # Warn user that some samples do not have a batch annotation
     for batch_col in parameters_dict["batch_cols_meta"]:
         samples_na_list = []
-        if meta_df[batch_col].isna().sum() > 0:
-            count_na_int = meta_df[batch_col].isna().sum()
+        if metadata_df[batch_col].isna().sum() > 0:
+            count_na_int = metadata_df[batch_col].isna().sum()
             samples_na_list = list(
-                meta_df[meta_df[batch_col].isna()].index)
+                metadata_df[metadata_df[batch_col].isna()].index)
             warning_na_meta_str = \
                 time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                 +f"###WARNING###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
@@ -688,14 +691,14 @@ if __name__ == "__main__":
             if len(samples_na_list) > 0:
                 drop_samples = set(samples_na_list) & set(data_df.index)
                 data_df = data_df.drop(drop_samples, axis=0)
-                meta_df = meta_df.drop(drop_samples, axis=0)
+                metadata_df = metadata_df.drop(drop_samples, axis=0)
 
     # Exit module if there are multiple levels in batch_cols of meta file
     for b in parameters_dict["batch_cols_meta"]:
-        if len(np.unique(meta_df[b])) == 1:
+        if len(np.unique(metadata_df[b])) == 1:
             warning_batch_level_str = \
                 time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###ERROR###: Batch Level {b} does only have 1 level:{np.unique(meta_df[b])[0]} value:"\
+                +f"###ERROR###: Batch Level {b} does only have 1 level:{np.unique(metadata_df[b])[0]} value:"\
                 + "\t\tMultiple levels are required to perform batch correction"  + "\n"
             log_string += warning_batch_level_str
             print(log_string)
@@ -714,7 +717,7 @@ if __name__ == "__main__":
                 if k.startswith("harmony")}
 
         data_processed_df, log_string_harmony = batchcorrect_harmony(
-            data_df, meta_df, 
+            data_df, metadata_df, 
             parameters_dict["batch_cols_meta"],
             random_seed=parameters_dict["random_seed"] + counter, 
             **harmony_kwargs_dict
@@ -730,7 +733,7 @@ if __name__ == "__main__":
                     +f"COMBAT is only implemented for one batch variable.\n"\
                     +f"{len(parameters_dict['batch_cols_meta'])} levels are provided: {parameters_dict['batch_cols_meta']}"  + "\n"
             log_string += info_fitsamples_str
-            print(log_string)
+            helper.logger(log_file,log_string)
             sys.exit(0)
 
         # translate combat parameter from dict 
@@ -741,7 +744,7 @@ if __name__ == "__main__":
         fitsamples_idx_list = None
         if len(combat_kwargs_dict["fitsamples_meta"]) == 2:
             fit_col, fit_level = combat_kwargs_dict["fitsamples_meta"]
-            fitsamples_idx_list = list(meta_df[meta_df[fit_col]==fit_level].index)
+            fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"COMBAT will be fitted on {len(fitsamples_idx_list)} samples.\n"\
@@ -751,13 +754,13 @@ if __name__ == "__main__":
             # Check whether the same batch levels are defined in samples
             # fitting combat and the ones and the rest of the dataset
 
-            meta_df[fit_col] 
+            metadata_df[fit_col] 
 
             levels_fitsamples = set(
-                meta_df.loc[
+                metadata_df.loc[
                     fitsamples_idx_list, parameters_dict["batch_cols_meta"][0]])
             levels_data = set(
-                meta_df[parameters_dict["batch_cols_meta"][0]])
+                metadata_df[parameters_dict["batch_cols_meta"][0]])
             if len(levels_data) != len(levels_fitsamples):
                 info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
@@ -765,15 +768,15 @@ if __name__ == "__main__":
                     +f"Level(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
                 log_string += info_fitsamples_str
             # Remove samples of batch levels do not appear in fit samples
-            meta_df = meta_df[
-                ~meta_df[parameters_dict["batch_cols_meta"][0]].isin(
+            metadata_df = metadata_df[
+                ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
                     list(levels_data-levels_fitsamples))]
-            data_df = data_df.loc[meta_df.index]
+            data_df = data_df.loc[metadata_df.index]
 
 
         def batchcorrect_combat(
             data_df:pd.DataFrame, 
-            meta_df:pd.DataFrame, 
+            metadata_df:pd.DataFrame, 
             batch_key:str,
             fitsamples_idx_list=list,
             cov_preserve_list=list,
@@ -828,11 +831,11 @@ if __name__ == "__main__":
 
                 # effects to preserve during batch correction
                 if cov_preserve_list != None:
-                    x_df = meta_df[cov_preserve_list]
+                    x_df = metadata_df[cov_preserve_list]
 
                 # covariates to adjust for during batch correction
                 if cov_adjust_list != None:
-                    c_df = meta_df[cov_adjust_list]
+                    c_df = metadata_df[cov_adjust_list]
 
                 # Init combat Model
                 combat_model=pycombat.Combat()
@@ -845,7 +848,7 @@ if __name__ == "__main__":
 
                     c_fit = combat_model.fit(
                         Y=data_df.loc[fitsamples_idx_list].to_numpy(),
-                        b=meta_df[batch_key].loc[fitsamples_idx_list].to_numpy(),
+                        b=metadata_df[batch_key].loc[fitsamples_idx_list].to_numpy(),
                         X=x_df.loc[fitsamples_idx_list], 
                         C=c_df.loc[fitsamples_idx_list]
                     )
@@ -857,7 +860,7 @@ if __name__ == "__main__":
 
                     c_fit = combat_model.fit(
                         Y=data_df.to_numpy(),
-                        b=meta_df[batch_key].to_numpy(),
+                        b=metadata_df[batch_key].to_numpy(),
                         X=x_df, 
                         C=c_df
                     )
@@ -868,7 +871,7 @@ if __name__ == "__main__":
 
                 data_processed_arr = c_fit.transform(
                     Y=data_df.to_numpy(),
-                    b=meta_df[batch_key].to_numpy(),
+                    b=metadata_df[batch_key].to_numpy(),
                     X=x_df, 
                     C=c_df
                 )
@@ -897,7 +900,7 @@ if __name__ == "__main__":
 
         out = batchcorrect_combat(
             data_df = data_df,
-            meta_df = meta_df,
+            metadata_df = metadata_df,
             batch_key = parameters_dict["batch_cols_meta"][0],
             fitsamples_idx_list=fitsamples_idx_list,
             cov_preserve_list = parameters_dict["combat_cols_preserve_meta"],
@@ -916,10 +919,11 @@ if __name__ == "__main__":
     elif parameters_dict["correct_method"] == "drift":
         # to be implemented
 
-    print(log_string)
+    #print(log_string)
     # # Save data
     # data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
     # sys.exit(0)
+    helper.close_module(data_processed_df, masked_df, log_file, log_string, out_dir_fp, outname, mask=True)
     
     
 
