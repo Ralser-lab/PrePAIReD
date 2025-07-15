@@ -1148,7 +1148,11 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     module_output = add_parameters_to_log(log_file, module, parameters_dict)
     # Load meta data
     if metadata:
-        metadata_df = load_metadata(metadata_df_fp, encoding=parameters_dict["metadata_encoding"])
+        metadata_df, log = load_metadata(metadata_fp=meta_df_fp,
+                                         metadata_sheet=parameters_dict["metadata_sheet"], 
+                                         filename_col=parameters_dict["metadata_filename_column"], 
+                                         encoding=parameters_dict["metadata_encoding"])
+        module_output += log
     else:
         metadata_df = []
     # Load mask
