@@ -34,6 +34,7 @@ import sys
 import pandas as pd
 import numpy as np
 import time
+import os
 #from modules_python import module_helper
 import module_helper as helper
 
@@ -658,8 +659,11 @@ if __name__ == "__main__":
         except (SyntaxError, NameError): #if type==str
             parameters_dict[x[0]] = x[1]
     '''
+    
+    input_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=True, id_mapping=False, mask=False, return_data_fp=True)
 
-    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=True, id_mapping=False, mask=False, return_data_fp=True)
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + "\n"
+    helper.logger(log_file,log)
 
     # Load metadata
     #metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
@@ -668,17 +672,15 @@ if __name__ == "__main__":
     #                                          encoding=parameters_dict["metadata_encoding"])
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
-    if not metadata_df:
+    if not any(metadata_df):
         sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         
-    
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
     input_id_col = ids_list[0]
-    
     
     #DIA-NN
     if parameters_dict["input_origin"]=="diann":
@@ -688,17 +690,17 @@ if __name__ == "__main__":
                                                      values_col=parameters_dict["input_values_column"],
                                                      input_filename_col=parameters_dict["input_filename_column"])
     
-    
-        # Load input file
-        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
-        helper.logger(log_file,log)
+        
+        input_df.reset_index(inplace=True)
+        
         try:
-            input_df = read_input(filename=parameters_dict["input_fp"], 
-                                  file_columns_list=file_columns_list)
+            input_df = input_df[file_columns_list]
+            #read_input(filename=parameters_dict["input_fp"], 
+            #                      file_columns_list=file_columns_list)
         except KeyError:
             #read complete input
-            input_df = read_input(filename=parameters_dict["input_fp"], 
-                                  file_columns_list=None)
+            #input_df = read_input(filename=parameters_dict["input_fp"], 
+            #                      file_columns_list=None)
             #identify missing columns which lead to KeyError; DIA-NN specific!
             missing_cols_set = set(file_columns_list) - set(input_df.columns)
             columns_filter_dict = {"Proteotypic":"filter_proteotypic",
@@ -743,7 +745,7 @@ if __name__ == "__main__":
         pass # adjust here for other programs
         
     # Check if filtering was successful, else pass error to log and exit    
-    if filtered_df:
+    if any(filtered_df):
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
         helper.logger(log_file,log)
     else:
@@ -771,12 +773,12 @@ if __name__ == "__main__":
 
     
     # Save data
-    id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t")
+    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t")
     #wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
     #mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
     
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + out_dir_fp + "data_" + str(counter) + ".tsv\n\t\t\tmask saved successfully to " + out_dir_fp + "data_mask_" + str(counter) + ".tsv\n\t\t\tand table for ID mapping saved to " + out_dir_fp + "id_mapping.tsv\n"
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n\t\t\tmask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n\t\t\tand table for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
+    #log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
     #helper.logger(log_file,log)
     #sys.exit(0)
     helper.close_module(wide_df, mask_df, log_file, log, out_dir_fp, outname, mask=True)
