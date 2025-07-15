@@ -662,10 +662,10 @@ if __name__ == "__main__":
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=False, id_mapping=False, mask=False, return_data_fp=True)
 
     # Load metadata
-    metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
-                                              metadata_sheet=parameters_dict["metadata_sheet"], 
-                                              filename_col=parameters_dict["metadata_filename_column"], 
-                                              encoding=parameters_dict["metadata_encoding"])
+    #metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
+    #                                          metadata_sheet=parameters_dict["metadata_sheet"], 
+    #                                          filename_col=parameters_dict["metadata_filename_column"], 
+    #                                          encoding=parameters_dict["metadata_encoding"])
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if not metadata_df:
