@@ -1112,9 +1112,10 @@ def add_parameters_to_log(log_file, module, parameters_dict):
     return ""
 
 ### Load Metadata without index
-def load_metadata(meta_df_fp):
+""""
+def load_metadata(meta_df_fp, encoding="utf-8"):
     return pd.read_csv(meta_df_fp,sep="\t")
-
+"""
 ### Load Mask
 def load_mask(data_df_fp):
     return pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
@@ -1147,7 +1148,7 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     module_output = add_parameters_to_log(log_file, module, parameters_dict)
     # Load meta data
     if metadata:
-        metadata_df = load_mask(data_df_fp)
+        metadata_df = load_metadata(metadata_df_fp, encoding=parameters_dict["metadata_encoding"])
     else:
         metadata_df = []
     # Load mask
