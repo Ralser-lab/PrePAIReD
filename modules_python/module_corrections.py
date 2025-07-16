@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 
 #statistics and modelling
 import pycombat #CoAxLab
+
 # import scanpy as sc
 from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
@@ -43,7 +44,7 @@ from sklearn import metrics
 
 import module_helper as helper
 
-os.chdir(r"c:\\Users\\cleme\\OneDrive - Charité - Universitätsmedizin Berlin\\Projects\\11_PREPROCESSING\\Preprocessing")
+#os.chdir(r"c:\\Users\\cleme\\OneDrive - Charité - Universitätsmedizin Berlin\\Projects\\11_PREPROCESSING\\Preprocessing")
 
 ##############################################################################
 # Batch correction using parametric ComBat
@@ -529,6 +530,128 @@ def batchcorrect_harmony(
 
     return data_processed_df, log_string
 
+def batchcorrect_combat(
+    data_df:pd.DataFrame, 
+    metadata_df:pd.DataFrame, 
+    batch_key:str,
+    fitsamples_idx_list=list,
+    cov_preserve_list=list,
+    cov_adjust_list=list,
+    ):
+        
+        """
+        Apply combat batch correction, see https://github.com/CoAxLab/pycombat
+        
+        #TODO
+        check whether covariates provided overlap with profiles.columns, 
+        if not inform the user
+        how to handle fit samples
+
+        To low variation might lead to a dataframe full of NA's
+        if so recheck imputation and variance thresholds
+
+
+        author: BZ
+        
+        Parameters
+        ----------
+        profiles : pd.DataFrame
+            features (e.g. precursors) as rows, samples as columns
+        batchkey : str
+            column level to correct by (e.g. "batch")
+        fitsamples : list, optional
+            samples to use for fitting the combat class (e.g. QC-samples only), 
+            must be column names of profiles. 
+            The default is None, fitting with all samples in profiles.
+        covariates : list
+            list of column levels with covariates to be corrected for
+        binlevel : bool
+            if True, bin the levels provided by batchkey
+        bins : int
+            number of bins for the binning of batchkey
+        sample_column : str
+            name of the column level with the sample names. The default is "sample".
+            
+        Returns
+        -------
+        pd.DataFrame, same shape as input profiles.
+
+        """
+
+        ### Function 
+
+        log_list = []
+        log_list.append(
+            time.strftime(
+                "%Y-%m-%d%t%H:%M:%S: "+"Start COMBAT batch correction"))
+
+        # effects to preserve during batch correction
+        if cov_preserve_list != None:
+            x_df = metadata_df[cov_preserve_list]
+
+        # covariates to adjust for during batch correction
+        if cov_adjust_list != None:
+            c_df = metadata_df[cov_adjust_list]
+
+        # Init combat Model
+        combat_model=pycombat.Combat()
+        # fit combat model on selected samples
+        if fitsamples_idx_list != None:
+            
+            log_list.append(
+                time.strftime(
+                    "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples."))
+
+            c_fit = combat_model.fit(
+                Y=data_df.loc[fitsamples_idx_list].to_numpy(),
+                b=metadata_df[batch_key].loc[fitsamples_idx_list].to_numpy(),
+                X=x_df.loc[fitsamples_idx_list], 
+                C=c_df.loc[fitsamples_idx_list]
+            )
+        else:
+            
+            log_list.append(
+                time.strftime(
+                    "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on all samples."))
+
+            c_fit = combat_model.fit(
+                Y=data_df.to_numpy(),
+                b=metadata_df[batch_key].to_numpy(),
+                X=x_df, 
+                C=c_df
+            )
+
+        log_list.append(
+                time.strftime(
+                    "%Y-%m-%d%t%H:%M:%S: "+"Transform data."))
+
+        data_processed_arr = c_fit.transform(
+            Y=data_df.to_numpy(),
+            b=metadata_df[batch_key].to_numpy(),
+            X=x_df, 
+            C=c_df
+        )
+        data_processed_df = pd.DataFrame(
+            data_processed_arr,
+            index=data_df.index,
+            columns=data_df.columns)
+
+        # Check if output df consists of NA's exclusively 
+        # if so return error in Log and don't return processed df
+        if data_processed_df.isna().all().all():
+            log_list.append(
+                time.strftime(
+                    "%Y-%m-%d%t%H:%M:%S: "+"###ERROR###: All Values in DF were transformed to NA.\n"\
+                    +f"Please filter input dataframe for features with high missing values or low variance."  + "\n"))
+            log_string = "\n".join(log_list)
+            return log_string
+        else:
+            log_list.append(time.strftime(
+                "%Y-%m-%d%t%H:%M:%S: "\
+                +"Finished COMBAT batch correction successfully."))
+            log_string = "\n".join(log_list)
+            return data_processed_df, log_string
+
 # %%
 
 ## remove before final pushing!
@@ -615,7 +738,7 @@ if __name__ == "__main__":
     # Load metadata
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load meta data!\n")
     #meta_df = pd.read_csv(meta_df_fp,sep="\t",index_col=0)
-    metadata_df.set_index(metadata_df.columns[0], drop=False)
+    #metadata_df.set_index(metadata_df.columns[0], drop=False)
     # Load parameter file
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Load parameter file!\n")
     # with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
@@ -773,131 +896,6 @@ if __name__ == "__main__":
                     list(levels_data-levels_fitsamples))]
             data_df = data_df.loc[metadata_df.index]
 
-
-        def batchcorrect_combat(
-            data_df:pd.DataFrame, 
-            metadata_df:pd.DataFrame, 
-            batch_key:str,
-            fitsamples_idx_list=list,
-            cov_preserve_list=list,
-            cov_adjust_list=list,
-            ):
-                
-                """
-                Apply combat batch correction, see https://github.com/CoAxLab/pycombat
-                
-                #TODO
-                check whether covariates provided overlap with profiles.columns, 
-                if not inform the user
-                how to handle fit samples
-
-                To low variation might lead to a dataframe full of NA's
-                if so recheck imputation and variance thresholds
-
-
-                author: BZ
-                
-                Parameters
-                ----------
-                profiles : pd.DataFrame
-                    features (e.g. precursors) as rows, samples as columns
-                batchkey : str
-                    column level to correct by (e.g. "batch")
-                fitsamples : list, optional
-                    samples to use for fitting the combat class (e.g. QC-samples only), 
-                    must be column names of profiles. 
-                    The default is None, fitting with all samples in profiles.
-                covariates : list
-                    list of column levels with covariates to be corrected for
-                binlevel : bool
-                    if True, bin the levels provided by batchkey
-                bins : int
-                    number of bins for the binning of batchkey
-                sample_column : str
-                    name of the column level with the sample names. The default is "sample".
-                    
-                Returns
-                -------
-                pd.DataFrame, same shape as input profiles.
-
-                """
-
-                ### Function 
-
-                log_list = []
-                log_list.append(
-                    time.strftime(
-                        "%Y-%m-%d%t%H:%M:%S: "+"Start COMBAT batch correction"))
-
-                # effects to preserve during batch correction
-                if cov_preserve_list != None:
-                    x_df = metadata_df[cov_preserve_list]
-
-                # covariates to adjust for during batch correction
-                if cov_adjust_list != None:
-                    c_df = metadata_df[cov_adjust_list]
-
-                # Init combat Model
-                combat_model=pycombat.Combat()
-                # fit combat model on selected samples
-                if fitsamples_idx_list != None:
-                    
-                    log_list.append(
-                        time.strftime(
-                            "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples."))
-
-                    c_fit = combat_model.fit(
-                        Y=data_df.loc[fitsamples_idx_list].to_numpy(),
-                        b=metadata_df[batch_key].loc[fitsamples_idx_list].to_numpy(),
-                        X=x_df.loc[fitsamples_idx_list], 
-                        C=c_df.loc[fitsamples_idx_list]
-                    )
-                else:
-                    
-                    log_list.append(
-                        time.strftime(
-                            "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on all samples."))
-
-                    c_fit = combat_model.fit(
-                        Y=data_df.to_numpy(),
-                        b=metadata_df[batch_key].to_numpy(),
-                        X=x_df, 
-                        C=c_df
-                    )
-
-                log_list.append(
-                        time.strftime(
-                            "%Y-%m-%d%t%H:%M:%S: "+"Transform data."))
-
-                data_processed_arr = c_fit.transform(
-                    Y=data_df.to_numpy(),
-                    b=metadata_df[batch_key].to_numpy(),
-                    X=x_df, 
-                    C=c_df
-                )
-                data_processed_df = pd.DataFrame(
-                    data_processed_arr,
-                    index=data_df.index,
-                    columns=data_df.columns)
-
-                # Check if output df consists of NA's exclusively 
-                # if so return error in Log and don't return processed df
-                if data_processed_df.isna().all().all():
-                    log_list.append(
-                        time.strftime(
-                            "%Y-%m-%d%t%H:%M:%S: "+"###ERROR###: All Values in DF were transformed to NA.\n"\
-                            +f"Please filter input dataframe for features with high missing values or low variance."  + "\n"))
-                    log_string = "\n".join(log_list)
-                    return log_string
-                else:
-                    log_list.append(time.strftime(
-                        "%Y-%m-%d%t%H:%M:%S: "\
-                        +"Finished COMBAT batch correction successfully."))
-                    log_string = "\n".join(log_list)
-                    return data_processed_df, log_string
-        
-
-
         out = batchcorrect_combat(
             data_df = data_df,
             metadata_df = metadata_df,
@@ -917,7 +915,11 @@ if __name__ == "__main__":
             log_string += log_string_combat
 
     elif parameters_dict["correct_method"] == "drift":
+        pass
         # to be implemented
+        
+    else:
+        data_processed_df = data_df.copy()
 
     #print(log_string)
     # # Save data
