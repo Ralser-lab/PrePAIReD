@@ -646,10 +646,13 @@ if __name__ == "__main__":
             #### Not properly tested
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
             data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+        else:
+            data_processed_df = data_df.copy()
+            module_output += "###WARNING###: Normalzation method not implemented. Skipped module."
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
     except:
-        helper.logger(log_file, "### ERROR: Module ran into an error.")
+        helper.logger(log_file, "###ERROR###: Module ran into an error.")
         sys.exit(1)
 
     # Comparison for mask and logger what changed between both files
