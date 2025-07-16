@@ -1102,7 +1102,7 @@ def get_seed(parameters_dict, counter):
     return parameters_dict["seed"] + counter
 
 def add_parameters_to_log(log_file, module, parameters_dict):
-    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started\n"
+    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started.\n"
     module_output += "Parameters\n------------\n"
     for key,value in parameters_dict.items():
         module_output += str(key)+"\t\t\t"+str(value)+"\n"
@@ -1174,5 +1174,5 @@ def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_
     if mask:
         save_mask(masked_df, out_dir_fp, outname)
     # Close function
-    logger(log_file, time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
+    logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
     sys.exit(0)

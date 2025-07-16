@@ -36,7 +36,7 @@ from tqdm import tqdm
 
 
 #own scripts
-from Python.Snippets import global_variables as global_variables #kept as placeholder for logging until main is being constructed
+#from Python.Snippets import global_variables as global_variables #kept as placeholder for logging until main is being constructed
 import module_helper as helper 
 
 
@@ -747,6 +747,15 @@ if __name__ == "__main__":
         pass
     elif parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         pass
+    
+    else:
+        data_processed_df = data_df.copy()
+        module_output += "###WARNING###: Summarization method not found. Skipped module.\n"
+        
+    helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=True)
+
+    
+
     
 
     
