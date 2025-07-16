@@ -961,7 +961,7 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
 
     """
     
-    if data_df:
+    if any(data_df):
         samples = data_df.columns
     else:
         samples = metadata_df[metadata_sample_column]

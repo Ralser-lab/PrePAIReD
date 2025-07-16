@@ -18,10 +18,11 @@ import numpy as np
 import re
 import sys
 import time
+import os
 
 #own scripts
-from Python.Snippets import global_variables as global_variables # left this as placeholder for logging, when adding logging to main functions this will be moved to main, can be commented
-from modules_python import module_helper
+#from Python.Snippets import global_variables as global_variables # left this as placeholder for logging, when adding logging to main functions this will be moved to main, can be commented
+import module_helper as helper
 
 #statistics and modelling
 from itertools import permutations
@@ -338,7 +339,7 @@ def graphbased_imputation(peptide_profiles,mask=None,mask_description=None,imput
                 #calculate weighted median to estimate missing value, if at least estimate_threshold estimates for missing value are given
                 if np.sum(~np.isnan(estimates))>=estimate_threshold:
                     if weighting:
-                        peptide_profiles.loc[precursor,col]=module_helper.weighted_nanmedian(estimates,ratio_weights)
+                        peptide_profiles.loc[precursor,col]=helper.weighted_nanmedian(estimates,ratio_weights)
                     else:
                         peptide_profiles.loc[precursor,col]=np.nanmedian(estimates)
                 #[g.es.find(name=(x["name"],precursor))["weight"]*temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
@@ -818,7 +819,7 @@ def bpca_imputation(peptide_profiles,mask=None,mask_description=None,group=None,
 
 
 def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=None,metadata_sample_column="Sample.Name"):
-    if data_df:
+    if any(data_df):
         samples = data_df.columns
     else:
         samples = metadata_df[metadata_sample_column]
@@ -843,7 +844,7 @@ def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=Non
     for h,sample_hierarchy in enumerate(sample_hierarchies):
         if h == 0:
             upper_hierarchy = sample_hierarchy
-        lower_hierarchy #TODO
+        #lower_hierarchy #TODO
         
 
 
@@ -851,6 +852,8 @@ def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=Non
 
 if __name__ == "__main__":
     
+    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+    """
     # Get data from wrapper by parsing flags
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -890,7 +893,7 @@ if __name__ == "__main__":
     # Load parameter_file
     with open('Test_folder/4_IMPUTATION/Module_Parameters.json') as f:
         parameters_dict = json.load(f)
-        
+    """    
     #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
     '''
     meta_df_fp = "../Metadata.tsv"
@@ -904,7 +907,7 @@ if __name__ == "__main__":
         except (SyntaxError, NameError): #if type==str
             parameters_dict[x[0]] = x[1]
     '''
-    
+    """
     # Define seed
     seed = parameters_dict["seed"] + counter
     
@@ -925,7 +928,7 @@ if __name__ == "__main__":
     log += "------------\n"  
     helper.logger(log_file, module_output=log)
     log = ""
-    
+    """
     
     # replace zeros with NA
     if parameters_dict["replace_zeros_with_nan"]:
@@ -997,8 +1000,9 @@ if __name__ == "__main__":
     else:
         log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped"
     
-    
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"
-    helper.logger(log)
-    sys.exit(0)
+    helper.close_module(data_processed_df, masked_df, log_file, log, out_dir_fp, outname, mask=True)
+
+    #log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"
+    #helper.logger(log)
+    #sys.exit(0)
         
