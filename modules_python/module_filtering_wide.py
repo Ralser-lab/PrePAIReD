@@ -20,6 +20,8 @@ from datetime import datetime
 import argparse
 import scipy.stats as stats
 
+import module_helper as helper
+
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
 ##############################################################################
@@ -622,7 +624,7 @@ if __name__ == "__main__":
     # Load parameters (from JSON later)
     # For testing purposes
     #""""
-    filtering_wide_methods = "metadata;sample;precursor"
+    #filtering_wide_methods = "metadata;sample;precursor"
     #"""
     #filtering_wide_methods = parameters_dict["filtering_wide_methods"]
      
@@ -638,6 +640,7 @@ if __name__ == "__main__":
     # Minimal filtering pipeline in methods order (metadata corruptions + sample filtering)
     # TO DO: streamline the params (for now using defaults), add logging, add warnings
 
+    filtering_wide_methods = "pass"
     methods = filtering_wide_methods.split(";")
      
     for method in methods:
