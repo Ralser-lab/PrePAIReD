@@ -771,7 +771,8 @@ if __name__ == "__main__":
                                   metadata_sample_col=parameters_dict["metadata_sample_column"])
 
 
-    
+    # Log Transformation (Base 2)
+    wide_df = helper.log_transform(wide_df)
     # Save data
     id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t")
     #wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
