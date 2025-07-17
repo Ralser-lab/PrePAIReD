@@ -770,7 +770,11 @@ if __name__ == "__main__":
                                   metadata_filename_col=parameters_dict["metadata_filename_column"],
                                   metadata_sample_col=parameters_dict["metadata_sample_column"])
 
-
+    # Log Transformation (Base 2)
+    wide_df = helper.log_transform(wide_df.replace(0,np.nan), base=2)
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
+    helper.logger(log_file,log)
+    
     # Log Transformation (Base 2)
     wide_df = helper.log_transform(wide_df.replace(0,np.nan))
     # Save data
