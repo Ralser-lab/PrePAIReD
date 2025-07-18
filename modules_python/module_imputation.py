@@ -123,6 +123,57 @@ def detection_probability_curve(means_log2, missingness, boundary=0.5):
     return round(decision_boundary, 2), result
 
 
+def detection_probability_curve_splined(means_log2, missingness, boundary=0.5):
+    """
+    Fits logistic regression for detection probability vs. log2 abundance,
+    using response-binned data (100 bins).
+
+    Parameters
+    ----------
+    carrier : object
+        Must contain 'pr_means_log2' and 'pr_miss_proportions'.
+    boundary : float, optional
+        Detection probability threshold for decision boundary (default=0.5).
+
+    Returns
+    -------
+    decision_boundary : float
+        Abundance at the given detection probability boundary.
+    result : GLMResults
+        Logistic regression model fit on binned response data.
+
+    Author SB 
+    
+    """
+    # Raw data preparation
+    df = pd.DataFrame({
+        'Avg Log2 Abundance': means_log2,
+        'Detection Probability': 1 - = miss_proportions
+    }).dropna()
+
+    # Spline the response variable (Detection Probability) using pd.qcut()
+    df['response_bin'] = pd.qcut(df['Detection Probability'], q=100, duplicates='drop')
+
+    # Compute mean abundance and mean detection probability per bin
+    grouped = df.groupby('response_bin').agg(
+        abundance_mean=('Avg Log2 Abundance', 'median'),
+        detection_mean=('Detection Probability', 'median')
+    ).dropna()
+
+    # Prepare data for GLM
+    X = sm.add_constant(grouped['abundance_mean'])
+    y = grouped['detection_mean']
+
+    # Fit binomial GLM (using proportions directly with freq_weights)
+    model = sm.GLM(y, X, family=sm.families.Binomial())
+    result = model.fit()
+
+    # Decision boundary calculation
+    intercept, coef = result.params
+    decision_boundary = (np.log(boundary / (1 - boundary)) - intercept) / coef
+
+    return round(decision_boundary, 2), result
+
 def classify_precursors(means_log2, boundary):
     """
     Classifies precursors as Missing Not At Random (MNAR) based on an abundance boundary.
