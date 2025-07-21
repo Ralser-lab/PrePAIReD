@@ -967,7 +967,7 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
         samples = metadata_df[metadata_sample_column]
     impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["precursor_hierarchy_values","missingness_type","missingness_type_int","imputation_method","k"]) #TODO #add parameters for imputation methods
     #create dataframe storing classes (integers) for different missingness types
-    missingness_types_df = pd.DataFrame(data=range(4),index=["Missing","MAR","MNAR","MCAR"], columns=["missingness_type_int"])
+    missingness_types_df = pd.DataFrame(data=range(1,5),index=["Missing","MAR","MNAR","MCAR"], columns=["missingness_type_int"])
     missingness_types_df.index.name="missingness_type" 
 
     #generate list with dictionaries through hierarchies
