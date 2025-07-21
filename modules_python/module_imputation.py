@@ -29,73 +29,99 @@ from itertools import permutations
 import igraph
 from sklearn.impute import KNNImputer
 import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from sklearn.preprocessing import SplineTransformer
 
-##############################################################################
-# Mixed imputation by detection probability modelling using precursor intensities
-# Author: SB
-##############################################################################
 
-def preprocess_data(data):
+def assign_missingness(data_df,id_mapping_df,missingness_types_df,missingness_type="Missing",mask_df=None,precursor_col="Precursor.Id",protein_col="Protein.Group",on_filter_mask=True):
     """
-    Preprocesses input data by removing fully missing columns and replacing zeros with NaNs.
-
-    author: SB
+    Determines whether no precursor of the proteins is measured and if so sets its value to zero.
+    author: BZ
+    
 
     Parameters
     ----------
-    data : pd.DataFrame
-        Input data for preprocessing.
+    data_df : pd.DataFrame
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
+    id_mapping_df : pd.DataFrame
+        dataframe mapping protein origin to precursors.
+    missingness_types_df : pd.DataFrame
+        dataframe with missingness types (e.g. MAR, MNAR) and their respective integer label. The default is None, assigning own labels.
+    missingness_type : str
+        name of the missingness_type in missingness_types_df to use in returned missingness mask. The default is "Missing".
+    mask_df : pd.DataFrame.
+        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, generating the mask with the DIA-NN output file.
+    precursor_col : string, optional
+        name of the column in id_mapping_df containing precursor ids mapping to data_df and mask_df. The default is "Precursor.Id".
+    protein_col : string, optional
+        name of the column in id_mapping_df containing protein ids. The Default is "Protein.Group".
+    on_filter_mask : bool, optional
+        flag specifying whether to treat previously filtered precursors as present. The default is True. 
 
     Returns
     -------
-    pd.DataFrame
-        Preprocessed DataFrame.
+    mask_df : pd.DataFrame.
+        dataframe with precursors as rows and runs as columns, with values corresponding to missingness as specified in missingness_types_df.
+
     """
+    log = ""
+    if missingness_types_df is not None:
+        missingness_types_class = missingness_types_df.set_index("missingness_type").loc[missingness_type,"missingness_type_int"]
+        if missingness_types_class == 0:
+            missingness_types_class = 9
+            log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING###: missingness_type for assigning missingness based on presence of precursors from same protein was set to 0. A value greater zero is required, set to 9."
+    else:
+        missingness_types_class = 1
+    #remember previous sorting
+    #orig_data_indices = data_df.index
+    #orig_mask_indices = mask_df.index
+    #copy original data for index operations
+    mask_mi_df = mask_df.copy()
+    data_mi_df = data_df.copy()
+    data_mi_df.replace(np.nan,0,inplace=True)
+    #create multiindex for grouping
+    data_mi_df.index = pd.MultiIndex.from_frame(id_mapping_df.set_index(precursor_col,drop=False).loc[data_mi_df.index,[precursor_col,protein_col]])
+    mask_mi_df.index = pd.MultiIndex.from_frame(id_mapping_df.set_index(precursor_col,drop=False).loc[mask_mi_df.index,[precursor_col,protein_col]])
+    #sort profiles by protein_col
+    data_mi_df.sort_index(axis=0,level=protein_col,inplace=True)
+    #create mask defining missing (False) or present (True) on protein-level
+    if on_filter_mask: #filtered precursors count as presence of a protein
+        missingness_mask_df = (mask_mi_df>=1).groupby(level=protein_col).sum()>0
+        missingness_mask_df = missingness_mask_df.loc[data_mi_df.index.get_level_values(protein_col).unique(),data_mi_df.columns]
+    else: #only consider precursors present after filtering
+        missingness_mask_df = data_mi_df.groupby(level=protein_col).sum()>0
+    #multiply values with mask, resulting in 0 for values missing and >0 for measured values
+    missingness_df = data_mi_df.mul(missingness_mask_df,axis=0,level=protein_col)
+    #revert labels such that False equals measured and missing equals True
+    missingness_df = missingness_df==False
+    #replace with True with missingness label and False with zero
+    missingness_df.replace(False,0,inplace=True)
+    missingness_df.replace(True,missingness_types_class,inplace=True)
+    return(missingness_df)
 
-    data = data.dropna(axis=1, how='all')
-    data = data.replace(0, np.nan)
 
-    return data
 
-def compute_log2_means_and_missingness(data):
-    """
-    Computes log2-transformed mean abundances and calculates missingness proportion per precursor.
-
-    author: SB
-
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Input DataFrame.
-
-    Returns
-    -------
-    means_log2 : pd.Series
-        Log2-transformed mean abundance per precursor.
-    missing : pd.Series
-        Missingness proportion per precursor.
-    """
-
-    means = data.mean(axis=0)
-    means_log2 = np.log2(means.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
-    missing = data.isnull().mean(axis=0)
-    return means_log2, missing
-
-def detection_probability_curve(means_log2, missingness, boundary=0.5):
+def detection_probability_curve(data_df, axis=1, boundary=0.5, detection_proportion_cap=1, method="logit-linear", n_knots=3):
     """
     Fits logistic regression to precursor detection probability and calculates a decision 
     boundary for missingness classification.
 
-    author: SB
+    author: SB, BZ
 
     Parameters
     ----------
-    means_log2 : pd.Series
-        Log2-transformed precursor abundances.
-    missingness : pd.Series
-        Missingness proportion per precursor.
+    data_df : pd.DataFrame
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).    
+    axis : int
+        1 for data_df precursors as rows, 0 for data_df with precursors as columns. The default is 1.
     boundary : float, optional
         Decision probability boundary for classification (default 0.5).
+    detection_probability_cap : float
+        A value 0 < detection_probability_cap <= 1 imposing a cap on the detection proportion for all precursors
+    method : str
+        A string specifying the method to fit the average precursor abundance to completeness. The deault is logit-linear.
+    n_knots : int
+        Number of knots used for data splines if method == logit-linear-splines. The default is 3.
 
     Returns
     -------
@@ -104,25 +130,75 @@ def detection_probability_curve(means_log2, missingness, boundary=0.5):
     result : statsmodels.GLMResults
         Logistic regression model fit results.
     """
+    
+    def func1_logitlinear(x,b0,b1):
+        return b0 + b1 * x
+    
+    def func2_logitlinear_df(X,b):
+        return np.sum(X*b,axis=1)
+    
+    def func3_capped_logitlinear(x,b0,b1):
+        return detection_proportion_cap*np.exp(b0+b1*x)/(1+np.exp(b0+b1*x))
 
-    df = pd.DataFrame({
-        'Avg Log2 Abundance': means_log2,
-        'Missing %': 1 - missingness
-    }).dropna()
+    def func4_logitlinear_biascorrected(X,b0,b1):
+        return b0 + b1*X['Avg Log2 Abundance'] - (0.5*(b1**2)*X['Var Log2 Abundance'])
+    
+    #compute means, variances and missingness
+    means = data_df.mean(axis=axis) 
+    variances = data_df.var(axis=axis,ddof=1) 
+    missingness = data_df.isnull().mean(axis=axis)
+    
+    #dataframe containing results
+    res_df = pd.DataFrame({
+        'Avg Log2 Abundance': means,
+        'Var Log2 Abundance': variances,
+        'Completeness': 1 - missingness,
+        'Logit Completeness': np.log((1 - missingness)/missingness)
+    }).replace([-np.inf,np.inf],np.nan).dropna(subset=["Avg Log2 Abundance","Completeness"])
+    #sort res_df by abundance
+    res_df.sort_values(by="Avg Log2 Abundance",inplace=True)
+    
+    if method=="logit-linear":
+        #Linear model with binomial distribution for logit completeness
+        X = sm.add_constant(res_df['Avg Log2 Abundance'])
+        model = sm.GLM(res_df['Completeness'], X, family=sm.families.Binomial())
+        result = model.fit()
+        intercept, coef = result.params
+        res_df["Completeness pred"] = 1/(1+np.exp(-func1_logitlinear(res_df["Avg Log2 Abundance"],intercept,coef)))
+        #decision_boundary = (np.log(boundary / (1 - boundary)) - intercept) / coef 
+    elif method=="logit-linear-fit":
+        popt, pcov = curve_fit(func1_logitlinear,res_df.dropna(subset='Logit Completeness')['Avg Log2 Abundance'],res_df.dropna(subset='Logit Completeness')['Logit Completeness'],method="trf",loss="cauchy")
+        res_df["Completeness pred"] = 1/(1+np.exp(-func1_logitlinear(res_df['Avg Log2 Abundance'],*popt)))
+        #decision_boundary =  (np.log(boundary / (1 - boundary)) - popt[0]) / popt[1]
+    elif method=="logit-linear-splines":
+        indices = res_df.dropna(subset=["Avg Log2 Abundance","Completeness","Logit Completeness"]).index
+        X = sm.add_constant(res_df.loc[indices,'Avg Log2 Abundance'])
+        #model = make_pipeline(SplineTransformer(n_knots=n_knots, degree=1), sm.GLM(family=sm.families.Binomial()))
+        spline = SplineTransformer(n_knots=n_knots, degree=1)
+        splines = spline.fit_transform(res_df.loc[indices,'Avg Log2 Abundance'].to_numpy().reshape(-1,1),res_df.loc[indices,"Logit Completeness"])
+        X = sm.add_constant(splines)
+        model = sm.GLM(res_df.loc[indices,'Completeness'], X, family=sm.families.Binomial())
+        result = model.fit()
+        popt = result.params
+        res_df.loc[indices,"Completeness pred"] = 1/(1+np.exp(-func2_logitlinear_df(X=X,b=popt.to_numpy().reshape(1,-1))))
+    elif method=="logit-linear-capped":
+        popt, pcov = curve_fit(func3_capped_logitlinear,res_df['Avg Log2 Abundance'],res_df['Completeness'],bounds=([-np.inf,0],[np.inf,1]))
+        res_df["Completeness pred"] = func3_capped_logitlinear(res_df['Avg Log2 Abundance'],*popt)
+        #TODO add cap below + exclusion of low completeness for fit
+    elif method=="logit-linear-biascorrected":
+        indices = res_df.dropna().index
+        popt, pcov = curve_fit(func4_logitlinear_biascorrected,res_df.loc[indices],res_df.loc[indices,'Logit Completeness'])
+        #res_df.loc[indices,"Completeness pred"] = 1/(1+np.exp(-func4_logitlinear_biascorrected(res_df.loc[indices],*popt)))
+        #fit too fuzzy, therefore logit-linear fit on predicted values
+        logit_completeness = func4_logitlinear_biascorrected(res_df.dropna(),*popt)
+        popt, pcov = curve_fit(func1_logitlinear,res_df.loc[indices,"Avg Log2 Abundance"],logit_completeness)
+        res_df.loc[indices,"Completeness pred"] = 1/(1+np.exp(-func1_logitlinear(res_df.loc[indices,"Avg Log2 Abundance"],*popt)))
+    decision_boundary = res_df.loc[(res_df["Completeness pred"].dropna()>=boundary).idxmax(),"Avg Log2 Abundance"]
+    
+    return round(decision_boundary, 2), res_df
 
-    X = sm.add_constant(df['Avg Log2 Abundance'])
-    y = df['Missing %']
 
-    model = sm.GLM(y, X, family=sm.families.Binomial())
-    result = model.fit()
-
-    intercept, coef = result.params
-
-    decision_boundary = (np.log(boundary / (1 - boundary)) - intercept) / coef
-
-    return round(decision_boundary, 2), result
-
-
+#TODO include into above
 def detection_probability_curve_splined(means_log2, missingness, boundary=0.5):
     """
     Fits logistic regression for detection probability vs. log2 abundance,
@@ -174,116 +250,70 @@ def detection_probability_curve_splined(means_log2, missingness, boundary=0.5):
 
     return round(decision_boundary, 2), result
 
-def classify_precursors(means_log2, boundary):
-    """
-    Classifies precursors as Missing Not At Random (MNAR) based on an abundance boundary.
-
-    author: SB
-
-    Parameters
-    ----------
-    means_log2 : pd.Series
-        Log2 mean abundances.
-    boundary : float
-        Decision boundary for classification.
-
-    Returns
-    -------
-    pd.Series
-        Boolean mask indicating MNAR (True) or MAR (False) precursors.
-    """
-
-    MNAR_mask = means_log2 < boundary
-    return MNAR_mask
 
 
-def mixed_imputer(data, MNAR_mask, missing, boundary, ramp, knn=3):
-    """
-    Imputes missing data using minimum abundance for MNAR precursors and KNN imputation for MAR precursors.
-
-    author: SB
-
-    Parameters
-    ----------
-    data : pd.DataFrame
-        DataFrame with missing precursor abundances.
-    MNAR_mask : pd.Series
-        Boolean mask identifying MNAR precursors.
-    missing : pd.Series
-        Missingness per precursor.
-    boundary : float
-        Decision boundary for MNAR/MAR classification.
-    ramp : float
-        Missingness threshold percentage for precursor inclusion.
-    knn : int, optional
-        Number of neighbors for KNN imputation (default 3).
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with missing values imputed.
-    """
-
-    threshold = ramp / 100
-    min_values = data.min()
-
-    # Filter columns based on missingness threshold
-    data_filtered = data.loc[:, missing < (1 - threshold)]
-
-    # Ensure MNAR and MAR columns exist after filtering
-    MNAR_cols = MNAR_mask[MNAR_mask].index.intersection(data_filtered.columns)
-    MAR_cols = MNAR_mask[~MNAR_mask].index.intersection(data_filtered.columns)
-
-    # Minimum imputation for MNAR columns
-    data_filtered[MNAR_cols] = data_filtered[MNAR_cols].fillna(min_values[MNAR_cols])
-
-    # KNN imputation (applied after minimum imputation)
-    imputer = KNNImputer(n_neighbors=knn)
-    data_imputed = pd.DataFrame(
-        imputer.fit_transform(data_filtered),
-        index=data_filtered.index,
-        columns=data_filtered.columns
-    )
-
-    return data_imputed
-
-def mixed_imputation(data, threshold = 50):
+def intensity_dependent_missingness_estimation(data_df, missingness_types_df=None, axis=1, boundary=0.5, detection_proportion_cap=1, method="logit-linear", n_knots=3):
     """
     Integrated pipeline for preprocessing data, classifying precursors, and performing 
     mixed imputation (minimum and KNN).
 
-    author: SB
+    author: SB, BZ
 
     Parameters
     ----------
-    data : pd.DataFrame
-        Input data requiring imputation.
-    threshold : float, optional
-        Missingness threshold for precursor retention (default 50%).
+    data_df : pd.DataFrame
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).    
+    missingnes_types_df : pd.DataFrame
+        Dataframe mapping the missingness type to an integer for simplified storing of missingness information per precursor and sample. Must contain the columns "missingness_type" and "missingness_type_int" and the values "MNAR" and "MAR" in the column "missingness_type". The default is None, assigning 1 to MAR and 2 to MNAR.
+    axis : int
+        1 for data_df precursors as rows, 0 for data_df with precursors as columns. The default is 1.
+    boundary : float, optional
+        Decision probability boundary for classification, i. e. Completeness threshold to obtain abundance boundary. The default is 0.5.
+    detection_probability_cap : float
+        A value 0 < detection_probability_cap <= 1 imposing a cap on the detection proportion for all precursors
+    method : str
+        A string specifying the method to fit the average precursor abundance to completeness. The deault is logit-linear.
+    n_knots : int
+        Number of knots used for data splines if method == logit-linear-splines. The default is 3.
+
 
     Returns
     -------
-    pd.DataFrame
-        Imputed dataset.
+    mnar_mask df : pd.DataFrame
+        Dataframe specifying missingness for every precursor in every sample.
+    regression_df : pd.DataFrame
+        Dataframe with average precursor abundance, variance, completeness and predicted completeness by fit function.
+        
     """
 
-    # Initial Data
-    sample_filtered = preprocess_data(data)
-
-    # Compute Means and Missingness
-    means_log2, missing = compute_log2_means_and_missingness(sample_filtered)
-
     # Fit Logistic Regression
-    boundary, regression_result = detection_probability_curve(means_log2, missing, boundary=0.5)
-    print(f"Decision boundary (Avg Log2): {boundary}")
+    decision_boundary, regression_df = detection_probability_curve(data_df, axis=axis, boundary=boundary, detection_proportion_cap=detection_proportion_cap, method=method, n_knots=n_knots)
+    
+    #assign values to missingness types
+    if missingness_types_df is not None:
+        mar_int = missingness_types_df.set_index("missingness_type").loc["MAR","missingness_type_int"]
+        mnar_int = missingness_types_df.set_index("missingness_type").loc["MNAR","missingness_type_int"]
+    else:
+        mar_int = 1
+        mnar_int = 2
+    
+    #initialize mask distinguishing MAR from MNAR, preserving measured values as zeros
+    missingness_mask_df = ~data_df.isnull()
+    missingness_mask_df.replace({False: 0, True: 1},inplace=True)
+    #classify missingness type for every precursor as MAR if below decision_boundary and MNAR if above decision_boundary
+    mars = (data_df.mean(axis=axis) < decision_boundary)
+    mars = mars[mars].index
+    mnars = (data_df.mean(axis=axis) >= decision_boundary)
+    mnars = mnars[mnars].index
+    missingness_mask_df.loc[mars] = missingness_mask_df.loc[mars] * mar_int
+    missingness_mask_df.loc[mnars] = missingness_mask_df.loc[mnars] * mnar_int
+    #missingness_mask_df.replace(0,np.nan,inplace=True)
 
-    # Classify MNAR/MAR
-    MNAR_mask = classify_precursors(means_log2, boundary)
+    return missingness_mask_df, regression_df, decision_boundary
 
-    # Perform Mixed Imputation
-    imputed_data = mixed_imputer(sample_filtered, MNAR_mask, missing, boundary, ramp=threshold, knn=3)
 
-    return imputed_data
+
+
 
 def graphbased_imputation(peptide_profiles,mask=None,mask_description=None,impute_modifications=False,group=None,estimate_threshold=1,weighting=False,keep_track=True):
     """
@@ -903,7 +933,7 @@ def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=Non
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
     """
     # Get data from wrapper by parsing flags
     parser = argparse.ArgumentParser()
@@ -991,12 +1021,11 @@ if __name__ == "__main__":
             # load imputation table
             impu_table_df = pd.read_csv(out_dir_fp + "imputation_procedures.tsv",sep="\t")
             # check imputation table on completeness such that every lower hierarchy is defined for every upper hierarchy
-            #TODO
-            check_imputation_table_on_completeness()
+            check_imputation_table_on_completeness() #TODO
         else:
             # if none existent, create table with imputation methods
             sample_hierarchies = parameters_dict["imputation_sample_hierarchies"].split(";")
-            precursor_hierarchy_values = [eval(x) for x in parameters_dict["missingness_imputation_thresholds"].split(";")]
+            precursor_hierarchy_values = [float(x) for x in parameters_dict["missingness_imputation_thresholds"].split(";")]
             impu_table_df = helper.create_imputation_table(metadata_df=metadata_df,
                                                     sample_hierarchies=sample_hierarchies,
                                                     precursor_hierarchy_values=precursor_hierarchy_values,
@@ -1005,53 +1034,123 @@ if __name__ == "__main__":
                                                     metadata_sample_column=parameters_dict["metadata_sample_column"])
             impu_table_df.to_csv(out_dir_fp + "imputation_procedures.tsv",sep="\t",index=False)
         
+        #extract missingness types 
+        missingness_types_df = impu_table_df[["missingness_type","missingness_type_int"]].drop_duplicates()
 
         # Process data
         try:
-            # create a mask to store missingness type (thus imputation approach neccessary)
-            imputation_mask_df = data_df.isna()
+            # create a mask to store missingness type (thus imputation approach neccessary), 0 equals no imputation applied
             if parameters_dict["eval_missingness_on_protein_presence"]:
                 # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
-                
-                pass
-            #identify hierarchy to evaluate missingness, evaluate missingness, store in one matrix #TODO
-            if parameters_dict["eval_missingness"]:
-                
-                # remember in mask missingness type (MAR vs. MNAR)
-                pass
+                protmissing_mask_df = assign_missingness(data_df=data_df,
+                                                        id_mapping_df=id_mapping_df,
+                                                        missingness_types_df=missingness_types_df,
+                                                        missingness_type=parameters_dict["missingness_type_protein_presence"],
+                                                        mask_df=mask_df,
+                                                        precursor_col=parameters_dict["precursor_col"],
+                                                        protein_col=parameters_dict["protein_col"],
+                                                        on_filter_mask=parameters_dict["define_protein_missingness_on_filter_mask"])
+                #numbers to strings
+                protmissing_mask_df = protmissing_mask_df.replace(pd.Series(missingness_types_df["missingness_type"].values,index=missingness_types_df["missingness_type_int"]).to_dict())
+                protmissing_mask_df.replace([np.nan,0],"",inplace=True)
+                #LOGGING #TODO
+            else:
+                protmissing_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+            if parameters_dict["eval_missingness_by_detection_threshold"]:
+                #identify hierarchy to evaluate missingness, evaluate missingness, store in one matrix
+                if parameters_dict["level_for_intensity_dependent_missingness_estimation"] is not None:
+                    levels = metadata_df[parameters_dict["level_for_intensity_dependent_missingness_estimation"]].unique()
+                    mar_mnar_mask_df = pd.DataFrame()
+                    regression_df = pd.DataFrame()
+                    decision_boundary_df = pd.DataFrame(index=levels,columns=["decision_boundary"])
+                    for level in levels:
+                        samples_in_level = list(set(data_df.columns) & set(metadata_df[metadata_df[parameters_dict["level_for_intensity_dependent_missingness_estimation"]]== level][parameters_dict["metadata_sample_column"]]))
+                        mar_mnar_mask_df_level, regression_df_level, decision_boundary_level = intensity_dependent_missingness_estimation(data_df[samples_in_level], 
+                                                                                                                                          missingness_types_df=missingness_types_df, 
+                                                                                                                                          axis=parameters_dict["axis"], 
+                                                                                                                                          boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
+                                                                                                                                          detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
+                                                                                                                                          method=parameters_dict["intensity_dependent_missingness_fit_method"], 
+                                                                                                                                          n_knots=parameters_dict["intensity_dependent_missingness_n_knots"])
+                        #combine mask and regression_df with current level
+                        mar_mnar_mask_df = pd.concat([mar_mnar_mask_df, mar_mnar_mask_df_level],axis=1)
+                        regression_df_level.columns = [x+"_"+str(level) for x in regression_df_level.columns]
+                        regression_df = regression_df.join(regression_df_level,how="outer")
+                        decision_boundary_df.loc[level,"decision_boundary"] = decision_boundary_level
+                    decision_boundary_df.to_csv(out_dir_fp + "intensity_dependent_missingness_estimation_decision_boundaries.tsv",sep="\t")
+                else:
+                    mar_mnar_mask_df, regression_df, decision_boundary = intensity_dependent_missingness_estimation(data_df, 
+                                                                                                                    missingness_types_df=missingness_types_df, 
+                                                                                                                    axis=parameters_dict["axis"], 
+                                                                                                                    boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
+                                                                                                                    detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
+                                                                                                                    method=parameters_dict["intensity_dependent_missingness_fit_method"], 
+                                                                                                                    n_knots=parameters_dict["intensity_dependent_missingness_n_knots"])
+                regression_df.to_csv(out_dir_fp + "intensity_dependent_missingness_estimation_plot_data.tsv",sep="\t")
+                #numbers to strings
+                mar_mnar_mask_df = mar_mnar_mask_df.replace(pd.Series(missingness_types_df["missingness_type"].values,index=missingness_types_df["missingness_type_int"]).to_dict())
+                mar_mnar_mask_df.replace([np.nan,0],"",inplace=True)
+                #LOGGING #TODO
+            else:
+                mar_mnar_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+            # combine masks
+            imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + mar_mnar_mask_df.loc[data_df.index,data_df.columns]
+            #replace / in beginning or end
+            imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True)
+            imputation_mask_df.to_csv(out_dir_fp + "imputation_mask.tsv",sep="\t")
+            #LOGGING #TODO
             
             # hierarchical imputation
             #IMPORTANT: hierarchy values should be unique, e.g. there cannot be plate "1" in several batches, or name them as "batch1_plate1" and "batch2_plate2" etc. by concatenating hierarchies
-            hierarchies = impu_table_df.columns.tolist()
-            hierarchies = hierarchies[:hierarchies.index("precursor_hierarchy_values")] #sample hierarchy columns must be present before column precursor_hierarchy
-            for hierarchy in hierarchies: #start with lowest sample hierarchy, go up, e.g. plate, batch, superbatch
+            sample_hierarchies = impu_table_df.columns.tolist()
+            sample_hierarchies = sample_hierarchies[:sample_hierarchies.index("precursor_hierarchy_values")] #sample hierarchy columns must be present before column precursor_hierarchy
+            for sample_hierarchy in sample_hierarchies: #start with lowest sample hierarchy, go up, e.g. plate, batch, superbatch. This way one can define different precursor_hierarchies such as missingness thresholds and impute on larger hierarchy with higher threshold
                 # select hierarchy values
-                hierarchy_values = impu_table_df[hierarchy].unique()
-                for hierarchy_value in hierarchy_values:
-                    samples = list(set(metadata_df[metadata_df[hierarchy]==hierarchy_value][parameters_dict["metadata_sample_column"]]) & set(data_df.columns))
+                sample_hierarchy_values = impu_table_df[sample_hierarchy].unique()
+                #LOGGING #TODO
+                for sample_hierarchy_value in sample_hierarchy_values:
+                    samples = list(set(metadata_df[metadata_df[sample_hierarchy]==sample_hierarchy_value][parameters_dict["metadata_sample_column"]]) & set(data_df.columns))
+                    #LOGGING number of samples #TODO
                     # select precursor_hierarchy (e.g. missingness 0.3, 0.5)
-                    precursor_hierarchies = impu_table_df[impu_table_df[hierarchy]==hierarchy_value]["precursor_hierarchy_values"].unique()
-                    # calculate missingness per precursor
-                    pass
+                    precursor_hierarchies = impu_table_df[impu_table_df[sample_hierarchy]==sample_hierarchy_value]["precursor_hierarchy_values"].unique()
+                    # calculate missingness per precursor for given samples
+                    missingness = data_df[samples].isnull().mean(axis=parameters_dict["axis"])
                     for precursor_hierarchy in precursor_hierarchies:
                         # select precursors matching hierarchy (with prior calculated missingness)
-                        precursors = list()
+                        precursors = missingness[missingness<precursor_hierarchy].index
                         # extract missingness types from mask
-                        missingness_types = imputation_mask_df.loc[precursors,samples].replace(0,np.nan).dropna().unique()
+                        missingness_types = imputation_mask_df.loc[precursors,samples].unique() #.replace(0,np.nan).dropna().unique()
                         for missingness_type in missingness_types:
-                            imputation_method = impu_table_df.set_index(["upper_sample_hierarchy","lower_sample_hierarchy","precursor_hierarchy","missingness_type_int"]).loc[(upper_hierarchy,lower_hierarchy,precursor_hierarchy,missingness_type),"imputation_method"]
-                            if imputation_method == "foo":
-                                foo(data_df.loc[precursors,samples])
-                            elif imputation_method =="bar":
-                                bar(data_df.loc[precursors,samples])
-
-        except:
-            helper.logger(log_file, "###ERROR### Module ran into an error.")
+                            #LOGGING number of precursors #TODO
+                            imputation_method = impu_table_df.set_index([sample_hierarchy,"precursor_hierarchy_values","missingness_type"]).loc[(sample_hierarchy_value,precursor_hierarchy,missingness_type),"imputation_method"]
+                            
+                            #IMPUTATION FUNCTION CALLS
+                            if imputation_method == "knn":
+                                #transposed=True
+                                knn_imputation(data_df.loc[precursors,samples],mask=None,mask_description=None,k=5,group=None,keep_track=True,transposed=False)
+                            elif imputation_method == "knn-ML":
+                                #transposed=False
+                                pass
+                            elif imputation_method == "minval-noise":
+                                pass
+                            elif imputation_method == "minval":
+                                pass
+                            elif imputation_method == "meanval-noise":
+                                pass
+                            elif imputation_method == "meanval":
+                                pass
+                            elif imputation_method == "bpca":
+                                pass
+                            elif imputation_method == "graphbased":
+                                pass
+                   
+        except Exception as e:
+            helper.logger(log_file, "###ERROR### Module ran into an error:" + e)
             sys.exit("Imputation exited with an error.")
     else:
         log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped"
     
-    helper.close_module(data_processed_df, masked_df, log_file, log, out_dir_fp, outname, mask=True)
+    helper.close_module(data_processed_df, mask_df, log_file, log, out_dir_fp, outname, mask=True)
 
     #log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"
     #helper.logger(log)
