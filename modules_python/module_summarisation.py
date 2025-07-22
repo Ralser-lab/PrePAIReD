@@ -479,12 +479,10 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
         rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
     id_mapping_df: pd.DataFrame
         information on mapping from precursor to protein (group) level. rows denote individual precursors
-    #####filter_mask : pd.DataFrame.
+    filter_mask : pd.DataFrame.
         dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters.
     module_output: str
-        log file to be filled.
+        log string to be filled.
     top_n_peptides : int, optional
         Number of precursors to summarize to protein intensities. The default is 3.
     weights : iterable, optional
@@ -497,17 +495,15 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
         name of index level containing precursor Ids. The default is 'Precursor.Id'.
     protein_col : str
         name of index level containing protein Ids. The default is 'Protein.Group'.
-        
-        
 
     Returns
     -------
     pg_profiles : pd.DataFrame
         rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
-    filter_mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters.
+    id_mapping_df_c: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
+    module_output: str
+        log string to be filled.
 
     """
     
@@ -601,10 +597,6 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     #return(pg_profiles,filter_mask,mask_description,module_output)
 
     return(pg_profiles.copy(),id_mapping_df_c,module_output)
-    
-    
-    
-
 
 def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
     """
@@ -616,11 +608,19 @@ def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col,
     ----------
     profiles : pd.DataFrame
         rows: precursors, columns: samples
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    seq_col : str
+        name of index level containing precursor Ids. The default is 'Precursor.Id'.
+    protein_col : str
+        name of index level containing protein Ids. The default is 'Protein.Group'.
 
     Returns
     -------
     lf_df : pd.DataFrame
         columns: [ID, sample, value]
+    id_mapping_df_c: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
 
     """
     '''
@@ -652,21 +652,26 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     
     Parameters
     ----------
-    peptide_profiles : pandas.DataFrame
+    data_df : pandas.DataFrame
         rows: precursors, columns: samples
-    unlog : bool
-        If True, reverse log-transformation to basis 2. Default is False.
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    module_output: str
+        log string to be filled.
     seq_col : str
         name of index level containing precursor Ids. The default is 'Precursor.Id'.
     protein_col : str
         name of index level containing protein Ids. The default is 'Protein.Group'.
-    run_col : str
-        name of column level containing sample/run Ids. The default is 'sample'.
+
     Returns
     -------
-    pd.DataFrame
-
+    data_prot_df : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    module_output: str
+        log string to be filled.
+        
     """
+    
     module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing Precursors to Protein using MaxLFQ...\n"
         
     #remember all multi-level ids on protein/gene level
@@ -680,7 +685,7 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     n_runs=len(data_df.columns)
     #transform to long format
     data_df=helper.unlog_transform_intensities(data_df)
-    lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy())
+    lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
     lf_df.replace(0,1,inplace=True) 
     #quantity_col = "value"
     #caclulate maxlfq
@@ -723,14 +728,23 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     
     Parameters
     ----------
-    peptide_profiles : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
-    protein_levels : TYPE, optional
-        name of index level(s) containing protein Ids. The default is ["Protein.Group","Genes"].
+    data_df : pandas.DataFrame
+        rows: precursors, columns: samples
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    module_output: str
+        log string to be filled.
+    seq_col : str
+        name of index level containing precursor Ids. The default is 'Precursor.Id'.
+    protein_col : str
+        name of index level containing protein Ids. The default is 'Protein.Group'.
 
     Returns
     -------
-    pd.DataFrame.
+    data_prot_df : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    module_output: str
+        log string to be filled.
 
     """
     id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
@@ -757,7 +771,7 @@ if __name__ == "__main__":
         data_processed_df, id_mapping_df, module_output = topN_summarization(data_df, id_mapping_df, masked_df, module_output, 
                                                                              top_n_peptides=parameters_dict["top_n_peptides"],
                                                                              weights=parameters_dict["weights"],
-                                                                             pooling=parameters_dict["pooling"],
+                                                                             pooling=parameters_dict["summarization_method"],
                                                                              min_peptides=parameters_dict["min_peptides"], 
                                                                              seq_col=parameters_dict["seq_col"], 
                                                                              protein_col = parameters_dict["protein_col"])
