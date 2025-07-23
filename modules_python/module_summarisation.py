@@ -507,7 +507,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
 
     """
     
-    pg_profiles=pd.DataFrame()
+    pg_profiles_df=pd.DataFrame()
     
     if weights is None:
         weights=[1,1,1]
@@ -574,11 +574,11 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             
             if len(temp_df)>=min_peptides:
                 if pooling=="mean":
-                    pg_profiles.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
+                    pg_profiles_df.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
                 elif pooling=="hmean":
-                    pg_profiles.loc[pg]=[weighted_harmonic_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
+                    pg_profiles_df.loc[pg]=[weighted_harmonic_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
                 elif pooling=="gmean":
-                    pg_profiles.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
+                    pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
                 #filter_mask.loc[mask_indices,data_df.columns]="s"
                 
                 
@@ -586,7 +586,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
             #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n"
-    pg_profiles.index.name="Protein.Group"
+    pg_profiles_df.index.name="Protein.Group"
     #add gene names
     #trans_df=data_df.reset_index().set_index("Protein.Group")
     #trans_df=trans_df[~trans_df.index.duplicated(keep="first")] #remove duplicated PGs
@@ -596,7 +596,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     #pg_profiles.columns.name=None
     #return(pg_profiles,filter_mask,mask_description,module_output)
 
-    return(pg_profiles.copy(),id_mapping_df_c,module_output)
+    return(pg_profiles_df.copy(),id_mapping_df_c,module_output)
 
 def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
     """

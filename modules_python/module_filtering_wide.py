@@ -426,7 +426,7 @@ def replace_labelled_peptides(data_df, target_label, replace_label, module_outpu
         # Update index
         data_df.index = new_index
         # Update log
-        module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' → '{replace_label}'\n"
+        module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' -> '{replace_label}'\n"
 
     return data_df, module_output
 
