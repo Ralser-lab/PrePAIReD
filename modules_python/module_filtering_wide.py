@@ -363,6 +363,73 @@ def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr
     # Filter and return
     return data_df.loc[missingness < optimal_threshold], module_output
 
+
+def filter_labelled_peptides(data_df, remove_label, module_output):
+    """
+    Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
+    author: BZ, SB
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        wide-format profiles, columns are samples
+    remove_label : str
+        name of the label to identify precursors to be removed.
+    Module_output : str
+        logfile to update
+
+    Returns
+    -------
+    pd.DataFrame
+        wide-format profiles, columns are samples, index with Precursor IDs.
+
+    """
+    # Find matching precursors
+    flagged_precursors = data_df.index.str.contains(remove_label)
+
+    # Update log
+    if flagged_precursors.any():
+        module_output += f"{flagged_precursors.sum()} precursors excluded because they contained the label: {remove_label}\n"
+
+    # Drop rows
+    return data_df.drop(flagged_precursors, axis=0), module_output
+
+def replace_labelled_peptides(data_df, target_label, replace_label, module_output): 
+    """
+    Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be replaced with another label
+    author: BZ, SB
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        wide-format profiles, columns are samples
+    target_label : str
+        name of the label to identify precursors to be replaced.
+    replace_label : str
+        Substring to replace the target_label with.
+    Module_output : str
+        logfile to update
+
+    Returns
+    -------
+    pd.DataFrame
+        wide-format profiles, columns are samples, index with Precursor IDs.
+
+    """
+    # Find matching precursors
+    flagged_precursors = data_df.index.str.contains(target_label)
+
+    # Perform replacement
+    if flagged_precursors.any():
+        # Replace in index
+        new_index = data_df.index.to_series().replace(to_replace=target_label, value=replace_label, regex=True)
+        # Update index
+        data_df.index = new_index
+        # Update log
+        module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' → '{replace_label}'\n"
+
+    return data_df, module_output
+
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
     """
     Remove precursors with too many missing values in given peptide_profiles.
@@ -549,71 +616,6 @@ def assign_missingness(peptide_profiles,mask,mask_description,protein_col="Prote
     peptide_profiles=peptide_profiles.loc[orig_indices]
     return([peptide_profiles,mask])
 
-def filter_labelled_peptides(peptide_profiles,remove_label,index_level="Precursor.Id"):
-    """
-    Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
-    author: BZ
-    
-    Parameters
-    ----------
-    peptide_profiles : pd.DataFrame
-        wide-format profiles, columns are samples, index is a pd.MultiIndex with Precursor IDs.
-    remove_label : str
-        name of the label to identify precursors to be removed.
-    index_level : str, optional
-        name of the profiles' index level containing the precursor IDs with the remove_label substring. The default is "Precursor.Id".
-
-    Returns
-    -------
-    pd.DataFrame
-        wide-format profiles, columns are samples, index is a pd.MultiIndex with Precursor IDs.
-
-    """
-    #i=peptide_profiles.index.names.index(index_level) remove all i 
-    all_exclude_precs=set()
-    for rlabel in remove_label:
-        exclude_precs=set(filter(lambda x: rlabel in x, peptide_profiles.index))
-        all_exclude_precs=all_exclude_precs | exclude_precs
-    print(str(len(all_exclude_precs)) + " Precursors excluded, because they contained following label: " + "; ".join(remove_label))
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+str(len(all_exclude_precs)) + " Precursors excluded, because they contained following label: " + "; ".join(remove_label) + "\n")
-        logfile.close()
-    return(peptide_profiles.drop(list(all_exclude_precs),axis=0))
-
-def replace_labelled_peptides(peptide_profiles,replace_label,to_be_replaced_with,index_level="Precursor.Id"):
-    """
-    Specify a e.g. SILAC label (part of the Precursor name), all label occurences will be substituted. E.g. From K(SILAC-K-L) to K.
-    author: BZ
-    
-    Parameters
-    ----------
-    peptide_profiles : pd.DataFrame
-        wide-format profiles, columns are samples, index is a pd.MultiIndex with Precursor IDs.
-    remove_label : str
-        name of the label to identify precursors to be removed. E.g. "K\(SILAC-K-L\)"
-    to_be_replaced_with : str
-        name of the substitute label. E.g. "K"
-    index_level : str, optional
-        name of the profiles' index level containing the precursor IDs with the remove_label substring. The default is "Precursor.Id".
-
-    Returns
-    -------
-    pd.DataFrame
-        wide-format profiles, columns are samples, index is a pd.MultiIndex with Precursor IDs.
-
-    """
-   
-    #i=peptide_profiles.index.names.index(index_level)
-    peptide_profiles.index=peptide_profiles.index.set_levels(peptide_profiles.index.str.replace(replace_label,to_be_replaced_with,regex=True),level=i)
-    #precursors = peptide_profiles.index.get_level_values(index_level)
-    #precursors = [re.sub(replace_label,to_be_replaced_with,precursor) for precursor in precursors]
-    #duplicates = [i for i in set(precursors) if precursors.count(i) > 1]
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+ " Precursor label: " + replace_label + " replaced with "+ to_be_replaced_with + " for all precursors\n")        
-        logfile.close()
-    return(peptide_profiles)
 
 ##############################################################################
 # %% MAIN
