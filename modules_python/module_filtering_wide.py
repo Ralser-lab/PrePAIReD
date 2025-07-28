@@ -81,7 +81,6 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     sample_flags = sample_flags[sample_flags.index.isin(data_df.columns)] 
     return data_df.loc[:, ~sample_flags], module_output
 
-
 def condition_on_detection_proportion(data_df):
 
     """
@@ -187,91 +186,6 @@ def filter_samples_on_detection_proportion(data_df, module_output, optimum_sampl
 
     return data_df.loc[:, missingness < optimal_threshold], module_output
 
-def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
-    """
-    Excludes samples (columns in profiles) with too many missing values.
-    #thresh determines how many measured values have to be at least in data 
-
-    # this works with data_df
-    
-    Parameters
-    ----------
-    profiles : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
-    thresh : float, optional
-        threshold on how many IDs relative to total amount of IDs are too many so that samples will be excluded. The default is 1/2.
-
-    Returns
-    -------
-    profiles_trimmed : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too many missing IDs excluded.
-    profiles_deleted : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too many missing IDs.
-        
-    """
-    num_samples_before=profiles.shape[1]
-    if replace_zeros_with_nan:
-        profiles_trimmed=profiles.copy().replace(0,np.nan)
-    else:
-        profiles_trimmed=profiles.copy()
-    profiles_trimmed=profiles_trimmed.dropna(axis=1,thresh=int(thresh*len(profiles)))
-    num_samples_after=profiles_trimmed.shape[1]
-    print(str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).")  #TODO print statements, ff
-    if global_variables.logfilename:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).\n")
-        logfile.close()
-    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
-    return([profiles_trimmed,profiles_deleted])
-
-def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
-    """
-    Excludes samples (columns in profiles) with too few IDs.
-
-        # this works with data_df
-
-    Parameters
-    ----------
-    profiles : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
-    thresh : float, optional
-        Threshold on how many IDs need to be at least in sample to be kept for further analysis, thresh * median(number of precursors over samples) determines how many precursors need to be at least in sample to be kept. The default is 1/2.
-    on_mad : bool, optional
-        if True, filters on median(number precursors) - thresh * MAD(number preecursors). The default is True.
-
-    Returns
-    -------
-    profiles_trimmed : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too few IDs excluded.
-    profiles_deleted : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too few IDs.
-
-    """
-    num_samples_before=profiles.shape[1]
-    num_precs=(profiles>0).sum()
-    if on_mad:
-        min_precs=np.nanmedian(num_precs)-(thresh*mad(num_precs))
-    else:
-        min_precs=thresh*np.nanmedian(num_precs)
-    profiles_trimmed=profiles.copy().replace(0,np.nan).dropna(axis=1,thresh=int(min_precs))
-    profiles_trimmed.replace(np.nan,0,inplace=True)
-    num_samples_after=profiles_trimmed.shape[1]
-    if on_mad: # print statements into log file as one string
-        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).")
-        print("Median number of precursors/proteins: "+str(np.median(num_precs)))
-        print("Minimum number of precursors/proteins: "+str(np.median(num_precs)-(thresh*mad(num_precs))))
-    else:
-        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).")
-    if global_variables.logfilename:
-        logfile=open(global_variables.logfilename,"a")
-        if on_mad:
-            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).\n")
-        else:
-            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).\n")
-        logfile.close()
-    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
-    return([profiles_trimmed,profiles_deleted])
-
 def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.nan):
     """
     exclude samples based on a value in a certain column in metadata, e.g. dropout/excl., keep is the value in that column to keep values
@@ -363,7 +277,6 @@ def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr
     # Filter and return
     return data_df.loc[missingness < optimal_threshold], module_output
 
-
 def filter_labelled_peptides(data_df, remove_label, module_output):
     """
     Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
@@ -393,6 +306,44 @@ def filter_labelled_peptides(data_df, remove_label, module_output):
 
     # Drop rows
     return data_df.drop(flagged_precursors, axis=0), module_output
+
+def filter_proteins_with_too_few_precursors(data_df, id_mapping_df, min_peptides, protein_col="Protein.Group", precursor_col = "Precursor.Id"):
+    """
+    Remove proteins identified by less precursors than specified with min_peptides.
+    author: BZ, SB
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
+    id_mapping_df: pd.DataFrame
+        dataframe that stores mapping of precursors and proteins. 
+    min_peptides : int
+        minimum number of precursors required per protein, proteins with less precursors will be excluded.
+    protein_col : str
+        Name of the ID column containing the protein or gene ID. The default is "Protein.Group".
+    precursor_col : str
+        Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
+
+    Returns
+    -------
+    data_df : pd.DataFrame
+        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
+
+    """
+    # Count precursors / protein
+    protein_counts = id_mapping_df[protein_col].value_counts()
+
+    # Keep proteins with at least n >= min_peptdies
+    proteins_to_keep = protein_counts[protein_counts >= min_peptides].index
+
+    # Get precursors mapped to filtered proteins
+    precursors_to_keep = id_mapping_df[id_mapping_df[protein_col].isin(proteins_to_keep)][precursor_col].drop_duplicates()
+
+    # Filter on proteome level
+    filtered_df = data_df.loc[data_df.index.isin(precursors_to_keep)]
+
+    return filtered_df
 
 def replace_labelled_peptides(data_df, target_label, replace_label, module_output): 
     """
@@ -429,6 +380,10 @@ def replace_labelled_peptides(data_df, target_label, replace_label, module_outpu
         module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' -> '{replace_label}'\n"
 
     return data_df, module_output
+    
+##############################################################################
+# %% Replicate Functions
+##############################################################################
 
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
     """
@@ -509,113 +464,91 @@ def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_anno
         logfile.close()
     print(str(np.round(100-len(peptide_profiles)/num_peptides*100,2))+"% of precursors excluded due to excessive number of missing values")
     return([peptide_profiles, mask, mask_description])
-    
-def filter_proteins_with_too_few_precursors(profiles,mask,mask_description,min_peptides,protein_col="Protein.Group",keep_track=True):
-    """
-    Remove proteins identified by less precursors than specified with min_peptides.
-    author: BZ
 
-    #needs refactoring with id mapping .tsv
+def exclude_samples_with_too_many_NaNs(profiles,thresh=1/2,replace_zeros_with_nan=True):
+    """
+    Excludes samples (columns in profiles) with too many missing values.
+    #thresh determines how many measured values have to be at least in data 
+
+    # this works with data_df
     
     Parameters
     ----------
     profiles : pd.DataFrame
-        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-    mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, generating the mask with the DIA-NN output file.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters. The default is None.
-    min_peptides : int
-        minimum number of precursors required per protein, proteins with less precursors will be excluded.
-    protein_col : str, optional
-        Name of the ID-column containing the protein or gene ID. The default is "Protein.Group".
-    keep_track : bool, optional
-        if set to True, keeps track of changes in filtering matrix (mask). The default is True.
-
-    Raises
-    ------
-    KeyError
-        Raised if protein_col not in profiles.index.
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    thresh : float, optional
+        threshold on how many IDs relative to total amount of IDs are too many so that samples will be excluded. The default is 1/2.
 
     Returns
     -------
-    profiles : pd.DataFrame
-        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-    mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, generating the mask with the DIA-NN output file.
-
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too many missing IDs excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too many missing IDs.
+        
     """
-    if protein_col not in profiles.index.names:
-        raise KeyError(protein_col +"not in specified ids")
-    #count precursors per proteins
-    protcounts=Counter(profiles.index.get_level_values(protein_col))
-    #identify proteins with too few precursors (<min_peptides)
-    prots_too_few_precs=list(dict(filter(lambda x: x[1]<min_peptides, protcounts.items())).keys())
-    #exclude proteins with too few precursors
-    profiles=profiles.drop(prots_too_few_precs,axis=0,level=protein_col)
-    #remember them in mask
-    if keep_track:
-        slice_ids=tuple(prots_too_few_precs if x==protein_col else slice(None) for x in mask.index.names)
-        mask.loc[slice_ids,profiles.columns]=mask.loc[slice_ids,profiles.columns].applymap(lambda x: eval("x+0."+str(mask_description.loc["Min. "+str(min_peptides)+" Peptides","value"])))
-    if global_variables.logfilename is not None:
+    num_samples_before=profiles.shape[1]
+    if replace_zeros_with_nan:
+        profiles_trimmed=profiles.copy().replace(0,np.nan)
+    else:
+        profiles_trimmed=profiles.copy()
+    profiles_trimmed=profiles_trimmed.dropna(axis=1,thresh=int(thresh*len(profiles)))
+    num_samples_after=profiles_trimmed.shape[1]
+    print(str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).")  #TODO print statements, ff
+    if global_variables.logfilename:
         logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(prots_too_few_precs))+" Proteins excluded due to less than "+str(min_peptides)+" precursors.\n")
+        logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too many missing peptides (at least "+str(thresh*100)+" % of precursors measured over all samples required).\n")
         logfile.close()
-    return([profiles,mask])
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
 
-def assign_missingness(peptide_profiles,mask,mask_description,protein_col="Protein.Group",on_filter_mask=True,keep_track=True):
+def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
     """
-    Determines whether no precursor of the proteins is measured and if so sets its value to zero.
-    author: BZ
-    
-    #Not need in this module
+    Excludes samples (columns in profiles) with too few IDs.
+
+        # this works with data_df
 
     Parameters
     ----------
-    peptide_profiles : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-    mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, generating the mask with the DIA-NN output file.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters. The default is None.
-    protein_col : string, optional
-        name of the index level to groupby protein ids
-    on_filter_mask : bool, optional
-        flag specifying whether to treat previously filtered precursors as present. The default is True. 
-    keep_track : bool, optional
-        if True, remembers in mask filtered precursors. The default is True
+    profiles : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    thresh : float, optional
+        Threshold on how many IDs need to be at least in sample to be kept for further analysis, thresh * median(number of precursors over samples) determines how many precursors need to be at least in sample to be kept. The default is 1/2.
+    on_mad : bool, optional
+        if True, filters on median(number precursors) - thresh * MAD(number preecursors). The default is True.
 
     Returns
     -------
-    peptide_profiles : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-    mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, generating the mask with the DIA-NN output file.
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples with too few IDs excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only samples with too few IDs.
 
     """
-    #remember previous sorting
-    orig_indices=peptide_profiles.index
-    #sort profiles by protein_col
-    peptide_profiles.sort_index(axis=0,level=protein_col,inplace=True)
-    #create mask defining missing at random or present (True) vs missing not at random (False) on protein-level
-    if on_filter_mask: #filtered precursors count as presence of a protein
-        missingness_mask=(mask>=1).groupby(level=protein_col).sum()>0
-        missingness_mask=missingness_mask.loc[peptide_profiles.index.get_level_values(protein_col).unique(),peptide_profiles.columns]
-    else: #only consider precursors present after filtering
-        missingness_mask=peptide_profiles.groupby(level=protein_col).sum()>0
-    #replace all missing values with -1
-    peptide_profiles.replace(0,-1,inplace=True)
-    #multiply values with mask, resulting in 0 for values missing not at random, -1 for values missing at random and >0 for measured values
-    peptide_profiles=peptide_profiles.mul(missingness_mask,axis=0,level=protein_col)
-    #replace -1 values with nans for imputation
-    peptide_profiles.replace(-1,np.nan,inplace=True)
-    #remember missingness in filter mask
-    if keep_track:
-        description_value=eval("0."+str(mask_description.loc["missing not at random","value"]))
-        mask.loc[peptide_profiles.index,peptide_profiles.columns]=mask.loc[peptide_profiles.index,peptide_profiles.columns]+(peptide_profiles==0)*description_value
-    peptide_profiles=peptide_profiles.loc[orig_indices]
-    return([peptide_profiles,mask])
-
+    num_samples_before=profiles.shape[1]
+    num_precs=(profiles>0).sum()
+    if on_mad:
+        min_precs=np.nanmedian(num_precs)-(thresh*mad(num_precs))
+    else:
+        min_precs=thresh*np.nanmedian(num_precs)
+    profiles_trimmed=profiles.copy().replace(0,np.nan).dropna(axis=1,thresh=int(min_precs))
+    profiles_trimmed.replace(np.nan,0,inplace=True)
+    num_samples_after=profiles_trimmed.shape[1]
+    if on_mad: # print statements into log file as one string
+        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).")
+        print("Median number of precursors/proteins: "+str(np.median(num_precs)))
+        print("Minimum number of precursors/proteins: "+str(np.median(num_precs)-(thresh*mad(num_precs))))
+    else:
+        print(str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).")
+    if global_variables.logfilename:
+        logfile=open(global_variables.logfilename,"a")
+        if on_mad:
+            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least median of all samples - "+str(thresh)+" times MAD precursors measured over all samples required).\n")
+        else:
+            logfile.write("\t\t\t\t"+str(num_samples_before-num_samples_after)+" samples excluded due to too few measured peptides (at least "+str(thresh*100)+" % of median precursor number measured over all samples required).\n")
+        logfile.close()
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
 
 ##############################################################################
 # %% MAIN
