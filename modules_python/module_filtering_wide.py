@@ -3,12 +3,22 @@ Input: wide-format data
 Output: Filtered wide-format data
 
 functions:
-     - remove_peptides_with_excessing_nans: removes precursors with too many missing values
-     - remove_proteins_with_too_few_precursors: removes proteins identified by less precursors than specified
-     - assign_missingness: determines whether no precursor of the proteins is measured and if so sets its value to zero, else np.nan for imputation
-     - remove_labelled_peptides: remove all precursors containing a certain e.g. SILAC label (part of the Precursor name) from further analysis
-     - replace_labelled_peptides: replaces all occurences of a certain string, e.g. "(SILAC-K-L)" over all IDs with a given substitute string, e.g. K.
-    
+    - filter_samples_based_on_metadata: 
+        Removes samples of poor quality, based on flags in a designated column in annotated metadata dataframe.
+    - filter_samples_by_detection_proportion: 
+        Removes samples that contain missing values more than a specified or automated threshold value (% missing proportion).
+    - filter_precursors_by_detection_proportion: 
+        Removes precursors that are detected less than a specified or automated threshold value (% missing proportion).
+    - filter_precursors_by_peptide_labels: 
+        Removes precursors that contain specific substrings (e.g., SILAC labels like "(SILAC-K-L)").
+    - filter_proteins_by_peptide_count: 
+        Removes precursors mapping to proteins less than a minimum number of unique peptides. 
+    - condition_on_detection_proportion: 
+        Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
+    - calculate_optimum_threshold: 
+        Automatically determines the most appropriate detection threshold value (for precursor or sample by % missing proportion) based on sampling statistics.
+    - replace_labelled_precursors: 
+        Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
 """
 
 #%% Imports
@@ -630,6 +640,3 @@ if __name__ == "__main__":
     #data_processed_df.to_csv(output_path, sep='\t')
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") 
     helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp, outname, mask=True)
-    
-
-# %%
