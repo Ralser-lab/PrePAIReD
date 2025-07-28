@@ -3,33 +3,20 @@ Input: wide-format data
 Output: Filtered wide-format data
 
 functions:
-    - filter_samples_based_on_metadata: 
-        Removes samples of poor quality, based on flags in a designated column in annotated metadata dataframe.
-    - filter_samples_by_detection_proportion: 
-        Removes samples that contain missing values more than a specified or automated threshold value (% missing proportion).
-    - filter_precursors_by_detection_proportion: 
-        Removes precursors that are detected less than a specified or automated threshold value (% missing proportion).
-    - filter_precursors_by_peptide_labels: 
-        Removes precursors that contain specific substrings (e.g., SILAC labels like "(SILAC-K-L)").
-    - filter_proteins_by_peptide_count: 
-        Removes precursors mapping to proteins less than a minimum number of unique peptides. 
-    - condition_on_detection_proportion: 
-        Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
-    - calculate_optimum_threshold: 
-        Automatically determines the most appropriate detection threshold value (for precursor or sample by % missing proportion) based on sampling statistics.
-    - replace_labelled_precursors: 
-        Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
+    - filter_samples_based_on_metadata: Removes samples of poor quality, based on flags in a designated column in annotated metadata dataframe.
+    - filter_samples_by_detection_proportion: Removes samples that contain missing values more than a specified or automated threshold value (% missing proportion).
+    - filter_precursors_by_detection_proportion: Removes precursors that are detected less than a specified or automated threshold value (% missing proportion).
+    - filter_precursors_by_peptide_labels: Removes precursors that contain specific substrings (e.g., SILAC labels like "(SILAC-K-L)").
+    - filter_proteins_by_peptide_count: Removes precursors mapping to proteins less than a minimum number of unique peptides. 
+    - condition_on_detection_proportion: Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
+    - calculate_optimum_threshold: Automatically determines the most appropriate detection threshold value (for precursor or sample by % missing proportion) based on sampling statistics.
+    - replace_labelled_precursors: Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
 """
 
 #%% Imports
 import numpy as np
-import pandas as pd
-import json
-import os
 from datetime import datetime
-import argparse
 import scipy.stats as stats
-
 import module_helper as helper
 
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
