@@ -1120,6 +1120,9 @@ def load_metadata(meta_df_fp, encoding="utf-8"):
 def load_mask(data_df_fp):
     return pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
 
+def load_mask_description(data_df_fp):
+    return pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
+	
 ### Save mask
 def save_mask(masked_df, out_dir_fp, outname):
     masked_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask.tsv"),sep="\t")
