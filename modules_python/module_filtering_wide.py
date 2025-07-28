@@ -13,13 +13,11 @@ functions:
     - replace_labelled_precursors: Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
 """
 
-#%% Imports
+# %% Imports
 import numpy as np
 from datetime import datetime
 import scipy.stats as stats
 import module_helper as helper
-
-#from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
 ##############################################################################
 # Sample Thresholding Functions
@@ -597,26 +595,31 @@ if __name__ == "__main__":
         if method == "filter_samples_based_on_metadata":
             module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_based_on_metadata(data_processed_df, metadata_df, module_output) 
+            #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_samples_by_detection_proportion": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
+            #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_precursors_by_detection_proportion": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
+            #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_precursors_by_peptide_labels": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
+            #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         elif method == "filter_proteins_by_peptide_count": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
+            #mask mupdate
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         else:
