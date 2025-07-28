@@ -25,10 +25,10 @@ import module_helper as helper
 #from Python.Snippets import global_variables as global_variables #left this as a place holder for logging, when incorporating logging into main, these parts will be removed.
 
 ##############################################################################
-# Sample Thresholding
+# Sample Thresholding Functions
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column ='Corrupted'):
+def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_column='File.Name', key_column='Corrupted'):
     """
     Indexes metadata on specified column (index_column), then filters rows from the input data DataFrame 
     based on bool values in a specific metadata column (key_column).
@@ -63,23 +63,218 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     str
         Module output, logged with ###ERROR### messages if index and column keys not found in metadata
     """
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if index_column not in meta_df.columns:
-        module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
+        module_output+=f"[{timestamp()}] ###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df
 
     meta_df_indexed = meta_df.set_index(index_column)
 
     if key_column not in meta_df_indexed.columns:
-        module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###ERROR###: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
+        module_output+=f"[{timestamp()}] ###ERROR###: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df
     
-    module_output+=f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
+    module_output+=f"[{timestamp()}] All keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
     # Fill NAs in key column with FALSE
     sample_flags = meta_df_indexed.loc[:, key_column].fillna(False) 
     # Sample interesection between meta_df and data_df
     sample_flags = sample_flags[sample_flags.index.isin(data_df.columns)] 
     return data_df.loc[:, ~sample_flags], module_output
+
+def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh=None, alpha_sample=0.95):
+    """
+    Integrated pipeline that filters samples from the dataset based on a calculated or 
+    user-defined optimal missingness threshold.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        Input DataFrame (indexed on precursors)
+    module_output : str
+        Log file to pick up run time comments and warnings
+    sample_thresh : float or None, default None
+        Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
+        default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
+    alpha_sample : float 
+        Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
+    
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame retaining samples with missingness below the selected threshold.
+    """
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Validate allowed values for optimum_sample
+    if sample_thresh is not None:
+        if not isinstance(sample_thresh, (int, float)):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_sample. Expected int or float, got {type(sample_thresh).__name__}.\n"
+            return data_df, module_output
+        if not (0 <= sample_thresh <= 100):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_sample. Must be between 0 and 100. Got {sample_thresh}.\n"
+            return data_df, module_output
+
+    # Validate allowed values for alpha_sample
+    if not isinstance(alpha_sample, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(alpha_sample).__name__}.\n"
+        return data_df, module_output
+    if not (0 <= alpha_sample <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {alpha_sample}.\n"
+        return data_df, module_output
+
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
+
+    if sample_thresh is not None:
+        optimal_threshold = sample_thresh / 100 
+
+    return data_df.loc[:, missingness < optimal_threshold], module_output
+
+##############################################################################
+# Precursor and Protein Thresholding Functions
+##############################################################################
+
+def filter_precursors_by_detection_proportion(data_df, module_output, precursor_thresh=None, alpha_pr=0.95):
+    """
+    Integrated pipeline that filters precursors from the dataset based on a calculated or 
+    user-defined optimal missingness threshold.
+
+    author: SB
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        Input DataFrame (indexed on precursors).
+    module_output : str
+        Log file to pick up run time comments and warnings
+    precursor_thresh : float or None, default None
+        Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
+        `calculate_optimum_threshold`.
+    alpha_pr : float
+        Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
+    
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame retaining precursors with missingness below the selected threshold.
+    """
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Validate allowed values for optimum_pr
+    if precursor_thresh is not None:
+        if not isinstance(precursor_thresh, (int, float)):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_pr. Expected int or float, got {type(precursor_thresh).__name__}.\n"
+            return data_df, module_output
+        if not (0 <= precursor_thresh <= 100):
+            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_pr. Must be between 0 and 100. Got {precursor_thresh}.\n"
+            return data_df, module_output
+
+    # Validate allowed values for alpha_pr
+    if not isinstance(alpha_pr, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_pr).__name__}.\n"
+        return data_df, module_output
+    if not (0 <= alpha_pr <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_pr}.\n"
+        return data_df, module_output
+    
+    # Calculate missingness and optimal threshold
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_pr, statistics='non-parametric')
+    
+    # Override with user-specified threshold if provided
+    if precursor_thresh is not None:
+        optimal_threshold = precursor_thresh / 100
+
+    # Filter and return
+    return data_df.loc[missingness < optimal_threshold], module_output
+
+def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=None):
+    """
+    Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
+    author: BZ, SB
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        wide-format profiles, columns are samples
+    module_output : str
+        Log file to pick up run time comments and warnings
+    remove_label : str
+        name of the label to identify precursors to be removed, default = None
+
+    Returns
+    -------
+    pd.DataFrame
+        wide-format profiles, columns are samples, index with Precursor IDs.
+
+    """
+
+    # Find matching precursors
+    flagged_precursors = data_df.index.str.contains(remove_label)
+
+    # Update log
+    if flagged_precursors.any():
+        timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        module_output += f"[{timestamp()}] {flagged_precursors.sum()} precursors excluded because they contained the label: {remove_label}\n"
+
+    # Drop rows
+    return data_df.drop(flagged_precursors, axis=0), module_output
+
+def filter_proteins_by_peptide_count(data_df, id_mapping_df, module_output, min_peptides=1, protein_col="Protein.Group", precursor_col="Precursor.Id"):
+    """
+    Remove proteins identified by less precursors than specified with min_peptides.
+    author: BZ, SB
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
+    id_mapping_df: pd.DataFrame
+        dataframe that stores mapping of precursors and proteins. 
+    module_output : str
+        Log file to pick up run time comments and warnings
+    min_peptides : int
+        minimum number of precursors required per protein, proteins with less precursors will be excluded. The default is 1. 
+    protein_col : str
+        Name of the ID column containing the protein or gene ID. The default is "Protein.Group".
+    precursor_col : str
+        Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
+
+    Returns
+    -------
+    data_df : pd.DataFrame
+        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
+
+    """
+    # Count precursors / protein
+    protein_counts = id_mapping_df[protein_col].value_counts()
+
+    # Keep proteins with at least n >= min_peptdies
+    proteins_to_keep = protein_counts[protein_counts >= min_peptides].index
+
+    # Get precursors mapped to filtered proteins
+    precursors_to_keep = id_mapping_df[id_mapping_df[protein_col].isin(proteins_to_keep)][precursor_col].drop_duplicates()
+
+    # Filter on proteome level
+    filtered_df = data_df.loc[data_df.index.isin(precursors_to_keep)]
+
+    # Update logfile with dropped precursor count
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    original_precursor_count = data_df.shape[0]
+    filtered_precursor_count = filtered_df.shape[0]
+    precursors_dropped = original_precursor_count - filtered_precursor_count
+    module_output += (
+        f"[{timestamp()}] " 
+        f"Filtered out {int(precursors_dropped)} precursors "
+        f"(kept {int(filtered_precursor_count)} out of {int(original_precursor_count)}) "
+        f"based on minimum of {min_peptides} peptides per protein.\n"
+    )
+    return filtered_df, module_output
+
+##############################################################################
+#  Other Functions (Automated Thresholding and Label Replacement)
+##############################################################################
 
 def condition_on_detection_proportion(data_df):
 
@@ -102,7 +297,7 @@ def condition_on_detection_proportion(data_df):
     missingness = missing.sort_values()
     return missingness
 
-def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric'):
+def calculate_optimum_threshold(data_df, alpha=0.95, statistics='parametric'):
     """
     Calculates the optimal missingness threshold based on a statistical approach, 
     parametric (normal distribution), by default.
@@ -137,215 +332,7 @@ def calculate_optimum_threshold(data_df, alpha = .95, statistics = 'parametric')
 
     return missingness, upper_bound
 
-def filter_samples_on_detection_proportion(data_df, module_output, optimum_sample = None, alpha_sample = 0.95):
-    """
-    Integrated pipeline that filters samples from the dataset based on a calculated or 
-    user-defined optimal missingness threshold.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_df : pd.DataFrame
-        Input DataFrame (indexed on precursors)
-    module_output : str
-        Log file to pick up run time comments and warnings
-    optimum_sample : float or None, default None
-        Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
-        default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
-    alpha_sample : float 
-        Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
-    
-    Returns
-    -------
-    pd.DataFrame
-        Filtered DataFrame retaining samples with missingness below the selected threshold.
-    """
-    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # Validate allowed values for optimum_sample
-    if optimum_sample is not None:
-        if not isinstance(optimum_sample, (int, float)):
-            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_sample. Expected int or float, got {type(optimum_sample).__name__}.\n"
-            return data_df, module_output
-        if not (0 <= optimum_sample <= 100):
-            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_sample. Must be between 0 and 100. Got {optimum_sample}.\n"
-            return data_df, module_output
-
-    # Validate allowed values for alpha_sample
-    if not isinstance(alpha_sample, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(alpha_sample).__name__}.\n"
-        return data_df, module_output
-    if not (0 <= alpha_sample <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {alpha_sample}.\n"
-        return data_df, module_output
-
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
-    if optimum_sample is not None:
-        optimal_threshold = optimum_sample / 100 
-
-    return data_df.loc[:, missingness < optimal_threshold], module_output
-
-def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.nan):
-    """
-    exclude samples based on a value in a certain column in metadata, e.g. dropout/excl., keep is the value in that column to keep values
-
-        # this works with data_df
-
-    Parameters
-    ----------
-    profiles : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
-    column : str, optional
-        name of the multi column level in profiles with values defining which samples should be excluded/kept. The default is "dropout/excl.".
-    keep : , optional
-        defines which value in column defines which samples should be kept. The default is np.nan.
-
-    Returns
-    -------
-    profiles_trimmed : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples as defined excluded.
-    profiles_deleted : pd.DataFrame
-        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only excluded samples.
-
-    """
-    num_samples_before=profiles.shape[1]
-    profiles_trimmed=profiles.xs(keep,axis=1,level=column,drop_level=False)
-    num_samples_after=profiles_trimmed.shape[1]
-    print(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.")
-    if global_variables.logfilename:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.\n")
-        logfile.close()
-    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
-    return([profiles_trimmed,profiles_deleted])
-
-##############################################################################
-# Precursor Thresholding
-##############################################################################
-
-def filter_precursors_on_detection_proportion(data_df, module_output, optimum_pr=None, alpha_pr=0.95):
-    """
-    Integrated pipeline that filters precursors from the dataset based on a calculated or 
-    user-defined optimal missingness threshold.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_df : pd.DataFrame
-        Input DataFrame (indexed on precursors).
-    module_output : str
-        Log file to pick up run time comments and warnings
-    optimum_pr : float or None, default None
-        Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
-        `calculate_optimum_threshold`.
-    alpha_pr : float
-        Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
-    
-    Returns
-    -------
-    pd.DataFrame
-        Filtered DataFrame retaining precursors with missingness below the selected threshold.
-    """
-    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # Validate allowed values for optimum_pr
-    if optimum_pr is not None:
-        if not isinstance(optimum_pr, (int, float)):
-            module_output += f"[{timestamp()}] ###ERROR###: Invalid type for optimum_pr. Expected int or float, got {type(optimum_pr).__name__}.\n"
-            return data_df, module_output
-        if not (0 <= optimum_pr <= 100):
-            module_output += f"[{timestamp()}] ###ERROR###: Invalid value for optimum_pr. Must be between 0 and 100. Got {optimum_pr}.\n"
-            return data_df, module_output
-
-    # Validate allowed values for alpha_pr
-    if not isinstance(alpha_pr, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_pr).__name__}.\n"
-        return data_df, module_output
-    if not (0 <= alpha_pr <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_pr}.\n"
-        return data_df, module_output
-    
-    # Calculate missingness and optimal threshold
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_pr, statistics='non-parametric')
-    
-    # Override with user-specified threshold if provided
-    if optimum_pr is not None:
-        optimal_threshold = optimum_pr / 100
-
-    # Filter and return
-    return data_df.loc[missingness < optimal_threshold], module_output
-
-def filter_labelled_peptides(data_df, remove_label, module_output):
-    """
-    Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
-    author: BZ, SB
-    
-    Parameters
-    ----------
-    data_df : pd.DataFrame
-        wide-format profiles, columns are samples
-    remove_label : str
-        name of the label to identify precursors to be removed.
-    Module_output : str
-        logfile to update
-
-    Returns
-    -------
-    pd.DataFrame
-        wide-format profiles, columns are samples, index with Precursor IDs.
-
-    """
-    # Find matching precursors
-    flagged_precursors = data_df.index.str.contains(remove_label)
-
-    # Update log
-    if flagged_precursors.any():
-        module_output += f"{flagged_precursors.sum()} precursors excluded because they contained the label: {remove_label}\n"
-
-    # Drop rows
-    return data_df.drop(flagged_precursors, axis=0), module_output
-
-def filter_proteins_with_too_few_precursors(data_df, id_mapping_df, min_peptides, protein_col="Protein.Group", precursor_col = "Precursor.Id"):
-    """
-    Remove proteins identified by less precursors than specified with min_peptides.
-    author: BZ, SB
-    
-    Parameters
-    ----------
-    data_df : pd.DataFrame
-        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-    id_mapping_df: pd.DataFrame
-        dataframe that stores mapping of precursors and proteins. 
-    min_peptides : int
-        minimum number of precursors required per protein, proteins with less precursors will be excluded.
-    protein_col : str
-        Name of the ID column containing the protein or gene ID. The default is "Protein.Group".
-    precursor_col : str
-        Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
-
-    Returns
-    -------
-    data_df : pd.DataFrame
-        rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-
-    """
-    # Count precursors / protein
-    protein_counts = id_mapping_df[protein_col].value_counts()
-
-    # Keep proteins with at least n >= min_peptdies
-    proteins_to_keep = protein_counts[protein_counts >= min_peptides].index
-
-    # Get precursors mapped to filtered proteins
-    precursors_to_keep = id_mapping_df[id_mapping_df[protein_col].isin(proteins_to_keep)][precursor_col].drop_duplicates()
-
-    # Filter on proteome level
-    filtered_df = data_df.loc[data_df.index.isin(precursors_to_keep)]
-
-    return filtered_df
-
-def replace_labelled_peptides(data_df, target_label, replace_label, module_output): 
+def replace_labelled_precursors(data_df, target_label, replace_label, module_output): 
     """
     Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be replaced with another label
     author: BZ, SB
@@ -382,7 +369,7 @@ def replace_labelled_peptides(data_df, target_label, replace_label, module_outpu
     return data_df, module_output
     
 ##############################################################################
-# %% Replicate Functions
+# Replicate Functions
 ##############################################################################
 
 def filter_peptides_with_excessing_nans(peptide_profiles, file=None,profile_annotation_df=None,min_peptides=1,nan_threshold=1/3, mask=None, mask_description=None,values=None,ids=None,keep_track=True,diann_sample_column="File.Name"):
@@ -550,62 +537,99 @@ def exclude_samples_with_too_few_precursors(profiles,thresh=1/2,on_mad=True):
     profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
     return([profiles_trimmed,profiles_deleted])
 
+def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.nan):
+    """
+    exclude samples based on a value in a certain column in metadata, e.g. dropout/excl., keep is the value in that column to keep values
+
+        # this works with data_df
+
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities.
+    column : str, optional
+        name of the multi column level in profiles with values defining which samples should be excluded/kept. The default is "dropout/excl.".
+    keep : , optional
+        defines which value in column defines which samples should be kept. The default is np.nan.
+
+    Returns
+    -------
+    profiles_trimmed : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, samples as defined excluded.
+    profiles_deleted : pd.DataFrame
+        rows equal protein groups or precursor IDs, columns correspond to samples and values in the dataframe to intensities, only excluded samples.
+
+    """
+    num_samples_before=profiles.shape[1]
+    profiles_trimmed=profiles.xs(keep,axis=1,level=column,drop_level=False)
+    num_samples_after=profiles_trimmed.shape[1]
+    print(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.")
+    if global_variables.logfilename:
+        logfile=open(global_variables.logfilename,"a")
+        logfile.write(str(num_samples_before-num_samples_after)+" samples excluded based on metadata column '"+str(column)+"'.\n")
+        logfile.close()
+    profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
+    return([profiles_trimmed,profiles_deleted])
+
 ##############################################################################
 # %% MAIN
 ##############################################################################
 
 if __name__ == "__main__":
     
-    # Load parameters (from JSON later)
-    # For testing purposes
-    #""""
-    #filtering_wide_methods = "metadata;sample;precursor"
-    #"""
-    #filtering_wide_methods = parameters_dict["filtering_wide_methods"]
-     
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
+
     # Load data (always in wide format: rows = precursors, columns = samples)
     #data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
     #meta_df = pd.read_csv(meta_df_fp, sep='\t')
-
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
+    
+    # Load parameters (from JSON later)
+    # parameters_dict = ...
 
     # Initialize the working DataFrame
     data_processed_df = data_df.copy()
-
-    # Minimal filtering pipeline in methods order (metadata corruptions + sample filtering)
-    # TO DO: streamline the params (for now using defaults), add logging, add warnings
-
-    filtering_wide_methods = "pass"
+    
+    # Load methods
+    #filtering_wide_methos = 'pass'
+    filtering_wide_methods = "filter_samples_based_on_metadata; filter_samples_by_detection_proportion; filter_precursors_by_detection_proportion; " \
+    "filter_precursors_by_peptide_labels; filter_proteins_by_peptide_count"
     methods = filtering_wide_methods.split(";")
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
      
     for method in methods:
-        if method == "metadata":
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on metadata...\n") 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by metadata: {data_processed_df.shape}\n")
+        if method == "filter_samples_based_on_metadata":
+            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_based_on_metadata(data_processed_df, metadata_df, module_output) 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data after filtering wide by metadata: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
-        elif method == "sample": # shift to logger
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on sample missingness...")
-            data_processed_df, module_output = filter_samples_on_detection_proportion(data_processed_df, module_output)
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by sample missingness: {data_processed_df.shape}\n")
+        elif method == "filter_samples_by_detection_proportion": 
+            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
+            data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
+            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
 
-        elif method == "precursor": # shift to logger
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n") 
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtering based on precursor missingness...") 
-            data_processed_df, module_output = filter_precursors_on_detection_proportion(data_processed_df, module_output)
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Precursors x samples of data before filtering wide by precursor missingness: {data_processed_df.shape}\n")
+        elif method == "filter_precursors_by_detection_proportion": 
+            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
+            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
+
+        elif method == "filter_precursors_by_peptide_labels": 
+            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
+            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
+
+        elif method == "filter_proteins_by_peptide_count": 
+            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
+            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         else:
-            module_output += (f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ###WARNING### Unknown filtering method: {method} — skipping.\n")
+            module_output += (f"[{timestamp()}] ###WARNING### Unknown filtering method: {method} — skipping.\n")
 
     # Save the final processed data
     #output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
     #data_processed_df.to_csv(output_path, sep='\t')
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") 
     helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp, outname, mask=True)
-
     
 
 # %%
