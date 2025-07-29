@@ -212,7 +212,7 @@ def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=Non
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if not remove_label:
-        module_output += f"[{timestamp()}] No precursors removed: remove_label is empty or None.\n"
+        module_output += f"[{timestamp()}] ###ERROR###: No precursors removed: remove_label is empty or None.\n"
         return data_df, module_output
 
     flagged_precursors = data_df.index.str.contains(remove_label)
@@ -362,7 +362,7 @@ def replace_labelled_precursors(data_df, module_output, target_label=None, repla
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if not target_label:
-        module_output += f"[{timestamp()}]: No replacement performed: target_label is empty or None.\n"
+        module_output += f"[{timestamp()}]: ###ERROR###: No replacement performed: target_label is empty or None.\n"
         return data_df, module_output
     
     # Find matching precursors
@@ -381,7 +381,7 @@ def replace_labelled_precursors(data_df, module_output, target_label=None, repla
 
     return data_df, module_output
 
-def udpate_mask_df(data_df, data_processed_df, axis, mask_df, mask_dicitionary):
+def udpate_mask_df(data_df, data_processed_df, axis, mask_df, mask_description_df):
     """"""
     return mask_df
 
@@ -637,7 +637,7 @@ if __name__ == "__main__":
         elif method == "filter_proteins_by_peptide_count": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
-            #mask mupdate
+            #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         else:
