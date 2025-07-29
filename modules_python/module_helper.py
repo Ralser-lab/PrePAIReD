@@ -936,7 +936,7 @@ def annotate_metadata_to_profiles(profiles, metadata_df, sample_col="Sample.ID")
     return(profiles)
 
 
-def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_values,default_impu_method="knn",data_df=None,metadata_sample_column="Sample.Name"):
+def create_imputation_table(metadata_df,sample_hierarchies,missingness_thresholds="1/3;0.3;0.25_0.3",data_df=None,metadata_sample_column="Sample.Name",default_impu_method_ProtAbsence="knn",default_impu_method_MAR="knn",default_impu_method_MNAR="minval-noise",default_impu_method_ProtAbsenceMAR="knn",default_impu_method_ProtAbsenceMNAR="minval-noise",default_knn_k=15):
     """
     Create a template for an involved table to define different impuation methods across sample and precursor hierarchies.
 
@@ -946,15 +946,25 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
         Metadata dataframe mapping hierarchies to samples.
     sample_hierarchies : list
         list with names of columns in metadata_df to do hierarchical imputation across.
-    precursor_hierarchy_values : list
-        list with thresholds for precursor missingness.
-    default_impu_method : str, optional
-        a default imputation method. The default is "knn".
+    missingness_thresholds : str
+        str with thresholds for precursor missingness; ";" separates between sample_hierarchies, "_" separates within sample hierarchy. The default is "1/3;0.3;0.3_0.25".
     data_df : pd.DataFrame or None, optional
         wide format dataframe with IDs as rows and samples as columns, used to obtain samples in experiment; if None, all samples from metadata_df are taken into account. The default is None.
     metadata_sample_column : str, optional
         Name of the column containing sample names matching to columns in data_df. The default is "Sample.Name".
-
+    default_impu_method_ProtAbsence : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence'. The default is 'knn'.
+    default_impu_method_MAR : str, optional
+        name of the imputation method used for missingness by 'MAR'. The default is 'knn'.
+    default_impu_method_MNAR : str, optional
+        name of the imputation method used for missingness by 'MNAR'. The default is 'minval-noise'.
+    default_impu_method_ProtAbsenceMAR : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/MAR'. The default is 'knn'.
+    default_impu_method_ProtAbsenceMNAR : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/MNAR'. The default is 'minval-noise'.
+    default_knn_k : int, optional
+        Default value for k used for kNN imputation.
+        
     Returns
     -------
     pd.DataFrame.
@@ -965,67 +975,26 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
         samples = data_df.columns
     else:
         samples = metadata_df[metadata_sample_column]
-    impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["precursor_hierarchy_values","missingness_type","missingness_type_int","imputation_method","k"]) #TODO #add parameters for imputation methods
+    impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["missingness_thresh","missingness_type","imputation_method","k"]) #TODO #add parameters for imputation methods
     #create dataframe storing classes (integers) for different missingness types
-    missingness_types_df = pd.DataFrame(data=range(1,7),index=["Missing","MAR","MNAR","Missing/MAR","Missing/MNAR","MCAR"], columns=["missingness_type_int"])
-    missingness_types_df.index.name="missingness_type" 
-
-    #generate list with dictionaries through hierarchies
-    all_sample_hierarchy_values_dicts_list = list()
-    sample_hierarchies_stack = np.copy(sample_hierarchies)
-    while len(sample_hierarchies_stack)>1:
-        sample_hierarchy = sample_hierarchies_stack[0]
-        lower_sample_hierarchy = sample_hierarchies_stack[1]
-        sample_hierarchies_stack = sample_hierarchies_stack[1:]
-        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].unique()
+    missingness_types = ["ProtAbsence","MAR","MNAR","ProtAbsence/MAR","ProtAbsence/MNAR"]
+    
+    for s,sample_hierarchy in enumerate(sample_hierarchies):
+        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].dropna().unique()
         sample_hierarchy_values = np.sort(sample_hierarchy_values)
-        sample_hierarchy_value_dict = dict()
-        for sample_hierarchy_value in sample_hierarchy_values:
-            lower_sample_hierarchy_values = metadata_df.loc[(metadata_df[metadata_sample_column].isin(samples)) & (metadata_df[sample_hierarchy]==sample_hierarchy_value)][lower_sample_hierarchy].unique()
-            lower_sample_hierarchy_values = np.sort(lower_sample_hierarchy_values)
-            sample_hierarchy_value_dict[sample_hierarchy_value] = lower_sample_hierarchy_values
-        all_sample_hierarchy_values_dicts_list.append(sample_hierarchy_value_dict)
-    all_sample_hierarchy_values_dicts_list = [{"":list(all_sample_hierarchy_values_dicts_list[0].keys())}] + all_sample_hierarchy_values_dicts_list
-        
-    # with help of dictionaries fill impu_table_df
-    k = [0] * len(sample_hierarchies) #indexes for dictionaries
-    i = 0
-    while True:
-        	#set new keys
-        keys = [""]
-        #fill keys over hierarchies
-        for s in range(len(sample_hierarchies)):
-            '''
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-1]]):
-                k[s] = 0
-                k[s-1] +=1
-            '''
-            keys.append(all_sample_hierarchy_values_dicts_list[s][keys[-1]][k[s]])
-            if s == len(sample_hierarchies)-1:
-                k[s] += 1
-            '''
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-2]]):
-                k[s] = 0
-                k[s-1] +=1
-            '''
-        for precursor_hierarchy_value in precursor_hierarchy_values:
-            for missingness_type in missingness_types_df.index:
-                impu_table_df.loc[i,sample_hierarchies] = keys[1:]
-                impu_table_df.loc[i,"precursor_hierarchy_values"] = precursor_hierarchy_value
-                impu_table_df.loc[i,"missingness_type"] = missingness_type
-                impu_table_df.loc[i,"missingness_type_int"] = missingness_types_df.loc[missingness_type,"missingness_type_int"]
-                i += 1
-        #update k
-        for s in range(len(sample_hierarchies)-1,-1,-1):
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[s]]):
-                k[s] = 0
-                k[s-1] +=1
-        #break while loop if covered all values from highest hierarchy
-        if keys[1] == len(all_sample_hierarchy_values_dicts_list[0][keys[0]]):
-            break
-    #set default parameters
-    impu_table_df["imputation_method"] = default_impu_method
-    #TODO
+        missingness_thresholds_s = [eval(x) for x in missingness_thresholds.split(";")[s].split("_")] # to convert e.g. 1/3 to float
+        impu_table_part_df = pd.DataFrame(columns=impu_table_df.columns,index=range(len(sample_hierarchy_values)*len(missingness_types)*len(missingness_thresholds_s)))
+        impu_table_part_df[sample_hierarchy] = list(itertools.chain.from_iterable([[x]*len(missingness_types)*len(missingness_thresholds_s) for x in sample_hierarchy_values]))
+        impu_table_part_df["missingness_thresh"] = list(itertools.chain.from_iterable([[x]*len(missingness_types) for x in missingness_thresholds_s] * len(sample_hierarchy_values)))
+        impu_table_part_df["missingness_type"] = missingness_types * len(missingness_thresholds_s) * len(sample_hierarchy_values)
+        impu_table_df = pd.concat([impu_table_df,impu_table_part_df],axis=0,ignore_index=True)
+    #set default parameter
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence","imputation_method"] = default_impu_method_ProtAbsence
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MAR","imputation_method"] = default_impu_method_ProtAbsenceMAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MNAR","imputation_method"] = default_impu_method_ProtAbsenceMNAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="MAR","imputation_method"] = default_impu_method_MAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="MNAR","imputation_method"] = default_impu_method_MNAR
+    impu_table_df.loc[impu_table_df["imputation_method"]=="knn","k"] = default_knn_k
     return(impu_table_df)
 
 def logger(log_file, module_output=str):
