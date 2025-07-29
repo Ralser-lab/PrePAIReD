@@ -381,9 +381,13 @@ def replace_labelled_precursors(data_df, module_output, target_label=None, repla
 
     return data_df, module_output
 
-def udpate_mask_df(data_df, data_processed_df, axis, mask_df, mask_description_df):
-    """"""
-    return mask_df
+def udpate_mask_df(data_df, data_processed_df, axis, mask_df, label):
+    
+    if axis == 'samples': 
+        flags = data_df.columns.difference(data_processed_df.columns)
+    elif axis == 'precursors':
+        flags = data_df.index.difference(data_processed_df.index)
+    return flags
 
 ##############################################################################
 # Replicate Functions
@@ -587,7 +591,6 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
         logfile.close()
     profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
     return([profiles_trimmed,profiles_deleted])
-
 
 ##############################################################################
 # %% MAIN
