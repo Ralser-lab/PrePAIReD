@@ -770,7 +770,7 @@ if __name__ == "__main__":
     helper.logger(log_file,log)
     
     # Save data
-    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t")
+    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
     #wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
     #mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
     #mask_description_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask_description.tsv", sep="\t")
