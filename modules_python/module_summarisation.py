@@ -761,7 +761,7 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", metadata=True, id_mapping=True, mask=True)
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", metadata=True, id_mapping=True, mask=True)
     
     if parameters_dict["summarization_method"]=="MaxLFQ":
         data_processed_df, module_output = MaxLFQ_summarization(data_df, id_mapping_df, module_output, 
@@ -786,4 +786,4 @@ if __name__ == "__main__":
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
         
-    helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=True)
+    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
