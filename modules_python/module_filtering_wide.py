@@ -11,6 +11,7 @@ functions:
     - condition_on_detection_proportion: Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
     - calculate_optimum_threshold: Automatically determines the most appropriate detection threshold value (for precursor or sample by % missing proportion) based on sampling statistics.
     - replace_labelled_precursors: Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
+    - update_mask_df: Updates mask_df with a unique identifier based on the before / after a specific processing step.
 """
 
 # %% Imports
