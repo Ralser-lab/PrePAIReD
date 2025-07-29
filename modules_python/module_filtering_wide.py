@@ -590,7 +590,7 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
 
     # Load parameters (from JSON later)
     # parameters_dict = ...
@@ -642,4 +642,4 @@ if __name__ == "__main__":
     #output_path = os.path.join(out_dir_fp, 'data_filtered_wide.tsv')
     #data_processed_df.to_csv(output_path, sep='\t')
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Filtered data saved to: {output_path}") 
-    helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp, outname, mask=True)
+    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp, outname, mask=True)
