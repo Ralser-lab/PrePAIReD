@@ -131,7 +131,7 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
 # Precursor and Protein Thresholding Functions
 ##############################################################################
 
-def filter_precursors_by_detection_proportion(data_df, module_output, precursor_thresh=None, alpha_pr=0.95):
+def filter_precursors_by_detection_proportion(data_df, module_output, precursor_thresh=None, alpha_precursor=0.95):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -147,7 +147,7 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
     precursor_thresh : float or None, default None
         Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
         `calculate_optimum_threshold`.
-    alpha_pr : float
+    alpha_precursor : float
         Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
     
     Returns
@@ -167,15 +167,15 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
             return data_df, module_output
 
     # Validate allowed values for alpha_pr
-    if not isinstance(alpha_pr, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_pr).__name__}.\n"
+    if not isinstance(alpha_precursor, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_precursor).__name__}.\n"
         return data_df, module_output
-    if not (0 <= alpha_pr <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_pr}.\n"
+    if not (0 <= alpha_precursor <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_precursor}.\n"
         return data_df, module_output
     
     # Calculate missingness and optimal threshold
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_pr, statistics='non-parametric')
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_precursor, statistics='non-parametric')
     
     # Override with user-specified threshold if provided
     if precursor_thresh is not None:
@@ -268,7 +268,7 @@ def filter_proteins_by_peptide_count(data_df, id_mapping_df, module_output, min_
     return filtered_df, module_output
 
 ##############################################################################
-#  Other Functions (Automated Thresholding and Label Replacement)
+#  Other Functions (Automated Thresholding, Label Replacement, Mask Updater)
 ##############################################################################
 
 def condition_on_detection_proportion(data_df):
@@ -362,7 +362,11 @@ def replace_labelled_precursors(data_df, target_label, replace_label, module_out
         module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' -> '{replace_label}'\n"
 
     return data_df, module_output
-    
+
+def udpate_mask_df(data_df, data_processed_df, axis, mask_df, mask_dicitionary):
+    """"""
+    return mask_df
+
 ##############################################################################
 # Replicate Functions
 ##############################################################################
@@ -574,18 +578,13 @@ if __name__ == "__main__":
     
     data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
 
-    # Load data (always in wide format: rows = precursors, columns = samples)
-    #data_df = pd.read_csv(data_df_fp, sep='\t', index_col=0)
-    #meta_df = pd.read_csv(meta_df_fp, sep='\t')
-    
     # Load parameters (from JSON later)
     # parameters_dict = ...
 
-    # Initialize the working DataFrame
+    # Initialize the working DataFrame (always in wide format: rows = precursors, columns = samples)
     data_processed_df = data_df.copy()
     
     # Load methods
-    #filtering_wide_methos = 'pass'
     filtering_wide_methods = "filter_samples_based_on_metadata; filter_samples_by_detection_proportion; filter_precursors_by_detection_proportion; " \
     "filter_precursors_by_peptide_labels; filter_proteins_by_peptide_count"
     methods = filtering_wide_methods.split(";")
@@ -602,7 +601,7 @@ if __name__ == "__main__":
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
             #mask update
-            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_precursors_by_detection_proportion": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
