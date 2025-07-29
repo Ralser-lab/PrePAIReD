@@ -78,7 +78,7 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     sample_flags = sample_flags[sample_flags.index.isin(data_df.columns)] 
     return data_df.loc[:, ~sample_flags], module_output
 
-def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh=None, alpha_sample=0.95):
+def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh=None, sample_alpha=0.95):
     """
     Integrated pipeline that filters samples from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -114,14 +114,14 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
             return data_df, module_output
 
     # Validate allowed values for alpha_sample
-    if not isinstance(alpha_sample, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(alpha_sample).__name__}.\n"
+    if not isinstance(sample_alpha, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(sample_alpha).__name__}.\n"
         return data_df, module_output
-    if not (0 <= alpha_sample <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {alpha_sample}.\n"
+    if not (0 <= sample_alpha <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {sample_alpha}.\n"
         return data_df, module_output
 
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df, alpha_sample)
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df, sample_alpha)
 
     if sample_thresh is not None:
         optimal_threshold = sample_thresh / 100 
@@ -132,7 +132,7 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
 # Precursor and Protein Thresholding Functions
 ##############################################################################
 
-def filter_precursors_by_detection_proportion(data_df, module_output, precursor_thresh=None, alpha_precursor=0.95):
+def filter_precursors_by_detection_proportion(data_df, module_output, precursor_thresh=None, precursor_alpha=0.95):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
@@ -155,6 +155,8 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
     -------
     pd.DataFrame
         Filtered DataFrame retaining precursors with missingness below the selected threshold.
+    module_output : str
+        Updated log string.
     """
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -168,15 +170,15 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
             return data_df, module_output
 
     # Validate allowed values for alpha_pr
-    if not isinstance(alpha_precursor, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(alpha_precursor).__name__}.\n"
+    if not isinstance(precursor_alpha, (int, float)):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(precursor_alpha).__name__}.\n"
         return data_df, module_output
-    if not (0 <= alpha_precursor <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {alpha_precursor}.\n"
+    if not (0 <= precursor_alpha <= 1):
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {precursor_alpha}.\n"
         return data_df, module_output
     
     # Calculate missingness and optimal threshold
-    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, alpha_precursor, statistics='non-parametric')
+    missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, precursor_alpha, statistics='non-parametric')
     
     # Override with user-specified threshold if provided
     if precursor_thresh is not None:
@@ -203,7 +205,8 @@ def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=Non
     -------
     pd.DataFrame
         wide-format profiles, columns are samples, index with Precursor IDs.
-
+    module_output : str
+        Updated log string.
     """
 
     # Find matching precursors
@@ -241,7 +244,8 @@ def filter_proteins_by_peptide_count(data_df, id_mapping_df, module_output, min_
     -------
     data_df : pd.DataFrame
         rows equal precursor or protein ids, columns correspond to samples and values in the dataframe to intensities (e.g. Precursor.Quantity from DIA-NN output).
-
+    module_output : str
+        Updated log string.
     """
     # Count precursors / protein
     protein_counts = id_mapping_df[protein_col].value_counts()
@@ -328,7 +332,7 @@ def calculate_optimum_threshold(data_df, alpha=0.95, statistics='parametric'):
 
     return missingness, upper_bound
 
-def replace_labelled_precursors(data_df, target_label, replace_label, module_output): 
+def replace_labelled_precursors(data_df, module_output, target_label=None, replace_label=None): 
     """
     Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be replaced with another label
     author: BZ, SB
@@ -338,18 +342,25 @@ def replace_labelled_precursors(data_df, target_label, replace_label, module_out
     data_df : pd.DataFrame
         wide-format profiles, columns are samples
     target_label : str
-        name of the label to identify precursors to be replaced.
+        name of the label to identify precursors to be replaced. Default is None.
     replace_label : str
-        Substring to replace the target_label with.
-    Module_output : str
+        Substring to replace the target_label with. Default is None.
+    module_output : str
         logfile to update
 
     Returns
     -------
     pd.DataFrame
         wide-format profiles, columns are samples, index with Precursor IDs.
-
+    module_output : str
+        Updated log string.
     """
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    if not target_label:
+        module_output += f"[{timestamp()}]: No replacement performed: target_label is empty or None.\n"
+        return data_df, module_output
+    
     # Find matching precursors
     flagged_precursors = data_df.index.str.contains(target_label)
 
@@ -360,7 +371,9 @@ def replace_labelled_precursors(data_df, target_label, replace_label, module_out
         # Update index
         data_df.index = new_index
         # Update log
-        module_output += f"{flagged_precursors.sum()} precursors replaced: '{target_label}' -> '{replace_label}'\n"
+        module_output += f"[{timestamp()}]: {flagged_precursors.sum()} precursors replaced: '{target_label}' -> '{replace_label}'\n"
+    else:
+        module_output += f"[{timestamp()}]: No replacement performed: {target_label} precursors not found\n"
 
     return data_df, module_output
 
