@@ -1097,7 +1097,11 @@ def load_mask_description(data_df_fp):
 def save_mask(masked_df, out_dir_fp, outname):
     masked_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask.tsv"),sep="\t")
     return
-    
+
+def save_mask_description(mask_description_df, out_dir_fp, outname):
+    mask_description_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask_description.tsv"),sep="\t")
+    return
+
 def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
@@ -1108,9 +1112,9 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
     # Load data
     if not return_data_fp:
-    	data_df = load_data(data_df_fp)
+        data_df = load_data(data_df_fp)
     else:
-	data_df = None
+        data_df = None
     # Load parameters
     parameters_dict = load_parameters(param_fp,out_dir_fp)
     # Load ID mapping
@@ -1134,14 +1138,17 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     # Load mask
     if mask:
         masked_df = load_mask(data_df_fp)
+        mask_description_df = load_mask_description(data_df_fp)
     else:
         masked_df = []
+        mask_description_df = []
     if return_data_fp:
-        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp
     else:
-        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
 	    
-def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=False):
+	    
+def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False):
     # Update log file
     logger(log_file, module_output=module_output)
     # Save data
@@ -1149,6 +1156,7 @@ def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_
     # Save mask
     if mask:
         save_mask(masked_df, out_dir_fp, outname)
+        save_mask_description(mask_description_df, out_dir_fp, outname)
     # Close function
     logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
     sys.exit(0)
