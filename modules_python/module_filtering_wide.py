@@ -612,7 +612,7 @@ if __name__ == "__main__":
 
         elif method == "filter_precursors_by_peptide_labels": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
-            data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
+            data_processed_df, module_output = filter_precursors_by_peptide_labels(data_processed_df, module_output)
             #mask update
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
