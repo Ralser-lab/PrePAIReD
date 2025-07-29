@@ -684,7 +684,7 @@ parameters_dict = {
 
 if __name__ == "__main__":
 
-    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
 
     # Return string for logging from the function
     # for large functions log begfore function state
@@ -919,13 +919,13 @@ if __name__ == "__main__":
         # to be implemented
         
     else:
-        data_processed_df = data_df.copy()
+        data_processed_df = data_df
 
     #print(log_string)
     # # Save data
     # data_processed_df.to_csv(os.path.join(out_dir_fp,outname+".tsv"),sep="\t")
     # sys.exit(0)
-    helper.close_module(data_processed_df, masked_df, log_file, log_string, out_dir_fp, outname, mask=True)
+    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, log_string, out_dir_fp, outname, mask=True)
     
     
 
