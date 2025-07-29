@@ -622,31 +622,41 @@ if __name__ == "__main__":
         if method == "filter_samples_based_on_metadata":
             module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_based_on_metadata(data_processed_df, metadata_df, module_output) 
-            masked_df, mask_description_df = update_mask_df(data_df, data_processed_df, 'samples', method, masked_df, mask_description_df, id_mapping_df, metadata_df)
+            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
+                                                                                      method, masked_df, mask_description_df, 
+                                                                                      id_mapping_df, metadata_df)
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_samples_by_detection_proportion": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
-            masked_df, mask_description_df = update_mask_df(data_df, data_processed_df, 'samples', method, masked_df, mask_description_df, id_mapping_df, metadata_df)
+            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
+                                                                                      method, masked_df, mask_description_df, 
+                                                                                      id_mapping_df, metadata_df)
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_precursors_by_detection_proportion": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
-            masked_df, mask_description_df = update_mask_df(data_df, data_processed_df, 'precursors', method, masked_df, mask_description_df, id_mapping_df, metadata_df)
+            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
+                                                                                      method, masked_df, mask_description_df, 
+                                                                                      id_mapping_df, metadata_df)
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
 
         elif method == "filter_precursors_by_peptide_labels": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_peptide_labels(data_processed_df, module_output)
-            masked_df, mask_description_df = update_mask_df(data_df, data_processed_df, 'precursors', method, masked_df, mask_description_df, id_mapping_df, metadata_df)
+            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
+                                                                                      method, masked_df, mask_description_df, 
+                                                                                      id_mapping_df, metadata_df)
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         elif method == "filter_proteins_by_peptide_count": 
             module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
-            masked_df, mask_description_df = update_mask_df(data_df, data_processed_df, 'precursors', method, masked_df, mask_description_df, id_mapping_df, metadata_df)
+            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
+                                                                                      method, masked_df, mask_description_df, 
+                                                                                      id_mapping_df, metadata_df)
             module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
 
         else:
