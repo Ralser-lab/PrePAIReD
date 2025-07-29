@@ -574,8 +574,11 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 
 
 if __name__ == "__main__":
-    
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+
+    if parameters_dict["normalization_method"] in ["delayed"]:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+    else:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=False)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
