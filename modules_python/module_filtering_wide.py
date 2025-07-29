@@ -208,16 +208,20 @@ def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=Non
     module_output : str
         Updated log string.
     """
+    
+    timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # Find matching precursors
+    if not remove_label:
+        module_output += f"[{timestamp()}] No precursors removed: remove_label is empty or None.\n"
+        return data_df, module_output
+
     flagged_precursors = data_df.index.str.contains(remove_label)
 
-    # Update log
     if flagged_precursors.any():
-        timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        module_output += f"[{timestamp()}] {flagged_precursors.sum()} precursors excluded because they contained the label: {remove_label}\n"
-
-    # Drop rows
+        module_output += f"[{timestamp()}] {flagged_precursors.sum()} precursors excluded because they contained the label: '{remove_label}'\n"
+    else:
+        module_output += f"[{timestamp()}] No precursors excluded: label '{remove_label}' not found in any index.\n"
+    
     return data_df.drop(flagged_precursors, axis=0), module_output
 
 def filter_proteins_by_peptide_count(data_df, id_mapping_df, module_output, min_peptides=1, protein_col="Protein.Group", precursor_col="Precursor.Id"):
@@ -583,6 +587,7 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
         logfile.close()
     profiles_deleted=profiles[list(filter(lambda x: x not in profiles_trimmed.columns,profiles.columns))] 
     return([profiles_trimmed,profiles_deleted])
+
 
 ##############################################################################
 # %% MAIN
