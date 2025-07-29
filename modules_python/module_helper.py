@@ -1107,7 +1107,10 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     parser = get_parser() 
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
     # Load data
-    data_df = load_data(data_df_fp)
+    if not return_data_fp:
+    	data_df = load_data(data_df_fp)
+    else:
+	data_df = None
     # Load parameters
     parameters_dict = load_parameters(param_fp,out_dir_fp)
     # Load ID mapping
