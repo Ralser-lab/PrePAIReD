@@ -14,7 +14,6 @@ functions:
     - update_mask_df: Updates mask_df with a unique identifier after a specific wide filtering step.
 """
 
-# %% Imports
 import numpy as np
 from datetime import datetime
 import scipy.stats as stats
@@ -604,7 +603,7 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
     return([profiles_trimmed,profiles_deleted])
 
 ##############################################################################
-# %% MAIN
+#  Main
 ##############################################################################
 
 if __name__ == "__main__":
@@ -613,8 +612,8 @@ if __name__ == "__main__":
 
     data_processed_df = data_df.copy()
     
-    filtering_wide_methods = "filter_samples_based_on_metadata; filter_samples_by_detection_proportion; filter_precursors_by_detection_proportion; filter_precursors_by_peptide_labels; filter_proteins_by_peptide_count"
-    methods = filtering_wide_methods.split(";")
+    filtering_wide_methods = "filter_samples_based_on_metadata;filter_samples_by_detection_proportion;filter_precursors_by_detection_proportion;filter_precursors_by_peptide_labels;filter_proteins_by_peptide_count"
+    methods = filtering_wide_methods.replace(" ","").split(";")
 
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
      
@@ -625,40 +624,50 @@ if __name__ == "__main__":
             mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
                                                                                       method, masked_df, mask_description_df, 
                                                                                       id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
+            helper.logger(log_file,module_output)
+            module_output = ""
 
         elif method == "filter_samples_by_detection_proportion": 
-            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
             data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
             mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
                                                                                       method, masked_df, mask_description_df, 
                                                                                       id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
+            helper.logger(log_file,module_output)
+            module_output = ""
 
         elif method == "filter_precursors_by_detection_proportion": 
-            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
             mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
                                                                                       method, masked_df, mask_description_df, 
                                                                                       id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n")
+            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
+            helper.logger(log_file,module_output)
+            module_output = ""
 
         elif method == "filter_precursors_by_peptide_labels": 
-            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_precursors_by_peptide_labels(data_processed_df, module_output)
             mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
                                                                                       method, masked_df, mask_description_df, 
                                                                                       id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
+            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n") 
+            helper.logger(log_file,module_output)
+            module_output = ""
 
         elif method == "filter_proteins_by_peptide_count": 
-            module_output += (f"[{timestamp()}] Precursors x samples of data before {method}: {data_processed_df.shape}\n") 
+            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
             data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
             mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
                                                                                       method, masked_df, mask_description_df, 
                                                                                       id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples of data after {method}: {data_processed_df.shape}\n") 
-
+            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n") 
+            helper.logger(log_file,module_output)
+            module_output = ""
+        
         else:
             module_output += (f"[{timestamp()}] ###WARNING### Unknown filtering method: {method} — skipping.\n")
 
