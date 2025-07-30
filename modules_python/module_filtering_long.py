@@ -182,7 +182,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if intersect_files.sum() == 0:
             intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
         if intersect_files.sum() == 0:
-            log += "###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
+            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
             #sys.exit("###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
             return([None,None,None,log])
         input_df = input_df[intersect_files]
@@ -211,7 +211,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_proteotypic","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
     # FILTER BY Q-VALUE
     # exclude by q-value threshold for gene group AND precursor
     if filters_dict["filter_by_qvalue"]:
@@ -226,7 +226,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_q_value","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_global_qvalue"]:
         if "Global.Q.Value" in input_df.columns:
             if keep_track:
@@ -239,7 +239,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_global_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_gg_qvalue"]:
         if "GG.Q.Value" in input_df.columns:
             if keep_track:
@@ -252,7 +252,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_gg_qvalue","number of remaining precursors"]=len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_pg_qvalue"]:
         if "PG.Q.Value" in input_df.columns:
             if keep_track:
@@ -265,7 +265,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_pg_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_p_qvalue"]:
         if "Protein.Q.Value" in input_df.columns:
             if keep_track:
@@ -278,7 +278,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_p_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_global_pg_qvalue"]:
         if "Global.PG.Q.Value" in input_df.columns:
             if keep_track:
@@ -291,7 +291,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of remaining precursors"]=len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_lib_qvalue"]:
         if "Lib.Q.Value" in input_df.columns:
             if keep_track:
@@ -317,7 +317,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
 
     # FILTER BY PEP
     # exclude rows with posterior error probability (PEP) for precursor identification exceeding pep_thresh
@@ -333,7 +333,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_PEP","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
     # FILTER ON MS-LEVEL
     # exclude rows with correlation between MS1 and MS2 chromatograms below MScorr_thresh
     if filters_dict["filter_by_MScorr"]:
@@ -348,7 +348,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_MScorr","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
+            log += "\t\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
     # exclude rows with MS2 evidence below evidence_thresh
     if filters_dict["filter_by_evidence"]:
         if "Mass.Evidence" in input_df.columns:
@@ -362,7 +362,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_evidence","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMass.Evidence not in input_df, filter skipped\n"
+            log += "\t\t\t\tMass.Evidence not in input_df, filter skipped\n"
     if filters_dict["filter_by_MScorr_evidence_combined"]:
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
@@ -373,7 +373,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
+            log += "\t\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
     #filter out precursors with zero value
     if filters_dict["filter_by_zero_values"]:
         if keep_track:
@@ -390,8 +390,9 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during filtering of input_df\n\n"
     log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
     if input_df.index.tolist() == []:
-        log += "\t\t\t###WARNING### Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
+        log += "\t\t\t\t###WARNING### Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
     return([input_df,mask_df,mask_description_df,log])
+
 
 
 #Construction site, improve if needed
@@ -664,12 +665,19 @@ if __name__ == "__main__":
 
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
-    if not any(metadata_df):
+    if metadata_df is None:
         sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        
+
+    # Log parameters
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
+    log += "\nParameters\n------------\n"
+    log += pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    log += "\n------------\n"  
+    helper.logger(log_file, module_output=log)
+         
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
     input_id_col = ids_list[0]
