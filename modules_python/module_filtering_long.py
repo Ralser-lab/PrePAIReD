@@ -10,6 +10,7 @@ functions:
     - select_filtering_columns: provides based on applied filters a pre-selection of column names to read from the DIA-NN output report.tsv to save RAM
     - filtering: apply filtering on DIA-NN output report.tsv
     (- filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used)
+    - name_unknown_proteins: replaces NaN in id_mapping_df[protein_col], i.e. renames missing protein origins.
     (- create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime)
     - long_to_wide _format: Transforms long format data frame to wide format
 
@@ -23,8 +24,6 @@ variable names + types
     int/float/bool/str: *
     filenames: *_fp
 
-#TODO
-# - rename missing uniProt IDs and Genes
 
 """
 # %%
@@ -438,7 +437,48 @@ def filtering_peptide_specific(file, filter_mask, mask_description, filter_by_pr
     return(file)
 '''
 
+#Not Tested #TODO
+def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"], protein_col="Protein.Group", replace_id_col="Protein.Ids"):
+    """
+    Replaces NaN in protein_col of id_mapping_df with values from the column replace_id_col in the dataframe from which id_mapping was initially generated (file at input_fp).
+    Remaining NaN are replaced with "UnknownProteinX" where X is a unique integer, thus loosing the information whether Precursors with missing protein_col belonged to the same protein.
 
+    Parameters
+    ----------
+    id_mapping_df : pd.DataFrame
+        DataFrame collecting IDs such as Gene Names or Protein Groups for Precursors
+    input_fp : str
+        path and filename of a file mapping Precursors in id_mapping_df to other IDs, e.g. the DIA-NN output report.tsv.
+    ids_list : list, optional
+        List of columns in id_mapping_df used to uniquely identify a precursor. The default is ["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"].
+    protein_col : str, optional
+        Name of the column in id_mapping_df and the data stored at input_fp with missing IDs which are to be replaced. The default is "Protein.Group".
+    replace_id_col : str, optional
+        Name of the column in the data stored at input_fp to be used for replacement of missing ids in id_mapping_df[protein_col]. The default is "Protein.Ids".
+
+    Returns
+    -------
+    id_mapping_df : pd.DataFrame
+        DataFrame collecting IDs such as Gene Names or Protein Groups for Precursors.
+
+    """
+    #define columns needed from input
+    ids_list = list(set([protein_col] + ids_list))
+    file_columns = list(set([replace_id_col] + ids_list))
+    #read input to find possible id translation
+    trans_df = read_input(input_fp, file_columns=file_columns).set_index(ids_list)
+    #replace NaN in protein_col with Protein.Ids from input
+    protein_groups = [trans_df.loc[x,replace_id_col] if pd.isna(x[protein_col]) else x for x in id_mapping_df[ids_list]]
+    #if there are still NaN, replace them with UnknownProtein + some integer, 
+    i=1
+    for x in range(len(protein_groups)):
+        if pd.isna(protein_groups[x]):
+            protein_groups[x] = "UnknownProtein"+str(i)
+            i+=1
+    #assign new values to initial mapping
+    id_mapping_df[protein_col] = protein_groups
+    return(id_mapping_df)
+         
 #DEPRECATED
 '''
 #error in "Assigning measured proteins [...]" ff during function call if ids in profile_df does not match ids in filter_mask
@@ -734,7 +774,15 @@ if __name__ == "__main__":
         
         # Extract ID mapping
         id_mapping_df = input_df[ids_list].drop_duplicates()
-        
+
+        # Rename missing values in protein_col
+        if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
+            id_mapping_df = name_unknown_proteins(id_mapping_df=id_mapping_df,
+                                                  input_fp=data_df_fp, 
+                                                  ids_list=ids_list, 
+                                                  protein_col=parameters_dict["protein_col"], 
+                                                  replace_id_col=parameters_dict["alternative_protein_col"])
+                 
         # Precursor filtering (DIA-NN specific)
         input_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
                                                                   input_id_col=input_id_col, 
