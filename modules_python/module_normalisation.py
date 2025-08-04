@@ -292,9 +292,9 @@ def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_d
     log=""
     # get dataframe with precursors originating from normpeptides_list
     if normlabel is not None:
-        normprecursors_df = data_df.loc[list(filter(lambda x: normlabel in x, id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]))]
+        normprecursors_df = data_df.loc[list(filter(lambda x: normlabel in x, id_mapping_df[id_mapping_df[peptide_col].isin(normpeptides_list)][precursor_col]))]
     else:
-        normprecursors_df = data_df.loc[id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]]
+        normprecursors_df = data_df.loc[id_mapping_df[id_mapping_df[peptide_col].isin(normpeptides_list)][precursor_col]]
     # select a subset of IDs which is present in at least nan_intersect_thresh *100% samples
     if normalization_on_intersecting_precs:
        #extract precursors present over all samples
@@ -574,11 +574,11 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 
 
 if __name__ == "__main__":
-
-    if parameters_dict["normalization_method"] in ["delayed"]:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
-    else:
+ 
+    try:
         data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=False)
+    except:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
@@ -601,6 +601,7 @@ if __name__ == "__main__":
                    helper.logger(log_file, module_output)
                    sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
                # read file containing peptide list
+               ### ID Mapping ###
                peptide_df = pd.read_csv(parameters_dict["peptide_list_fp"],sep="\t")
                # check if column with peptides and precursors are present in peptide_df
                if parameters_dict["peptide_list_file_peptide_column"] not in peptide_df.columns or parameters_dict["peptide_list_file_precursor_column"] not in peptide_df.columns:
