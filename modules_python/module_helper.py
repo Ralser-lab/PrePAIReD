@@ -1053,7 +1053,7 @@ def get_parser_arguments(parser):
         idmap_fp = ""
     log_file = args.log_file.replace("\\","/")
     counter = args.counter
-    outname = "data_"+"{:02d}".format(counter)+".tsv"
+    outname = "data_"+"{:02d}".format(int(counter))+".tsv"
     return data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, int(counter), outname
 
 def load_data(data_df_fp):
