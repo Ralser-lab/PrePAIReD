@@ -353,7 +353,7 @@ def normalize_median(df):
         (1st dim peptides, 2nd dim samples)
 
     """
-    return df.sub(df.median(axis=0),axis=1)
+    return df.sub(df.median(axis=0),axis=1)+df.median().median()
 
 
 def normalize_mean(df):
@@ -376,7 +376,7 @@ def normalize_mean(df):
         (1st dim peptides, 2nd dim samples)
 
     """
-    return df.sub(df.mean(axis=0),axis=1)
+    return df.sub(df.mean(axis=0),axis=1)+df.mean().mean()
 
 
 
