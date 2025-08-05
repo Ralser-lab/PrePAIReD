@@ -655,8 +655,9 @@ if __name__ == "__main__":
             module_output += "###WARNING###: Normalzation method not implemented. Skipped module."
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
-    except:
+    except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.")
+        helper.logger(log_file, "###ERROR###: "+e)
         sys.exit(1)
 
     # Comparison for mask and logger what changed between both files
