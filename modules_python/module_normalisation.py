@@ -292,9 +292,9 @@ def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_d
     log=""
     # get dataframe with precursors originating from normpeptides_list
     if normlabel is not None:
-        normprecursors_df = data_df.loc[list(filter(lambda x: normlabel in x, id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]))]
+        normprecursors_df = data_df.loc[list(filter(lambda x: normlabel in x, id_mapping_df[id_mapping_df[peptide_col].isin(normpeptides_list)][precursor_col]))]
     else:
-        normprecursors_df = data_df.loc[id_mapping_df[id_mapping_df["Stripped.Sequence"].isin(normpeptides_list)][precursor_col]]
+        normprecursors_df = data_df.loc[id_mapping_df[id_mapping_df[peptide_col].isin(normpeptides_list)][precursor_col]]
     # select a subset of IDs which is present in at least nan_intersect_thresh *100% samples
     if normalization_on_intersecting_precs:
        #extract precursors present over all samples
@@ -353,7 +353,7 @@ def normalize_median(df):
         (1st dim peptides, 2nd dim samples)
 
     """
-    return df.sub(df.median(axis=0),axis=1)
+    return df.sub(df.median(axis=0),axis=1)+df.median().median()
 
 
 def normalize_mean(df):
@@ -376,7 +376,7 @@ def normalize_mean(df):
         (1st dim peptides, 2nd dim samples)
 
     """
-    return df.sub(df.mean(axis=0),axis=1)
+    return df.sub(df.mean(axis=0),axis=1)+df.mean().mean()
 
 
 
@@ -574,8 +574,11 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 
 
 if __name__ == "__main__":
-    
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+ 
+    try:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=False)
+    except:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
@@ -598,6 +601,7 @@ if __name__ == "__main__":
                    helper.logger(log_file, module_output)
                    sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
                # read file containing peptide list
+               ### ID Mapping ###
                peptide_df = pd.read_csv(parameters_dict["peptide_list_fp"],sep="\t")
                # check if column with peptides and precursors are present in peptide_df
                if parameters_dict["peptide_list_file_peptide_column"] not in peptide_df.columns or parameters_dict["peptide_list_file_precursor_column"] not in peptide_df.columns:
@@ -646,10 +650,14 @@ if __name__ == "__main__":
             #### Not properly tested
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing delayed normalization.\n"
             data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
+        else:
+            data_processed_df = data_df
+            module_output += "###WARNING###: Normalzation method not implemented. Skipped module."
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
-    except:
-        helper.logger(log_file, "### ERROR: Module ran into an error.")
+    except Exception as e:
+        helper.logger(log_file, "###ERROR###: Module ran into an error.")
+        helper.logger(log_file, "###ERROR###: "+e)
         sys.exit(1)
 
     # Comparison for mask and logger what changed between both files
@@ -662,12 +670,13 @@ if __name__ == "__main__":
     
     # Save data
     if parameters_dict["normalization_method"] not in ["delayed"]:
-        helper.close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=True)
+        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
     else:
         np.save(os.path.join(out_dir_fp,out_dir_fp.split("/")[-1]+".npy"),data_processed_arr)
         helper.logger(log_file, module_output=module_output)
         # Save mask
         helper.save_mask(masked_df, out_dir_fp, outname)
+        helper.save_mask_description(mask_description_df, out_dir_fp, outname)
         helper.logger(log_file, "Module finished as expected.")
         sys.exit(0)
     

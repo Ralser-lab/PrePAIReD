@@ -18,6 +18,8 @@ Output: Summarised wide-format data
 
 """
 
+# TODO
+# Adjust doc-strings
 
 #general
 import pandas as pd
@@ -36,8 +38,8 @@ from tqdm import tqdm
 
 
 #own scripts
-from Python.Snippets import global_variables as global_variables #kept as placeholder for logging until main is being constructed
-from modules_python import module_helper
+#from Python.Snippets import global_variables as global_variables #kept as placeholder for logging until main is being constructed
+import module_helper as helper 
 
 
 
@@ -409,7 +411,8 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     
     return protein_lfq_df
 
-
+####################
+####################
 
 def weighted_harmonic_mean(x,w=None):
     """
@@ -458,7 +461,7 @@ def geometric_mean(x):
     
 
 
-def summarize_peptides(peptide_profiles,filter_mask,mask_description,top_n_peptides=3,weights=None,pooling="mean",min_peptides=1,group=None):
+def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n_peptides=3,weights=None,pooling="mean",min_peptides=1, seq_col="Precursor.ID", protein_col = "Protein.Group"):
     """
     summarize peptide intensities to protein intensities
     top_n_peptides most abundant, highly correlated and least imputed precursors over samples are summarized to a protein intensity
@@ -472,12 +475,14 @@ def summarize_peptides(peptide_profiles,filter_mask,mask_description,top_n_pepti
     
     Parameters
     ----------
-    peptide_profiles : pd.DataFrame
+    data_df : pd.DataFrame (old: peptide_profiles)
         rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
     filter_mask : pd.DataFrame.
         dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters.
+    module_output: str
+        log string to be filled.
     top_n_peptides : int, optional
         Number of precursors to summarize to protein intensities. The default is 3.
     weights : iterable, optional
@@ -486,118 +491,114 @@ def summarize_peptides(peptide_profiles,filter_mask,mask_description,top_n_pepti
         one of {"mean","hmean","gmean"} to summarize selected precursors to proteins. "hmean" equals harmonic mean, "gmean" equals geometric mean and "mean" the arithmetic mean. The default is "mean".
     min_peptides : int, optional
         require at least min_peptides precursors to calculate a protein intensity, else the protein intensity is set to 0. The default is 1.
-    group : str, optional
-        value in the corresponding multiindex column group. The default is None.
+    seq_col : str
+        name of index level containing precursor Ids. The default is 'Precursor.Id'.
+    protein_col : str
+        name of index level containing protein Ids. The default is 'Protein.Group'.
 
     Returns
     -------
     pg_profiles : pd.DataFrame
         rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
-    filter_mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description: pd.DataFrame.
-        mapping numbers in mask to filters.
+    id_mapping_df_c: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
+    module_output: str
+        log string to be filled.
 
     """
-    pg_profiles=pd.DataFrame(columns=peptide_profiles.columns)
+    
+    pg_profiles_df=pd.DataFrame()
+    
     if weights is None:
         weights=[1,1,1]
-    peptide_profiles.replace(np.nan,0,inplace=True)
+    data_df.replace(np.nan,0,inplace=True)
     print("Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S"))
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n")
-        logfile.write("\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n")
-        if weights is not None:
-            logfile.write("\t\t\t\t- for the summarization precursors were selected by high abundance, correlation and low number of imputed values with following weights: "+", ".join([str(x) for x in weights])+"\n")
-        else:
-            logfile.write("\t\t\t\t- for the summarization precursors were selected by high abundance, correlation and low number of imputed values\n")
-        logfile.close()
-    '''
-    if "sample group" in mask.index:
-        indices = mask.index.drop("sample group")
-    else:
-        indices = mask.index
-    '''
-    #add column in filter_mask with 1 if Precursor contributes to Protein intensity and 0 if not
-    if type(filter_mask.columns)==pd.core.indexes.multi.MultiIndex:
-        filter_mask["Precursor summarized for Protein",group]=0
-    else:
-        filter_mask["Precursor summarized for Protein"]=0
-    indices=peptide_profiles.index
-    print(("Precursor summarized for Protein",group) in filter_mask.columns)
+        
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n"
+    module_output += "\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n"
+    module_output += "\t\t\t\t- for the summarization precursors were selected by high abundance, correlation and low number of imputed values with following weights: "+", ".join([str(x) for x in weights])+"\n"
+
+    indices=data_df.index
+    #filter_mask = pd.DataFrame(columns=["Precursor summarized for Protein"],index=indices, values=0)    
+        
+    # Check if columns are in id_mapping_df
+    if protein_col not in id_mapping_df:
+        module_output += "###ERROR### Group column for summariaztion not found"
+        return data_df, id_mapping_df, module_output
+    
+    if seq_col not in id_mapping_df:
+        module_output += "###ERROR### Sequence column for summariaztion not found"
+        return data_df, id_mapping_df, module_output
+    
+    # add new column to id_mapping_df
+    ##### ID Mapping as output for summarization
+    ######## Add save function
+    id_mapping_df["Summarisation"] = 0
+        
+    pgs_list = id_mapping_df[protein_col].unique()
+    id_mapping_dict = {pg:list(id_mapping_df[id_mapping_df[protein_col]==pg][seq_col]) for pg in pgs_list}
+    
     #for every protein group
-    for pg in indices.get_level_values("Protein.Group").unique():
-        temp_df = peptide_profiles[peptide_profiles.index.get_level_values("Protein.Group")==pg]
-        ##on ranks (Problem: if several precursors are quite similar, the rank is too strict)
-        '''
-        rank_df=pd.DataFrame(index=temp_df.index,columns=["Abundance rank","Correlation rank","imputation rank"])
-        #rank_df["id"]=range(len(rank_df))
-        #abundance level
-        rank_df.loc[temp_df.sum(axis=1).sort_values(ascending=False).index,"Abundance rank"]=range(len(rank_df))
-        #correlation level
-        rank_df.loc[temp_df.T.corr().sum().sort_values(ascending=False).index,"Correlation rank"]=range(len(rank_df))
-        #imputation level
-        '''
-        ##on weighted harmonic mean between normalized abundance, correlation and amount of measured samples
-        hmean_df=pd.DataFrame(index=temp_df.index,columns=["norm. Abundance","norm. Correlation","norm. Imputation"])
-        sums=temp_df.sum(axis=1)
-        corrs=temp_df.T.corr()
-        corrs_hmean=[weighted_harmonic_mean(corrs.loc[x]) for x in corrs.index]
-        temp_mask=filter_mask.loc[temp_df.index].applymap(lambda x: int(str(x).split(".")[-1]))
-        measured_precs=(temp_mask!=mask_description.loc["Imputed","value"]).sum(axis=1)
-        hmean_df["norm. Abundance"]=sums/sums.max() #division by zero if peptide not abundant over all fractions => should be excluded in remove_peptides_with_excessing_nans
-        hmean_df["norm. Correlation"]=corrs_hmean/np.max(corrs_hmean) #division by zero if all precursors correlate zero
-        hmean_df["norm. Imputation"]=measured_precs/measured_precs.max() #division by zero if all values are imputed for precursor => should be excluded in remove_peptides_with_excessing_nans
-        hmean_df["hmean"]=[weighted_harmonic_mean(hmean_df.loc[x],weights) for x in hmean_df.index]
-        temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].sum()
-        #set indices for filter_mask
-        if pooling=="mean":
-            mask_indices=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].index
-        elif pooling=="hmean": 
-            prec_df=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]]
-            mask_indices=prec_df.index
-        elif pooling=="gmean":
-            prec_df=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]]
-            mask_indices=prec_df.index
-        if len(temp_df)>=min_peptides:
+    for pg in pgs_list:
+        
+        precursors_list = [precursor for precursor in id_mapping_dict[pg] if precursor in indices]
+        
+        if precursors_list:
+            temp_df = data_df.loc[precursors_list]
+            
+            ##on weighted harmonic mean between normalized abundance, correlation and amount of measured samples
+            hmean_df=pd.DataFrame(index=temp_df.index,columns=["norm. Abundance","norm. Correlation","norm. Imputation"])
+            sums=temp_df.sum(axis=1)
+            corrs=temp_df.T.corr()
+            corrs_hmean=[weighted_harmonic_mean(corrs.loc[x]) for x in corrs.index]
+            temp_mask=filter_mask.loc[temp_df.index].map(lambda x: int(str(float(x)).split(".")[-1]))
+            measured_precs=(temp_mask!=0).sum(axis=1)
+            
+            hmean_df["norm. Abundance"]=sums/sums.max() #division by zero if peptide not abundant over all fractions => should be excluded in remove_peptides_with_excessing_nans
+            hmean_df["norm. Correlation"]=corrs_hmean/np.max(corrs_hmean) #division by zero if all precursors correlate zero
+            hmean_df["norm. Imputation"]=measured_precs/measured_precs.max() #division by zero if all values are imputed for precursor => should be excluded in remove_peptides_with_excessing_nans
+            hmean_df["hmean"]=[weighted_harmonic_mean(hmean_df.loc[x],weights) for x in hmean_df.index]
+            
+            ##### Check what this coulmn is doing
+            temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].sum()
+        
+            #set indices for filter_mask
             if pooling=="mean":
-                pg_profiles.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
-            elif pooling=="hmean":
-                pg_profiles.loc[pg]=[weighted_harmonic_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
-            elif pooling=="gmean":
-                pg_profiles.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
-            if type(filter_mask.columns)==pd.core.indexes.multi.MultiIndex:
-                filter_mask.loc[mask_indices,("Precursor summarized for Protein",group)]=1
-            else:
-                filter_mask.loc[mask_indices,"Precursor summarized for Protein"]=1
-        else: #protein excluded due to less than min_peptides precursors
-            if type(filter_mask.columns)==pd.core.indexes.multi.MultiIndex:
-                filter_mask.loc[mask_indices,(peptide_profiles.columns,group)]=filter_mask.loc[mask_indices,(peptide_profiles.columns,group)].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-                filter_mask.loc[mask_indices,(peptide_profiles.columns,group)]=filter_mask.loc[mask_indices,(peptide_profiles.columns,group)].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-            else:
-                filter_mask.loc[mask_indices,peptide_profiles.columns]=filter_mask.loc[mask_indices,peptide_profiles.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-                filter_mask.loc[mask_indices,peptide_profiles.columns]=filter_mask.loc[mask_indices,peptide_profiles.columns].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-    print("End Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S"))
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write(time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n")
-        logfile.close()
-    pg_profiles.index.name="Protein.Group"
+                mask_indices=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].index
+            else: 
+                prec_df=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]]
+                mask_indices=prec_df.index
+               
+            id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
+            id_mapping_df_c.loc[mask_indices,"Summarisation"] = 1
+            
+            if len(temp_df)>=min_peptides:
+                if pooling=="mean":
+                    pg_profiles_df.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
+                elif pooling=="hmean":
+                    pg_profiles_df.loc[pg]=[weighted_harmonic_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
+                elif pooling=="gmean":
+                    pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
+                #filter_mask.loc[mask_indices,data_df.columns]="s"
+                
+                
+            #else: #protein excluded due to less than min_peptides precursors
+            #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
+            #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n"
+    pg_profiles_df.index.name="Protein.Group"
     #add gene names
-    trans_df=peptide_profiles.reset_index().set_index("Protein.Group")
-    trans_df=trans_df[~trans_df.index.duplicated(keep="first")] #remove duplicated PGs
-    pg_profiles["Genes"]=trans_df.loc[pg_profiles.index,"Genes"]
-    pg_profiles=pg_profiles.reset_index().set_index(["Genes","Protein.Group"])
+    #trans_df=data_df.reset_index().set_index("Protein.Group")
+    #trans_df=trans_df[~trans_df.index.duplicated(keep="first")] #remove duplicated PGs
+    #pg_profiles["Genes"]=trans_df.loc[pg_profiles.index,"Genes"]
+    #pg_profiles=pg_profiles.reset_index().set_index(["Genes","Protein.Group"])
     #pg_profiles.columns=pg_profiles.columns.get_level_values(0)
     #pg_profiles.columns.name=None
-    return(pg_profiles,filter_mask,mask_description)
-    
-    
-    
+    #return(pg_profiles,filter_mask,mask_description,module_output)
 
+    return(pg_profiles_df.copy(),id_mapping_df_c,module_output)
 
-def transform_profiles_to_longformat_table(profiles):
+def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
     """
     Reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns.
     
@@ -607,11 +608,19 @@ def transform_profiles_to_longformat_table(profiles):
     ----------
     profiles : pd.DataFrame
         rows: precursors, columns: samples
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    seq_col : str
+        name of index level containing precursor Ids. The default is 'Precursor.Id'.
+    protein_col : str
+        name of index level containing protein Ids. The default is 'Protein.Group'.
 
     Returns
     -------
     lf_df : pd.DataFrame
         columns: [ID, sample, value]
+    id_mapping_df_c: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
 
     """
     '''
@@ -621,22 +630,21 @@ def transform_profiles_to_longformat_table(profiles):
     ap_df["filename"]=np.repeat(profiles.columns.get_level_values("sample").tolist(),len(profiles))
     ap_df["prec_intensity"]=profiles.melt()["value"]
     '''
-    ids=profiles.index.names
-    profiles.reset_index(inplace=True)
-    if type(profiles.columns)==pd.core.indexes.multi.MultiIndex:
-        col_level=0 
-    else:
-        col_level=None
-    lf_df=profiles.melt(id_vars=ids,col_level=col_level)
-    #lf_df.drop_duplicates(inplace=True)
-    #lf_df.rename(columns={"value":"Precursor.Quantity"},inplace=True)
-    return(lf_df)
+    
+    #profiles.reset_index(inplace=True)
+    lf_df=profiles.melt(ignore_index=False)
+    lf_df.reset_index(inplace=True)
+    lf_df.columns = [seq_col,"sample","value"]
+    id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
+    ### Add protein_col
+    lf_df[protein_col] = [id_mapping_df_c.loc[lf_df.loc[index,seq_col],protein_col] for index in lf_df.index]
+    return(lf_df, id_mapping_df_c)
     
 
 
 
 #props to Franziska Kistner and Vadim Demichev for the MaxLFQ implementation+wrapper
-def MaxLFQ_summarization(peptide_profiles,unlog=False, seq_col="Precursor.Id", protein_col="Protein.Group", run_col="sample"):
+def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precursor.Id", protein_col="Protein.Group"):
     """
     Summarize precursors to protein intensities using MaxLFQ (Cox et al., 2014), implemented by Franziska Kistner with C++
     
@@ -644,93 +652,138 @@ def MaxLFQ_summarization(peptide_profiles,unlog=False, seq_col="Precursor.Id", p
     
     Parameters
     ----------
-    peptide_profiles : pandas.DataFrame
+    data_df : pandas.DataFrame
         rows: precursors, columns: samples
-    unlog : bool
-        If True, reverse log-transformation to basis 2. Default is False.
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    module_output: str
+        log string to be filled.
     seq_col : str
         name of index level containing precursor Ids. The default is 'Precursor.Id'.
     protein_col : str
         name of index level containing protein Ids. The default is 'Protein.Group'.
-    run_col : str
-        name of column level containing sample/run Ids. The default is 'sample'.
+
     Returns
     -------
-    pd.DataFrame
-
+    data_prot_df : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    module_output: str
+        log string to be filled.
+        
     """
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write("\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing Precursors to Protein using MaxLFQ...\n")
-        logfile.close()
+    
+    module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing Precursors to Protein using MaxLFQ...\n"
+        
     #remember all multi-level ids on protein/gene level
-    ids=peptide_profiles.index.names
-    protein_id_types=set(ids) & set(["Protein.Group","Protein.Ids","Protein.Names","Genes"])
-    gene_prot_df=pd.DataFrame(columns=list(protein_id_types))
-    for id_type in protein_id_types:
-        gene_prot_df[id_type]=peptide_profiles.index.get_level_values(id_type)
-    gene_prot_df.drop_duplicates(inplace=True)
+    #ids=peptide_profiles.index.names
+    #protein_id_types=set(ids) & set(["Protein.Group","Protein.Ids","Protein.Names","Genes"])
+    #gene_prot_df=pd.DataFrame(columns=list(protein_id_types))
+    #for id_type in protein_id_types:
+    #    gene_prot_df[id_type]=peptide_profiles.index.get_level_values(id_type)
+    #gene_prot_df.drop_duplicates(inplace=True)
     #initiate variables for MaxLFQ
-    n_runs=len(peptide_profiles.columns)
+    n_runs=len(data_df.columns)
     #transform to long format
-    if unlog:
-        peptide_profiles=module_helper.unlog_transform_intensities(peptide_profiles)
-    lf_df=transform_profiles_to_longformat_table(peptide_profiles.copy())
+    data_df=helper.unlog_transform_intensities(data_df)
+    lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
     lf_df.replace(0,1,inplace=True) 
-    #run_col = "sample"
-    #protein_col = "Protein.Group"
-    #seq_col = "Precursor.Id"
-    quantity_col = "value"
+    #quantity_col = "value"
     #caclulate maxlfq
     #log10_protein_profiles = estimate_protein_profile_from_dataframe(precursor_df=lf_df, run_id_column=run_col, protein_accession_column=protein_col, precursor_seq_column=seq_col, quantity_column=quantity_col, n_runs=n_runs)
-    log10_protein_profiles = estimate_protein_profile(precursor_df=lf_df, run=run_col, accession=protein_col, sequence=seq_col, ms2_quantity=quantity_col, expected_n_runs=n_runs)
-    protein_profiles=10**log10_protein_profiles
+    log10_protein_profiles = estimate_protein_profile(precursor_df=lf_df, run="sample", accession=protein_col, sequence=seq_col, ms2_quantity="value", expected_n_runs=n_runs)
+    data_prot_df=10**log10_protein_profiles
     #add all remaining IDs
-    protein_profiles.reset_index(inplace=True)
-    gene_prot_df.set_index(protein_col,inplace=True)
-    protein_id_types.remove(protein_col)
-    for id_type in protein_id_types:
-        protein_profiles[id_type] = gene_prot_df.loc[protein_profiles[protein_col], id_type].tolist()
-    protein_profiles.set_index(list(set(ids) & set(["Protein.Group","Protein.Ids","Protein.Names","Genes"])),inplace=True)
+    #data_df.reset_index(inplace=True)
+    #gene_prot_df.set_index(protein_col,inplace=True)
+    #protein_id_types.remove(protein_col)
+    #for id_type in protein_id_types:
+    #    protein_profiles[id_type] = gene_prot_df.loc[protein_profiles[protein_col], id_type].tolist()
+    #protein_profiles.set_index(list(set(ids) & set(["Protein.Group","Protein.Ids","Protein.Names","Genes"])),inplace=True)
     #set proteins whose all precursors had zero values back to zero
-    peptide_sums=peptide_profiles.groupby(axis=0,level="Protein.Group").sum()
-    peptide_sums.columns=peptide_sums.columns.get_level_values(run_col)
-    protein_profiles[peptide_sums==0]=0
+    
+    data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
+    
+    peptide_sums = data_df.groupby(by="index",level=0).sum()
+    
+    # Reorder to remove temporary replacement
+    indices_prot = [index for index in peptide_sums.index if index in data_prot_df.index]
+    columns_prot = [column for column in peptide_sums.columns if column in data_prot_df.columns]
+    peptide_sums = peptide_sums.loc[indices_prot,columns_prot]
+    
+    #peptide_sums.columns=peptide_sums.columns.get_level_values(run_col)
+    data_prot_df[peptide_sums==0]=0
     #add groups to protein profiles 
-    protein_profiles=protein_profiles[peptide_profiles.columns.get_level_values(run_col)]
-    protein_profiles.columns=peptide_profiles.columns
+    #protein_profiles=protein_profiles[peptide_profiles.columns.get_level_values(run_col)]
+    #protein_profiles.columns=peptide_profiles.columns
     #protein_profiles.columns.names=peptide_profiles.columns.names
-    if global_variables.logfilename is not None:
-        logfile = open(global_variables.logfilename, "a")
-        logfile.write("\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarization done.\n")
-        logfile.close()
-    return(protein_profiles)
+    
+    module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarization done.\n"
+    return(data_prot_df, module_output)
 
-
-
-def precursor_sum(peptide_profiles,protein_levels=["Protein.Group","Genes"]):
+def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id", protein_col="Protein.Group"):
     """
     sums precursor intensities to obtain protein quantities.
 
-    author: BZ
+    author: BZ/OL
     
     Parameters
     ----------
-    peptide_profiles : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
-    protein_levels : TYPE, optional
-        name of index level(s) containing protein Ids. The default is ["Protein.Group","Genes"].
+    data_df : pandas.DataFrame
+        rows: precursors, columns: samples
+    id_mapping_df: pd.DataFrame
+        information on mapping from precursor to protein (group) level. rows denote individual precursors
+    module_output: str
+        log string to be filled.
+    seq_col : str
+        name of index level containing precursor Ids. The default is 'Precursor.Id'.
+    protein_col : str
+        name of index level containing protein Ids. The default is 'Protein.Group'.
 
     Returns
     -------
-    pd.DataFrame.
+    data_prot_df : pd.DataFrame
+        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+    module_output: str
+        log string to be filled.
 
     """
-    protein_profiles=peptide_profiles.groupby(axis=0,level=protein_levels).sum()
-    if global_variables.logfilename is not None:
-        logfile=open(global_variables.logfilename,"a")
-        logfile.write("\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n")
-        logfile.close()
-    return(protein_profiles)
-
+    id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
+    data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
     
+    data_df = data_df.groupby(by="index",level=0).sum()
+    
+    module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n"
+    
+    return(data_df, module_output)
+
+
+
+
+if __name__ == "__main__":
+    
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", metadata=True, id_mapping=True, mask=True)
+    
+    if parameters_dict["summarization_method"]=="MaxLFQ":
+        data_processed_df, module_output = MaxLFQ_summarization(data_df, id_mapping_df, module_output, 
+                                                                seq_col=parameters_dict["seq_col"], 
+                                                                protein_col = parameters_dict["protein_col"])
+    elif parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+        data_processed_df, id_mapping_df, module_output = topN_summarization(data_df, id_mapping_df, masked_df, module_output, 
+                                                                             top_n_peptides=parameters_dict["top_n_peptides"],
+                                                                             weights=parameters_dict["weights"],
+                                                                             pooling=parameters_dict["summarization_method"],
+                                                                             min_peptides=parameters_dict["min_peptides"], 
+                                                                             seq_col=parameters_dict["seq_col"], 
+                                                                             protein_col = parameters_dict["protein_col"])
+    elif parameters_dict["summarization_method"]=="sum":
+        data_processed_df, module_output = precursor_sum(data_df, id_mapping_df, module_output, 
+                                                         seq_col=parameters_dict["seq_col"], 
+                                                         protein_col = parameters_dict["protein_col"])
+    else:
+        data_processed_df = data_df
+        module_output += "###WARNING###: Summarization method not found. Skipped module."
+        
+    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+        id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
+        
+    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)

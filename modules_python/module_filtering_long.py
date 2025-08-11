@@ -10,6 +10,7 @@ functions:
     - select_filtering_columns: provides based on applied filters a pre-selection of column names to read from the DIA-NN output report.tsv to save RAM
     - filtering: apply filtering on DIA-NN output report.tsv
     (- filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used)
+    - name_unknown_proteins: replaces NaN in id_mapping_df[protein_col], i.e. renames missing protein origins.
     (- create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime)
     - long_to_wide _format: Transforms long format data frame to wide format
 
@@ -23,8 +24,6 @@ variable names + types
     int/float/bool/str: *
     filenames: *_fp
 
-#TODO
-# - rename missing uniProt IDs and Genes
 
 """
 # %%
@@ -34,7 +33,8 @@ import sys
 import pandas as pd
 import numpy as np
 import time
-#from modules_python import module_helper
+import os
+#from modules_python import module_helper as helper
 import module_helper as helper
 
 
@@ -181,7 +181,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if intersect_files.sum() == 0:
             intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
         if intersect_files.sum() == 0:
-            log += "###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
+            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
             #sys.exit("###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
             return([None,None,None,log])
         input_df = input_df[intersect_files]
@@ -210,7 +210,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_proteotypic","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
     # FILTER BY Q-VALUE
     # exclude by q-value threshold for gene group AND precursor
     if filters_dict["filter_by_qvalue"]:
@@ -225,7 +225,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_q_value","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_global_qvalue"]:
         if "Global.Q.Value" in input_df.columns:
             if keep_track:
@@ -238,7 +238,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_global_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_gg_qvalue"]:
         if "GG.Q.Value" in input_df.columns:
             if keep_track:
@@ -251,7 +251,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_gg_qvalue","number of remaining precursors"]=len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_pg_qvalue"]:
         if "PG.Q.Value" in input_df.columns:
             if keep_track:
@@ -264,7 +264,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_pg_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_p_qvalue"]:
         if "Protein.Q.Value" in input_df.columns:
             if keep_track:
@@ -277,7 +277,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_p_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_global_pg_qvalue"]:
         if "Global.PG.Q.Value" in input_df.columns:
             if keep_track:
@@ -290,7 +290,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of remaining precursors"]=len(input_df)
             len_input_df_after=len(input_df)
         else:
-            log += "\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
     if filters_dict["filter_by_lib_qvalue"]:
         if "Lib.Q.Value" in input_df.columns:
             if keep_track:
@@ -316,7 +316,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
 
     # FILTER BY PEP
     # exclude rows with posterior error probability (PEP) for precursor identification exceeding pep_thresh
@@ -332,13 +332,13 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_PEP","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
+            log += "\t\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
     # FILTER ON MS-LEVEL
     # exclude rows with correlation between MS1 and MS2 chromatograms below MScorr_thresh
     if filters_dict["filter_by_MScorr"]:
         if "Ms1.Profile.Corr" in input_df.columns:
             if keep_track:
-                rows = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][input_id_col].itertuples(index=False).tolist()
+                rows = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][input_id_col].tolist()
                 cols = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][diann_sample_column].tolist()
                 for r in range(len(rows)):
                     mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Ms1.Profile.Corr","value"]
@@ -347,7 +347,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_MScorr","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
+            log += "\t\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
     # exclude rows with MS2 evidence below evidence_thresh
     if filters_dict["filter_by_evidence"]:
         if "Mass.Evidence" in input_df.columns:
@@ -361,7 +361,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_evidence","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMass.Evidence not in input_df, filter skipped\n"
+            log += "\t\t\t\tMass.Evidence not in input_df, filter skipped\n"
     if filters_dict["filter_by_MScorr_evidence_combined"]:
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
@@ -372,7 +372,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"] = len(input_df)
             len_input_df_after = len(input_df)
         else:
-            log += "\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
+            log += "\t\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
     #filter out precursors with zero value
     if filters_dict["filter_by_zero_values"]:
         if keep_track:
@@ -389,8 +389,9 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during filtering of input_df\n\n"
     log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
     if input_df.index.tolist() == []:
-        log += "\t\t\tFiltered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
+        log += "\t\t\t\t###WARNING### Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
     return([input_df,mask_df,mask_description_df,log])
+
 
 
 #Construction site, improve if needed
@@ -436,7 +437,48 @@ def filtering_peptide_specific(file, filter_mask, mask_description, filter_by_pr
     return(file)
 '''
 
+#Not Tested #TODO
+def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"], protein_col="Protein.Group", replace_id_col="Protein.Ids"):
+    """
+    Replaces NaN in protein_col of id_mapping_df with values from the column replace_id_col in the dataframe from which id_mapping was initially generated (file at input_fp).
+    Remaining NaN are replaced with "UnknownProteinX" where X is a unique integer, thus loosing the information whether Precursors with missing protein_col belonged to the same protein.
 
+    Parameters
+    ----------
+    id_mapping_df : pd.DataFrame
+        DataFrame collecting IDs such as Gene Names or Protein Groups for Precursors
+    input_fp : str
+        path and filename of a file mapping Precursors in id_mapping_df to other IDs, e.g. the DIA-NN output report.tsv.
+    ids_list : list, optional
+        List of columns in id_mapping_df used to uniquely identify a precursor. The default is ["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"].
+    protein_col : str, optional
+        Name of the column in id_mapping_df and the data stored at input_fp with missing IDs which are to be replaced. The default is "Protein.Group".
+    replace_id_col : str, optional
+        Name of the column in the data stored at input_fp to be used for replacement of missing ids in id_mapping_df[protein_col]. The default is "Protein.Ids".
+
+    Returns
+    -------
+    id_mapping_df : pd.DataFrame
+        DataFrame collecting IDs such as Gene Names or Protein Groups for Precursors.
+
+    """
+    #define columns needed from input
+    ids_list = list(set([protein_col] + ids_list))
+    file_columns = list(set([replace_id_col] + ids_list))
+    #read input to find possible id translation
+    trans_df = read_input(input_fp, file_columns=file_columns).set_index(ids_list)
+    #replace NaN in protein_col with Protein.Ids from input
+    protein_groups = [trans_df.loc[x,replace_id_col] if pd.isna(x[protein_col]) else x for x in id_mapping_df[ids_list]]
+    #if there are still NaN, replace them with UnknownProtein + some integer, 
+    i=1
+    for x in range(len(protein_groups)):
+        if pd.isna(protein_groups[x]):
+            protein_groups[x] = "UnknownProtein"+str(i)
+            i+=1
+    #assign new values to initial mapping
+    id_mapping_df[protein_col] = protein_groups
+    return(id_mapping_df)
+         
 #DEPRECATED
 '''
 #error in "Assigning measured proteins [...]" ff during function call if ids in profile_df does not match ids in filter_mask
@@ -658,27 +700,29 @@ if __name__ == "__main__":
         except (SyntaxError, NameError): #if type==str
             parameters_dict[x[0]] = x[1]
     '''
+    
+    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=True, id_mapping=False, mask=False, return_data_fp=True)
 
-    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=False, id_mapping=False, mask=False, return_data_fp=True)
-
-    # Load metadata
-    metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
-                                              metadata_sheet=parameters_dict["metadata_sheet"], 
-                                              filename_col=parameters_dict["metadata_filename_column"], 
-                                              encoding=parameters_dict["metadata_encoding"])
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
-    if not metadata_df:
+    if metadata_df is None:
         sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        
-    
+
+    # Log parameters
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
+    log += "\nParameters\n------------\n"
+    log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    log += "\n------------\n"  
+    helper.logger(log_file, module_output=log)
+         
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
     input_id_col = ids_list[0]
     
+   
     
     #DIA-NN
     if parameters_dict["input_origin"]=="diann":
@@ -688,17 +732,16 @@ if __name__ == "__main__":
                                                      values_col=parameters_dict["input_values_column"],
                                                      input_filename_col=parameters_dict["input_filename_column"])
     
-    
-        # Load input file
-        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + parameters_dict["input_fp"] + "\n"
-        helper.logger(log_file,log)
+        
+        
         try:
-            input_df = read_input(filename=parameters_dict["input_fp"], 
-                                  file_columns_list=file_columns_list)
+            #Loading input file
+            log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + "\n"
+            helper.logger(log_file,log)
+            input_df = read_input(filename=data_df_fp, file_columns_list=file_columns_list)
         except KeyError:
             #read complete input
-            input_df = read_input(filename=parameters_dict["input_fp"], 
-                                  file_columns_list=None)
+            input_df = read_input(filename=data_df_fp, file_columns_list=None)
             #identify missing columns which lead to KeyError; DIA-NN specific!
             missing_cols_set = set(file_columns_list) - set(input_df.columns)
             columns_filter_dict = {"Proteotypic":"filter_proteotypic",
@@ -712,10 +755,11 @@ if __name__ == "__main__":
                                    "PEP":"filter_by_PEP",
                                    "Ms1.Profile.Corr":"filter_by_MScorr",
                                    "Mass.Evidence":"filter_by_evidence"}
-            if missing_cols_set - set(parameters_dict.keys()) == set():
-                #switch off filters linked to missing columns 
-                parameters_dict[columns_filter_dict[missing_cols_set]] = False
-                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter(s) " + columns_filter_dict[missing_cols_set] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
+            if missing_cols_set - set(columns_filter_dict.keys()) == set():
+                #switch off filters linked to missing columns
+                for missing_col in missing_cols_set:
+                    parameters_dict[columns_filter_dict[missing_col]] = False
+                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter " + columns_filter_dict[missing_col] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
             if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
                 parameters_dict["filter_by_MScorr_evidence_combined"]=False
             else:
@@ -730,9 +774,17 @@ if __name__ == "__main__":
         
         # Extract ID mapping
         id_mapping_df = input_df[ids_list].drop_duplicates()
-        
+
+        # Rename missing values in protein_col
+        if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
+            id_mapping_df = name_unknown_proteins(id_mapping_df=id_mapping_df,
+                                                  input_fp=data_df_fp, 
+                                                  ids_list=ids_list, 
+                                                  protein_col=parameters_dict["protein_col"], 
+                                                  replace_id_col=parameters_dict["alternative_protein_col"])
+                 
         # Precursor filtering (DIA-NN specific)
-        filtered_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
+        input_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
                                                                   input_id_col=input_id_col, 
                                                                   metadata_df=metadata_df, 
                                                                   filters_dict=parameters_dict, 
@@ -743,7 +795,7 @@ if __name__ == "__main__":
         pass # adjust here for other programs
         
     # Check if filtering was successful, else pass error to log and exit    
-    if filtered_df:
+    if not input_df.empty:
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
         helper.logger(log_file,log)
     else:
@@ -753,9 +805,9 @@ if __name__ == "__main__":
     
     # Rename filter_mask columns
     mask_df = helper.rename_filter_mask_columns(mask_df, 
-                                                       metadata_df, 
-                                                       filename_col=parameters_dict["metadata_filename_column"], 
-                                                       sample_col=parameters_dict["metadata_sample_column"])
+                                                metadata_df, 
+                                                filename_col=parameters_dict["metadata_filename_column"], 
+                                                sample_col=parameters_dict["metadata_sample_column"])
     
     # Long to wide format
     wide_df, mask_df = long_to_wide_format(input_df,
@@ -768,19 +820,20 @@ if __name__ == "__main__":
                                   metadata_filename_col=parameters_dict["metadata_filename_column"],
                                   metadata_sample_col=parameters_dict["metadata_sample_column"])
 
-
+    # Log Transformation (Base 2)
+    wide_df = helper.log_transform(wide_df.replace(0,np.nan), base=2)
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
+    helper.logger(log_file,log)
     
     # Save data
-    id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t")
+    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
     #wide_df.to_csv(out_dir_fp + "data_" + str(counter) + ".tsv", sep="\t")
     #mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
+    #mask_description_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask_description.tsv", sep="\t")
     
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + out_dir_fp + "data_" + str(counter) + ".tsv\n\t\t\tmask saved successfully to " + out_dir_fp + "data_mask_" + str(counter) + ".tsv\n\t\t\tand table for ID mapping saved to " + out_dir_fp + "id_mapping.tsv\n"
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t\t\tmodule_filtering_long ends without errors.\n"
-    #helper.logger(log_file,log)
-    #sys.exit(0)
-    helper.close_module(wide_df, mask_df, log_file, log, out_dir_fp, outname, mask=True)
-
+    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n\t\t\tmask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n\t\t\tand table for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
+    helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True)
+  
 
 
 

@@ -43,6 +43,7 @@ import time
 import argparse
 import json
 import sys
+import itertools
 
 def zscore_transform(df, robust=False, axis:int=0):
     """
@@ -936,7 +937,7 @@ def annotate_metadata_to_profiles(profiles, metadata_df, sample_col="Sample.ID")
     return(profiles)
 
 
-def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_values,default_impu_method="knn",data_df=None,metadata_sample_column="Sample.Name"):
+def create_imputation_table(metadata_df,sample_hierarchies,missingness_thresholds="1/3;0.3;0.25_0.3",data_df=None,metadata_sample_column="Sample.Name",default_impu_method_ProtAbsence="knn",default_impu_method_MAR="knn",default_impu_method_MNAR="minval-noise",default_impu_method_ProtAbsenceMAR="knn",default_impu_method_ProtAbsenceMNAR="minval-noise",default_knn_k=15):
     """
     Create a template for an involved table to define different impuation methods across sample and precursor hierarchies.
 
@@ -946,86 +947,55 @@ def create_imputation_table(metadata_df,sample_hierarchies,precursor_hierarchy_v
         Metadata dataframe mapping hierarchies to samples.
     sample_hierarchies : list
         list with names of columns in metadata_df to do hierarchical imputation across.
-    precursor_hierarchy_values : list
-        list with thresholds for precursor missingness.
-    default_impu_method : str, optional
-        a default imputation method. The default is "knn".
+    missingness_thresholds : str
+        str with thresholds for precursor missingness; ";" separates between sample_hierarchies, "_" separates within sample hierarchy. The default is "1/3;0.3;0.3_0.25".
     data_df : pd.DataFrame or None, optional
         wide format dataframe with IDs as rows and samples as columns, used to obtain samples in experiment; if None, all samples from metadata_df are taken into account. The default is None.
     metadata_sample_column : str, optional
         Name of the column containing sample names matching to columns in data_df. The default is "Sample.Name".
-
+    default_impu_method_ProtAbsence : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence'. The default is 'knn'.
+    default_impu_method_MAR : str, optional
+        name of the imputation method used for missingness by 'MAR'. The default is 'knn'.
+    default_impu_method_MNAR : str, optional
+        name of the imputation method used for missingness by 'MNAR'. The default is 'minval-noise'.
+    default_impu_method_ProtAbsenceMAR : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/MAR'. The default is 'knn'.
+    default_impu_method_ProtAbsenceMNAR : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/MNAR'. The default is 'minval-noise'.
+    default_knn_k : int, optional
+        Default value for k used for kNN imputation.
+        
     Returns
     -------
     pd.DataFrame.
 
     """
     
-    if data_df:
+    if data_df is not None:
         samples = data_df.columns
     else:
         samples = metadata_df[metadata_sample_column]
-    impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["precursor_hierarchy_values","missingness_type","missingness_type_int","imputation_method","k"]) #TODO #add parameters for imputation methods
+    impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["missingness_thresh","missingness_type","imputation_method","k"]) #TODO #add parameters for imputation methods
     #create dataframe storing classes (integers) for different missingness types
-    missingness_types_df = pd.DataFrame(data=range(4),index=["Missing","MAR","MNAR","MCAR"], columns=["missingness_type_int"])
-    missingness_types_df.index.name="missingness_type" 
-
-    #generate list with dictionaries through hierarchies
-    all_sample_hierarchy_values_dicts_list = list()
-    sample_hierarchies_stack = np.copy(sample_hierarchies)
-    while len(sample_hierarchies_stack)>1:
-        sample_hierarchy = sample_hierarchies_stack[0]
-        lower_sample_hierarchy = sample_hierarchies_stack[1]
-        sample_hierarchies_stack = sample_hierarchies_stack[1:]
-        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].unique()
+    missingness_types = ["ProtAbsence","MAR","MNAR","ProtAbsence/MAR","ProtAbsence/MNAR"]
+    
+    for s,sample_hierarchy in enumerate(sample_hierarchies):
+        sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].dropna().unique()
         sample_hierarchy_values = np.sort(sample_hierarchy_values)
-        sample_hierarchy_value_dict = dict()
-        for sample_hierarchy_value in sample_hierarchy_values:
-            lower_sample_hierarchy_values = metadata_df.loc[(metadata_df[metadata_sample_column].isin(samples)) & (metadata_df[sample_hierarchy]==sample_hierarchy_value)][lower_sample_hierarchy].unique()
-            lower_sample_hierarchy_values = np.sort(lower_sample_hierarchy_values)
-            sample_hierarchy_value_dict[sample_hierarchy_value] = lower_sample_hierarchy_values
-        all_sample_hierarchy_values_dicts_list.append(sample_hierarchy_value_dict)
-    all_sample_hierarchy_values_dicts_list = [{"":list(all_sample_hierarchy_values_dicts_list[0].keys())}] + all_sample_hierarchy_values_dicts_list
-        
-    # with help of dictionaries fill impu_table_df
-    k = [0] * len(sample_hierarchies) #indexes for dictionaries
-    i = 0
-    while True:
-        	#set new keys
-        keys = [""]
-        #fill keys over hierarchies
-        for s in range(len(sample_hierarchies)):
-            '''
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-1]]):
-                k[s] = 0
-                k[s-1] +=1
-            '''
-            keys.append(all_sample_hierarchy_values_dicts_list[s][keys[-1]][k[s]])
-            if s == len(sample_hierarchies)-1:
-                k[s] += 1
-            '''
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[-2]]):
-                k[s] = 0
-                k[s-1] +=1
-            '''
-        for precursor_hierarchy_value in precursor_hierarchy_values:
-            for missingness_type in missingness_types_df.index:
-                impu_table_df.loc[i,sample_hierarchies] = keys[1:]
-                impu_table_df.loc[i,"precursor_hierarchy_values"] = precursor_hierarchy_value
-                impu_table_df.loc[i,"missingness_type"] = missingness_type
-                impu_table_df.loc[i,"missingness_type_int"] = missingness_types_df.loc[missingness_type,"missingness_type_int"]
-                i += 1
-        #update k
-        for s in range(len(sample_hierarchies)-1,-1,-1):
-            if k[s] >= len(all_sample_hierarchy_values_dicts_list[s][keys[s]]):
-                k[s] = 0
-                k[s-1] +=1
-        #break while loop if covered all values from highest hierarchy
-        if keys[1] == len(all_sample_hierarchy_values_dicts_list[0][keys[0]]):
-            break
-    #set default parameters
-    impu_table_df["imputation_method"] = default_impu_method
-    #TODO
+        missingness_thresholds_s = [eval(x) for x in missingness_thresholds.split(";")[s].split("_")] # to convert e.g. 1/3 to float
+        impu_table_part_df = pd.DataFrame(columns=impu_table_df.columns,index=range(len(sample_hierarchy_values)*len(missingness_types)*len(missingness_thresholds_s)))
+        impu_table_part_df[sample_hierarchy] = list(itertools.chain.from_iterable([[x]*len(missingness_types)*len(missingness_thresholds_s) for x in sample_hierarchy_values]))
+        impu_table_part_df["missingness_thresh"] = list(itertools.chain.from_iterable([[x]*len(missingness_types) for x in missingness_thresholds_s] * len(sample_hierarchy_values)))
+        impu_table_part_df["missingness_type"] = missingness_types * len(missingness_thresholds_s) * len(sample_hierarchy_values)
+        impu_table_df = pd.concat([impu_table_df,impu_table_part_df],axis=0,ignore_index=True)
+    #set default parameter
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence","imputation_method"] = default_impu_method_ProtAbsence
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MAR","imputation_method"] = default_impu_method_ProtAbsenceMAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MNAR","imputation_method"] = default_impu_method_ProtAbsenceMNAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="MAR","imputation_method"] = default_impu_method_MAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="MNAR","imputation_method"] = default_impu_method_MNAR
+    impu_table_df.loc[impu_table_df["imputation_method"]=="knn","k"] = default_knn_k
     return(impu_table_df)
 
 def logger(log_file, module_output=str):
@@ -1083,7 +1053,7 @@ def get_parser_arguments(parser):
         idmap_fp = ""
     log_file = args.log_file.replace("\\","/")
     counter = args.counter
-    outname = "data_"+str(counter)+".tsv"
+    outname = "data_"+"{:02d}".format(int(counter))+".tsv"
     return data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, int(counter), outname
 
 def load_data(data_df_fp):
@@ -1102,7 +1072,7 @@ def get_seed(parameters_dict, counter):
     return parameters_dict["seed"] + counter
 
 def add_parameters_to_log(log_file, module, parameters_dict):
-    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started\n"
+    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started.\n"
     module_output += "Parameters\n------------\n"
     for key,value in parameters_dict.items():
         module_output += str(key)+"\t\t\t"+str(value)+"\n"
@@ -1112,18 +1082,26 @@ def add_parameters_to_log(log_file, module, parameters_dict):
     return ""
 
 ### Load Metadata without index
-def load_metadata(meta_df_fp):
+""""
+def load_metadata(meta_df_fp, encoding="utf-8"):
     return pd.read_csv(meta_df_fp,sep="\t")
-
+"""
 ### Load Mask
 def load_mask(data_df_fp):
     return pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
 
+def load_mask_description(data_df_fp):
+    return pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
+	
 ### Save mask
 def save_mask(masked_df, out_dir_fp, outname):
     masked_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask.tsv"),sep="\t")
     return
-    
+
+def save_mask_description(mask_description_df, out_dir_fp, outname):
+    mask_description_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask_description.tsv"),sep="\t")
+    return
+
 def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
@@ -1133,7 +1111,10 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     parser = get_parser() 
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
     # Load data
-    data_df = load_data(data_df_fp)
+    if not return_data_fp:
+        data_df = load_data(data_df_fp)
+    else:
+        data_df = None
     # Load parameters
     parameters_dict = load_parameters(param_fp,out_dir_fp)
     # Load ID mapping
@@ -1147,20 +1128,27 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     module_output = add_parameters_to_log(log_file, module, parameters_dict)
     # Load meta data
     if metadata:
-        metadata_df = load_mask(data_df_fp)
+        metadata_df, log = load_metadata(metadata_fp=meta_df_fp,
+                                         metadata_sheet=parameters_dict["metadata_sheet"], 
+                                         filename_col=parameters_dict["metadata_filename_column"], 
+                                         encoding=parameters_dict["metadata_encoding"])
+        module_output += log
     else:
         metadata_df = []
     # Load mask
     if mask:
         masked_df = load_mask(data_df_fp)
+        mask_description_df = load_mask_description(data_df_fp)
     else:
         masked_df = []
+        mask_description_df = []
     if return_data_fp:
-        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter, data_df_fp
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp
     else:
-        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, out_dir_fp, outname, log_file, counter
+        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
 	    
-def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_fp,outname, mask=False):
+	    
+def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False):
     # Update log file
     logger(log_file, module_output=module_output)
     # Save data
@@ -1168,6 +1156,7 @@ def close_module(data_processed_df, masked_df, log_file, module_output, out_dir_
     # Save mask
     if mask:
         save_mask(masked_df, out_dir_fp, outname)
+        save_mask_description(mask_description_df, out_dir_fp, outname)
     # Close function
-    logger(log_file, "Module finished as expected.\n")
+    logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
     sys.exit(0)
