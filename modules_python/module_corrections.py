@@ -940,7 +940,7 @@ if __name__ == "__main__":
         data_processed_df, log_string_harmony = batchcorrect_harmony(
             data_df, metadata_df, 
             parameters_dict["batch_cols_meta"],
-            random_seed=seed + counter, 
+            random_seed=seed, 
             **harmony_kwargs_dict
         )
         log_string += log_string_harmony
