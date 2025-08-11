@@ -992,9 +992,9 @@ if __name__ == "__main__":
                                 
                                 #IMPUTATION FUNCTION CALLS
                                 if imputation_method == "knn":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
                                 elif imputation_method == "knn-ML":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                                 elif imputation_method == "minval-noise":
                                     data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                                 elif imputation_method == "minval":
