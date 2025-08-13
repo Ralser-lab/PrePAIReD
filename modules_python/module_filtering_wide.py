@@ -62,13 +62,13 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
 
     if index_column not in meta_df.columns:
         module_output+=f"[{timestamp()}] ###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
-        return data_df
+        return data_df, module_output
 
     meta_df_indexed = meta_df.set_index(index_column)
 
     if key_column not in meta_df_indexed.columns:
         module_output+=f"[{timestamp()}] ###ERROR###: COLUMN KEY ERROR - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
-        return data_df
+        return data_df, module_output
     
     module_output+=f"[{timestamp()}] All keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
     # Fill NAs in key column with FALSE
@@ -380,22 +380,103 @@ def replace_labelled_precursors(data_df, module_output, target_label=None, repla
 
     return data_df, module_output
 
-def update_mask_df(data_df, data_processed_df, axis, method, mask_df, mask_description_df, id_mapping_df, metadata_df):
+def update_mask_df(data_df, data_processed_df, axis, method,
+                   mask_df, mask_description_df, id_mapping_df, 
+                   metadata_df, index_column):
+    """
+    Update masking information and related metadata for filtered data.
 
-    second_max_mapping = mask_df['value'].sort_values(ascending = True).iloc[-2]
+    This function updates `mask_df`, `mask_description_df`, `metadata_df`, 
+    and `id_mapping_df` based on differences between the original (`data_df`) 
+    and processed (`data_processed_df`) datasets. It assigns a new mask value 
+    for the given filtering `method` and updates relevant metadata depending 
+    on the specified `axis`.
+
+    The new mask value is determined as one greater than the 
+    second-largest value in `mask_description_df['value']` 
+    (or the largest if fewer than two values exist).
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        The original dataset before filtering or processing.
+
+    data_processed_df : pd.DataFrame
+        The processed dataset after filtering or transformation.
+
+    axis : str
+        Axis along which to apply masking. Must be one of:
+        - `'samples'` : Compare columns between `data_df` and `data_processed_df`.
+        - `'precursors'` : Compare index between `data_df` and `data_processed_df`.
+
+    method : str
+        The name of the filtering method being applied.
+
+    mask_df : pd.DataFrame
+        DataFrame storing mask values for features or samples.
+
+    mask_description_df : pd.DataFrame
+        DataFrame mapping filter methods to mask values. 
+        Must contain columns: `['filter', 'value']`.
+
+    id_mapping_df : pd.DataFrame
+        Mapping DataFrame containing at least `Precursor.Id` column, 
+        updated when `axis='precursors'`.
+
+    metadata_df : pd.DataFrame
+        Metadata associated with samples or precursors, updated to 
+        reflect the new masking.
+
+    index_column : str
+        Column name in `metadata_df` to set as index for updates.
+
+    Returns
+    -------
+    tuple of pd.DataFrame
+        Updated `(mask_df, mask_description_df, metadata_df, id_mapping_df)`.
+
+    Notes
+    -----
+    - When `axis='samples'`, masking is applied to columns present in `data_df` 
+      but missing from `data_processed_df`.
+    - When `axis='precursors'`, masking is applied to rows present in `data_df` 
+      but missing from `data_processed_df`.
+    - Both `mask_description_df` and `metadata_df` are reindexed before returning.
+    """
+        
+    # Get the second largest value in mask_description_df safely
+    sorted_values = mask_description_df['value'].sort_values()
+    if len(sorted_values) >= 2:
+        second_max_mapping = sorted_values.iloc[-2]
+    else:
+        second_max_mapping = sorted_values.iloc[-1]
+
     new_value = second_max_mapping + 1
-    mask_description_df.loc[method, 'value'] = new_value
 
+    # Ensure method exists in mask_description_df or create it
+    if method in mask_description_df.index:
+        mask_description_df.loc[method, 'value'] = new_value
+    else:
+        mask_description_df.loc[method] = {'value': new_value}
+
+    # Set index column for metadata_df
+    metadata_df.set_index(index_column, inplace=True)
+
+    # Update based on axis
     if axis == 'samples':
         flags = data_df.columns.difference(data_processed_df.columns)
         if not flags.empty:
             mask_df.loc[:, flags] = new_value
             metadata_df.loc[flags, method] = new_value
+
     elif axis == 'precursors':
         flags = data_df.index.difference(data_processed_df.index)
         if not flags.empty:
             mask_df.loc[flags, :] = new_value
             id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), method] = new_value
+
+    # Reset metadata_df and mask_description_df index for return
+    metadata_df.reset_index(inplace=True)
 
     return mask_df, mask_description_df, metadata_df, id_mapping_df
 
@@ -608,67 +689,136 @@ def exclude_samples_based_on_metadata(profiles,column="dropout/excl.",keep=np.na
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=False, mask=True, return_data_fp=False)
+    #load 
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", metadata=True, id_mapping=True, mask=True)
 
-    data_processed_df = data_df.copy()
+    #params
+    filtering_wide_methods=parameters_dict['filtering_wide_methods']
+    index_column=parameters_dict['index_column']
+    key_column=parameters_dict['key_column']
+    sample_thresh=parameters_dict['sample_thresh']
+    sample_alpha=parameters_dict['sample_alpha']
+    precursor_thresh=parameters_dict['precursor_thresh']
+    precursor_alpha=parameters_dict['precursor_alpha']
+    remove_label=parameters_dict['remove_label']
+    min_peptides=parameters_dict['min_peptides']
+    protein_col=parameters_dict['protein_col']
+    precursor_col=parameters_dict['precursor_col']
+    target_label=parameters_dict['target_label']
+    replace_label=parameters_dict['replace_label']
+    metadata_idx=index_column
     
-    filtering_wide_methods = "filter_samples_based_on_metadata;filter_samples_by_detection_proportion;filter_precursors_by_detection_proportion;filter_precursors_by_peptide_labels;filter_proteins_by_peptide_count"
-    methods = filtering_wide_methods.replace(" ","").split(";")
-
+    #helper functions
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-     
-    for method in methods:
-        if method == "filter_samples_based_on_metadata":
-            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
-            data_processed_df, module_output = filter_samples_based_on_metadata(data_processed_df, metadata_df, module_output) 
-            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
-                                                                                      method, masked_df, mask_description_df, 
-                                                                                      id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
-            helper.logger(log_file,module_output)
-            module_output = ""
 
-        elif method == "filter_samples_by_detection_proportion": 
-            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n")
-            data_processed_df, module_output = filter_samples_by_detection_proportion(data_processed_df, module_output)
-            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'samples', 
-                                                                                      method, masked_df, mask_description_df, 
-                                                                                      id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
-            helper.logger(log_file,module_output)
-            module_output = ""
+    def _unpack(result):
+        """Allow called functions to return (df, log) or just df."""
+        if isinstance(result, tuple) and len(result) == 2:
+            return result[0], result[1]
+        return result, ""
 
-        elif method == "filter_precursors_by_detection_proportion": 
-            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
-            data_processed_df, module_output = filter_precursors_by_detection_proportion(data_processed_df, module_output)
-            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
-                                                                                      method, masked_df, mask_description_df, 
-                                                                                      id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n")
-            helper.logger(log_file,module_output)
-            module_output = ""
+    def _append_log(logs_list, log_str):
+        if isinstance(log_str, str) and log_str.strip():
+            logs_list.extend([line for line in log_str.splitlines() if line.strip()])
 
-        elif method == "filter_precursors_by_peptide_labels": 
-            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
-            data_processed_df, module_output = filter_precursors_by_peptide_labels(data_processed_df, module_output)
-            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
-                                                                                      method, masked_df, mask_description_df, 
-                                                                                      id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n") 
-            helper.logger(log_file,module_output)
-            module_output = ""
+    #run
+    logs = []
+    methods = filtering_wide_methods.replace(" ", "").split(";")
+    data_processed_df = data_df.copy()
 
-        elif method == "filter_proteins_by_peptide_count": 
-            module_output += (f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}\n") 
-            data_processed_df, module_output = filter_proteins_by_peptide_count(data_processed_df, id_mapping_df, module_output)
-            mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(data_df, data_processed_df, 'precursors', 
-                                                                                      method, masked_df, mask_description_df, 
-                                                                                      id_mapping_df, metadata_df)
-            module_output += (f"[{timestamp()}] Precursors x samples after {method}: {data_processed_df.shape}\n") 
-            helper.logger(log_file,module_output)
-            module_output = ""
-        
-        else:
-            module_output += (f"[{timestamp()}] ###WARNING### Unknown filtering method: {method} — skipping.\n")
+    if not methods:
+        logs.append(f"[{timestamp()}] ###WARNING### No filtering methods provided. Skipping filtering pipeline.")
+    else:
+        for method in methods:
+            logs.append(f"[{timestamp()}] Precursors x samples before {method}: {data_processed_df.shape}")
 
-    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp, outname, mask=True)
+            # snapshot BEFORE this method
+            pre_method_df = data_processed_df.copy()
+
+            if method == "filter_samples_based_on_metadata":
+                result = filter_samples_based_on_metadata(
+                    data_processed_df, metadata_df, "", index_column, key_column
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # compare before vs after THIS method (samples)
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'samples', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            elif method == "filter_samples_by_detection_proportion":
+                result = filter_samples_by_detection_proportion(
+                    data_processed_df, "", sample_thresh, sample_alpha
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # samples
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'samples', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            elif method == "filter_precursors_by_detection_proportion":
+                result = filter_precursors_by_detection_proportion(
+                    data_processed_df, "", precursor_thresh, precursor_alpha
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # precursors
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'precursors', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            elif method == "filter_precursors_by_peptide_labels":
+                result = filter_precursors_by_peptide_labels(
+                    data_processed_df, "", remove_label
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # precursors
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'precursors', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            elif method == "filter_proteins_by_peptide_count":
+                result = filter_proteins_by_peptide_count(
+                    data_processed_df, id_mapping_df, "", min_peptides, protein_col, precursor_col
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # precursors
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'precursors', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            elif method == "replace_labelled_precursors":
+                result = replace_labelled_precursors(
+                    data_processed_df, "", target_label, replace_label
+                )
+                data_processed_df, log_str = _unpack(result)
+                _append_log(logs, log_str)
+
+                # precursors
+                mask_df, mask_description_df, metadata_df, id_mapping_df = update_mask_df(
+                    pre_method_df, data_processed_df, 'precursors', method,
+                    mask_df, mask_description_df, id_mapping_df, metadata_df, metadata_idx
+                )
+
+            else:
+                logs.append(f"[{timestamp()}] ###WARNING### Unknown filtering method: {method} — skipping.")
+
+            logs.append(f"[{timestamp()}] Precursors x samples after  {method}: {data_processed_df.shape}")
+    # finalize output
+    module_output = "\n".join(logs)
+
+    helper.close_module(data_processed_df, mask_df, mask_description_df,
+                        log_file, module_output, out_dir_fp, outname, True,)
