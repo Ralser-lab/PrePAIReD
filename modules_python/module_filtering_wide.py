@@ -31,7 +31,7 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     If the specified index_column is not found in metadata, logs a ERROR: INDEX KEY ERROR, 
     and returns unfiltered data.
 
-    If the specified key_column is not found after indexing metadata, logs a ERRPR: COLUMN KEY ERROR, 
+    If the specified key_column is not found after indexing metadata, logs a ERROR: COLUMN KEY ERROR, 
     and returns unfiltered data.
 
     Author: SB
@@ -93,7 +93,7 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
     sample_thresh : float or None, default None
         Missingness threshold to use, between 0 and 100%; if no hard threshold specified, triggers
         default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
-    alpha_sample : float 
+    sample_alpha : float 
         Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
     
     Returns
@@ -114,10 +114,10 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
 
     # Validate allowed values for alpha_sample
     if not isinstance(sample_alpha, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_sample. Expected int or float, got {type(sample_alpha).__name__}.\n"
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for sample_alpha. Expected int or float, got {type(sample_alpha).__name__}.\n"
         return data_df, module_output
     if not (0 <= sample_alpha <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_sample. Must be between 0 and 1. Got {sample_alpha}.\n"
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for sample_alpha. Must be between 0 and 1. Got {sample_alpha}.\n"
         return data_df, module_output
 
     missingness, optimal_threshold = calculate_optimum_threshold(data_df, sample_alpha)
@@ -150,7 +150,7 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
     precursor_thresh : float or None, default None
         Missingness threshold to use (0–100%). If None, uses automatic thresholding via 
         `calculate_optimum_threshold`.
-    alpha_precursor : float
+    precursor_alpha : float
         Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
     
     Returns
@@ -173,10 +173,10 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
 
     # Validate allowed values for alpha_pr
     if not isinstance(precursor_alpha, (int, float)):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for alpha_pr. Expected int or float, got {type(precursor_alpha).__name__}.\n"
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid type for precursor alpha. Expected int or float, got {type(precursor_alpha).__name__}.\n"
         return data_df, module_output
     if not (0 <= precursor_alpha <= 1):
-        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for alpha_pr. Must be between 0 and 1. Got {precursor_alpha}.\n"
+        module_output += f"[{timestamp()}] ###ERROR###: Invalid value for precursor alpha. Must be between 0 and 1. Got {precursor_alpha}.\n"
         return data_df, module_output
     
     # Calculate missingness and optimal threshold
@@ -827,7 +827,6 @@ if __name__ == "__main__":
     # finalize output
 
     module_output = "\n".join(logs)
-    print(module_output)
 
     helper.close_module(data_processed_df, mask_df, mask_description_df,
                         log_file, module_output, out_dir_fp, outname, True,)
