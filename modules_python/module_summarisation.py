@@ -278,9 +278,9 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     
     #if platform.system() == "Windows":    
     libname_trim = libname.split(".")[0]
-    lib="\\".join(abspath(getsourcefile(lambda:0)).split("\\")[:-1]) + "\\" + libname
-    lib_trim="\\".join(abspath(getsourcefile(lambda:0)).split("\\")[:-1]) + "\\" + libname_trim
-    #lib=lib.replace("\\","/")
+    lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
+    lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
+    #lib=lib.replace("/","/")
     try:
         cpp_library = cdll.LoadLibrary(lib_trim)
     except FileNotFoundError:
@@ -291,20 +291,20 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
             if path_libcpp is not None:
                 CDLL(path_libcpp)
         '''
-        path_to_deps = "\\".join(util.find_library("libgcc_s_seh-1").split("\\")[:-1])
+        path_to_deps = "/".join(util.find_library("libgcc_s_seh-1").split("/")[:-1])
         #os.environ['PATH'] = path_to_deps + os.pathsep + os.environ['PATH']
         os.add_dll_directory(path_to_deps)
         try:
-            lib="\\".join(abspath(getsourcefile(lambda:0)).split("\\")[:-1]) + "\\" + libname
-            lib_trim="\\".join(abspath(getsourcefile(lambda:0)).split("\\")[:-1]) + "\\" + libname_trim
+            lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
+            lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
             cpp_library = cdll.LoadLibrary(lib)
         except FileNotFoundError:
             try:
-                lib="Python/Preprocessing/"+libname
+                lib=libname
                 #util.find_library(libname_trim)
                 cpp_library = cdll.LoadLibrary(lib)
             except FileNotFoundError:
-                lib = util.find_library("\\".join(abspath(getsourcefile(lambda:0)).split("\\")[:-1]) + "\\" + libname_trim)
+                lib = util.find_library("/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim)
                 cpp_library = cdll.LoadLibrary(lib)
             
     # Specify argument dtypes
@@ -457,7 +457,7 @@ def geometric_mean(x):
     float
 
     """
-    return(np.product(x)**(1/len(x)))
+    return(np.prod(x)**(1/len(x)))
     
 
 
@@ -507,12 +507,12 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
 
     """
     
-    pg_profiles_df=pd.DataFrame()
+    pg_profiles_df=pd.DataFrame(columns=data_df.columns)
     
     if weights is None:
         weights=[1,1,1]
     data_df.replace(np.nan,0,inplace=True)
-    print("Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S"))
+    module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
         
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n"
     module_output += "\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n"
@@ -559,8 +559,8 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             hmean_df["norm. Imputation"]=measured_precs/measured_precs.max() #division by zero if all values are imputed for precursor => should be excluded in remove_peptides_with_excessing_nans
             hmean_df["hmean"]=[weighted_harmonic_mean(hmean_df.loc[x],weights) for x in hmean_df.index]
             
-            ##### Check what this coulmn is doing
-            temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].sum()
+            ##### Check what this line is doing
+            #temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].sum()
         
             #set indices for filter_mask
             if pooling=="mean":
@@ -580,7 +580,6 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
                 elif pooling=="gmean":
                     pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
                 #filter_mask.loc[mask_indices,data_df.columns]="s"
-                
                 
             #else: #protein excluded due to less than min_peptides precursors
             #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
@@ -684,7 +683,7 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #initiate variables for MaxLFQ
     n_runs=len(data_df.columns)
     #transform to long format
-    data_df=helper.unlog_transform_intensities(data_df)
+    data_df=helper.unlog_transform(data_df)
     lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
     lf_df.replace(0,1,inplace=True) 
     #quantity_col = "value"
@@ -750,7 +749,9 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
     data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
     
+    data_df = 2**data_df
     data_df = data_df.groupby(by="index",level=0).sum()
+    data_df = np.log2(data_df).replace([np.inf, -np.inf], np.nan)
     
     module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n"
     
