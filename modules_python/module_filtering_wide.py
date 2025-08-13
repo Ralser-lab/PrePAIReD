@@ -124,6 +124,9 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
 
     if sample_thresh is not None:
         optimal_threshold = sample_thresh / 100 
+        module_output += f"[{timestamp()}] Using hard thresholding at {sample_thresh} % missingness for sample filtering.\n"
+    else:
+        module_output += f"[{timestamp()}] Using automated thresholding {optimal_threshold:.2f}% missingness (alpha={sample_alpha}) for sample filtering.\n"
 
     return data_df.loc[:, missingness < optimal_threshold], module_output
 
@@ -182,6 +185,9 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
     # Override with user-specified threshold if provided
     if precursor_thresh is not None:
         optimal_threshold = precursor_thresh / 100
+        module_output += f"[{timestamp()}] Using hard thresholding at {precursor_thresh} % missingness for precursor filtering.\n"
+    else:
+        module_output += f"[{timestamp()}] Using automated thresholding {optimal_threshold:.2f} % missingness (alpha={sample_alpha}) for precursor filtering.\n"
 
     # Filter and return
     return data_df.loc[missingness < optimal_threshold], module_output
@@ -817,8 +823,11 @@ if __name__ == "__main__":
                 logs.append(f"[{timestamp()}] ###WARNING### Unknown filtering method: {method} — skipping.")
 
             logs.append(f"[{timestamp()}] Precursors x samples after  {method}: {data_processed_df.shape}")
+   
     # finalize output
+
     module_output = "\n".join(logs)
+    print(module_output)
 
     helper.close_module(data_processed_df, mask_df, mask_description_df,
                         log_file, module_output, out_dir_fp, outname, True,)
