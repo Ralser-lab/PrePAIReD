@@ -34,7 +34,7 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     If the specified key_column is not found after indexing metadata, logs a ERROR: COLUMN KEY ERROR, 
     and returns unfiltered data.
 
-    Author: SB
+    author: SB
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ def filter_samples_based_on_metadata(data_df, meta_df, module_output, index_colu
     pd.DataFrame
         Filtered version of data_df where only samples that lack corruption in metadata are retained 
         (i.e. Corrupt != True).
-    str
+    module_output : str
         Module output, logged with ###ERROR### messages if index and column keys not found in metadata
     """
     timestamp = lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -95,6 +95,8 @@ def filter_samples_by_detection_proportion(data_df, module_output, sample_thresh
         default (optimum_sample = None) for automated thresholding using `calculate_optimum_threshold`.
     sample_alpha : float 
         Alpha (significance) level for threshold calculation between 0 and 1 (default 0.95).
+    module_output : str
+        Updated log file with error and execution comments
     
     Returns
     -------
@@ -195,6 +197,7 @@ def filter_precursors_by_detection_proportion(data_df, module_output, precursor_
 def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=None):
     """
     Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be removed from further analysis
+
     author: BZ, SB
     
     Parameters
@@ -232,6 +235,7 @@ def filter_precursors_by_peptide_labels(data_df, module_output, remove_label=Non
 def filter_proteins_by_peptide_count(data_df, id_mapping_df, module_output, min_peptides=1, protein_col="Protein.Group", precursor_col="Precursor.Id"):
     """
     Remove proteins identified by less precursors than specified with min_peptides.
+
     author: BZ, SB
     
     Parameters
@@ -344,6 +348,7 @@ def calculate_optimum_threshold(data_df, alpha=0.95, statistics='parametric'):
 def replace_labelled_precursors(data_df, module_output, target_label=None, replace_label=None): 
     """
     Specify a e.g. SILAC label (part of the Precursor name), all precursors containing the label will be replaced with another label
+
     author: BZ, SB
     
     Parameters
@@ -401,38 +406,31 @@ def update_mask_df(data_df, data_processed_df, axis, method,
     The new mask value is determined as one greater than the 
     second-largest value in `mask_description_df['value']` 
     (or the largest if fewer than two values exist).
+    author: SB
 
     Parameters
     ----------
     data_df : pd.DataFrame
         The original dataset before filtering or processing.
-
     data_processed_df : pd.DataFrame
         The processed dataset after filtering or transformation.
-
     axis : str
         Axis along which to apply masking. Must be one of:
         - `'samples'` : Compare columns between `data_df` and `data_processed_df`.
         - `'precursors'` : Compare index between `data_df` and `data_processed_df`.
-
     method : str
         The name of the filtering method being applied.
-
     mask_df : pd.DataFrame
         DataFrame storing mask values for features or samples.
-
     mask_description_df : pd.DataFrame
         DataFrame mapping filter methods to mask values. 
         Must contain columns: `['filter', 'value']`.
-
     id_mapping_df : pd.DataFrame
         Mapping DataFrame containing at least `Precursor.Id` column, 
         updated when `axis='precursors'`.
-
     metadata_df : pd.DataFrame
         Metadata associated with samples or precursors, updated to 
         reflect the new masking.
-
     index_column : str
         Column name in `metadata_df` to set as index for updates.
 
@@ -447,7 +445,7 @@ def update_mask_df(data_df, data_processed_df, axis, method,
       but missing from `data_processed_df`.
     - When `axis='precursors'`, masking is applied to rows present in `data_df` 
       but missing from `data_processed_df`.
-    - Both `mask_description_df` and `metadata_df` are reindexed before returning.
+    - The `metadata_df` is reindexed before returning.
     """
         
     # Get the second largest value in mask_description_df safely
