@@ -11,6 +11,7 @@ functions:
     - filtering: apply filtering on DIA-NN output report.tsv
     (- filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used)
     - name_unknown_proteins: replaces NaN in id_mapping_df[protein_col], i.e. renames missing protein origins.
+    - clean_mask_description_df: removes filters which were not applied from mask_description_df
     (- create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime)
     - long_to_wide _format: Transforms long format data frame to wide format
 
@@ -478,7 +479,55 @@ def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stri
     #assign new values to initial mapping
     id_mapping_df[protein_col] = protein_groups
     return(id_mapping_df)
-         
+
+
+def clean_mask_description_df(mask_description_df,filters_dict):
+    """
+    removes filters which were not applied from mask_description_df.
+
+    Parameters
+    ----------
+    mask_description_df: pd.DataFrame.
+        mapping numbers in filtering mask to filters.
+    filters_dict : dict
+        dictionary containing the used filters and filtering parameters.
+
+    Returns
+    -------
+    mask_description_df: pd.DataFrame.
+        mapping numbers in mask to filters.
+        
+    """
+    if not filters_dict["filter_proteotypic"]:
+        mask_description_df.drop("Proteotypic",axis=0,inplace=True)
+    if not filters_dict["filter_by_qvalue"]:
+        mask_description_df.drop("Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_global_qvalue"]:
+        mask_description_df.drop("Global.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_gg_qvalue"]:
+        mask_description_df.drop("GG.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_pg_qvalue"]:
+        mask_description_df.drop("PG.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_global_pg_qvalue"]:
+        mask_description_df.drop("Global.PG.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_p_qvalue"]:
+        mask_description_df.drop("Protein.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_lib_qvalue"]:
+        mask_description_df.drop("Lib.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_lib_pg_qvalue"]:
+        mask_description_df.drop("Lib.PG.Q.Value",axis=0,inplace=True)
+    if not filters_dict["filter_by_PEP"]:
+        mask_description_df.drop("PEP",axis=0,inplace=True)
+    if not filters_dict["filter_by_MScorr"]:
+        mask_description_df.drop("Ms1.Profile.Corr",axis=0,inplace=True)
+    if not filters_dict["filter_by_evidence"]:
+        mask_description_df.drop("Mass.Evidence",axis=0,inplace=True)    
+    if not filters_dict["filter_by_MScorr_evidence_combined"]:
+        mask_description_df.drop("Ms1.Profile.Corr + Mass.Evidence",axis=0,inplace=True)
+        
+    return mask_description_df
+
+
 #DEPRECATED
 '''
 #error in "Assigning measured proteins [...]" ff during function call if ids in profile_df does not match ids in filter_mask
@@ -699,6 +748,13 @@ if __name__ == "__main__":
             parameters_dict[x[0]] = eval(x[1])
         except (SyntaxError, NameError): #if type==str
             parameters_dict[x[0]] = x[1]
+    
+    data_df_fp = parameters_dict["input_fp"]
+    metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
+                                              metadata_sheet=parameters_dict["metadata_sheet"], 
+                                              filename_col=parameters_dict["metadata_filename_column"], 
+                                              encoding=parameters_dict["metadata_encoding"])
+ 
     '''
     
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Filtering long", metadata=True, id_mapping=False, mask=False, return_data_fp=True)
@@ -802,7 +858,9 @@ if __name__ == "__main__":
         helper.logger(log_file,log)
         sys.exit("###ERROR###: Long format Filtering failed.")
         
-    
+    # filter mask_description for applied filters only
+    mask_description_df = clean_mask_description_df(mask_description_df,filters_dict=parameters_dict)
+
     # Rename filter_mask columns
     mask_df = helper.rename_filter_mask_columns(mask_df, 
                                                 metadata_df, 
