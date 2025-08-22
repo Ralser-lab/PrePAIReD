@@ -190,7 +190,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
             log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
         if keep_track:
             if mask_df is None or mask_description_df is None:
-                mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
+                mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],min_precursors=filters_dict["min_precursors"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
                 log += log_create
     # FILTERING
     filtering_tracker_df = pd.DataFrame(index={key:value for key,value in filters_dict.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
