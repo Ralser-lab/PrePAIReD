@@ -10,6 +10,11 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import matplotlib as mpl
+
+### Generalize colors as an input_variable
 
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type="QC", sample_type_column="Sample.Type", size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png"):
@@ -220,3 +225,171 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_column = "S
 
     plt.savefig(outfile, bbox_inches="tight")
     return
+
+
+
+def set_aspect_equal(ax):
+    x_lim = ax.get_xlim()
+    y_lim = ax.get_ylim()
+    aspect = abs((x_lim[1]-x_lim[0])/(y_lim[1]-y_lim[0]))
+    ax.set_aspect(aspect)
+    return
+
+# For Imputation, Normalization, Correction
+### Coloring
+# Corrections: columns used -> continuous scale
+# Normalization: mean intensities and summed intensities (log) -> continuous scale
+# Imputation: mean intensities and summed intensities (log) -> continuous scale
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata = False):
+
+    ### Examples:
+    ### Drift correction
+    #continuous = True,
+    #column_color = "Order",
+    #use_metadata = False,
+    
+    ### Correction
+    #continuous = False
+    #column_color = "MS.Batch"
+    #column_color = "Sample.Type"
+
+    if continuous:
+        cmap = "viridis"
+    else:
+        cmap = "Spectral"
+    
+    data_origin[data_origin==0] = np.nan
+    if not use_metadata:
+        column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
+    data_origin = data_origin.copy().dropna()
+    #labels_origin = data_origin.columns
+    data_origin_scaled = StandardScaler().fit_transform(data_origin.T)
+    if use_metadata:
+        column_values_origin = metadata.loc[data_origin.columns,column_color].values
+    
+    pca_origin = PCA()
+    data_origin_transformed = pca_origin.fit_transform(data_origin_scaled)[:,:n_components]
+    var_origin = pca_origin.explained_variance_ratio_[:n_components]
+    
+    if data_processed is not None:
+        data_processed[data_processed==0] = np.nan
+        if not use_metadata:
+            column_values_processed = np.sum(~np.isnan(data_processed.values),axis=0)
+        data_processed = data_processed.copy().dropna()
+        #labels_processed = data_origin.columns
+        data_processed_scaled = StandardScaler().fit_transform(data_processed.T)
+        if use_metadata:
+            column_values_processed = metadata.loc[data_processed.columns,column_color].values
+        
+        pca_processed = PCA()
+        data_processed_transformed = pca_processed.fit_transform(data_processed_scaled)[:,:n_components]
+        var_processed = pca_processed.explained_variance_ratio_[:n_components]    
+    
+    cmap_ = mpl.cm.get_cmap(cmap)
+    
+    if continuous:
+        if data_processed is not None:
+            vmin = min(min(column_values_origin),min(column_values_processed))
+            vmax = max(max(column_values_origin),max(column_values_processed))
+        else:
+            vmin = min(column_values_origin)
+            vmax = max(column_values_origin)
+        norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    else:
+        values = set(column_values_origin)
+        values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
+        column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
+        bounds = np.linspace(0,1,len(values)+1)
+        norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
+        if data_processed is not None:
+            column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
+    
+    colors_origin = [cmap_(norm(el)) for el in column_values_origin]
+    if data_processed is not None:
+        colors_processed = [cmap_(norm(el)) for el in column_values_processed]
+    
+    fig = plt.figure(figsize=(n_components*2.5,n_components*2.5))
+    gs = GridSpec(n_components,n_components, hspace= 0.1, wspace = 0.1)
+    
+    for i in range(n_components-1):
+        for j in range(i+1,n_components):
+            ax = fig.add_subplot(gs[j,i])  
+            #ax.plot([0,i+1],[0,j+1])
+            ax.scatter(data_origin_transformed[:,i],data_origin_transformed[:,j],alpha=0.5, c=colors_origin)
+    
+            ax.tick_params(labelsize = fontsize)
+            set_aspect_equal(ax)
+            if i != 0:
+                ax.set_yticklabels([])
+                #pass
+            else:
+                ax.set_ylabel("PC "+str(j+1)+" ("+"{:.1f}".format(var_origin[j]*100)+"%)", fontsize = fontsize, labelpad = 5)
+                ax.yaxis.get_major_locator().set_params(integer=True) 
+            if j != n_components-1:
+                ax.set_xticklabels([])
+                #pass
+            else:
+                ax.set_xlabel("PC "+str(i+1)+" ("+"{:.1f}".format(var_origin[i]*100)+"%)", fontsize = fontsize, labelpad = 5)
+                ax.xaxis.get_major_locator().set_params(integer=True) 
+            
+            ax.set_axisbelow(True)
+            ax.grid()
+            
+            if data_processed is not None:
+                ax = fig.add_subplot(gs[i,j])
+                #ax.plot([0,j+1],[0,i+1])
+                ax.scatter(data_processed_transformed[:,j],data_processed_transformed[:,i],alpha=0.5, c=colors_processed)
+    
+                ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
+                set_aspect_equal(ax)
+                
+                ax.yaxis.tick_right()
+                ax.yaxis.set_label_position("right")
+                ax.yaxis.get_major_locator().set_params(integer=True) 
+                
+                ax.xaxis.tick_top()
+                ax.xaxis.set_label_position("top")
+                ax.xaxis.get_major_locator().set_params(integer=True) 
+    
+                if j != n_components-1:
+                    ax.set_yticklabels([])
+                    #pass
+                else:
+                    ax.set_ylabel("PC "+str(i+1)+" ("+"{:.1f}".format(var_processed[i]*100)+"%)", fontsize = fontsize, labelpad = 5)
+                    
+                if i != 0:
+                    ax.set_xticklabels([])
+                    #pass
+                else:
+                    ax.set_xlabel("PC "+str(j+1)+" ("+"{:.1f}".format(var_processed[j]*100)+"%)", fontsize = fontsize, labelpad = 5)
+        
+            ax.set_axisbelow(True)
+            ax.grid()
+    
+    if data_processed is not None:
+        fig.text(1.5/(2*n_components),(2*n_components-1.5)/(2*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
+        fig.text(1.5/(2*n_components),(2*n_components-1.5)/(2*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
+        #if column_color:
+        line = plt.Line2D((.05,.95-(.95/n_components)),
+                          (.95,.05+(.95/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
+    
+        #else:
+        #    line = plt.Line2D((.05,.95),(.95,.05+line_offset), color="k", linewidth=1, linestyle=":")
+            
+        fig.add_artist(line)
+    
+    cax = fig.add_subplot(gs[j,j])
+    cax.set_visible(False)
+    cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm,cmap=cmap), ax=cax, aspect = 10, fraction = 0.8)
+    cbar.ax.tick_params(labelsize=fontsize)
+    if use_metadata:
+        cbar.ax.set_ylabel(column_color, fontsize=fontsize_label, labelpad=10)
+    else:
+        cbar.ax.set_ylabel("# not NaN", fontsize=fontsize_label, labelpad=10)
+    if not continuous:
+        cbar.ax.set_yticks(list(values_dict.values()))
+        cbar.ax.set_yticklabels(values_dict.keys())
+    
+    plt.savefig(outfile, bbox_inches="tight")
+    return
+
