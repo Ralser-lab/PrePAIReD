@@ -434,7 +434,7 @@ def create_logfile(logfilename,ids,savefilename,analysis_folder,profile_annotati
     
 
 #create a matrix with precursors as rows and files/runs/samples/fractions as columns to keep track of filtered and imputed precursors
-def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
+def create_filtering_matrix(file,metadata_df,min_peptides,min_precursors,values,ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
     """
     Creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
     
@@ -447,6 +447,8 @@ def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.
     metadata_df : pd.DataFrame
         Metadata mapping File.Name to shorter run names.
     min_peptides : int
+        minimum number of peptides required to quantify a protein.
+    min_precursors : int
         minimum number of precursors required to quantify a protein.
     values : str
         values extracted from DIA-NN report.tsv, e.g. Precursor.Quantity.
@@ -482,13 +484,14 @@ def create_filtering_matrix(file,metadata_df,min_peptides,values,ids="Precursor.
     mask_description_df = pd.DataFrame(columns=["filter","value"])
     #mask_description["filter"] = ["not measured","measured and kept", "excessing_NaNs","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","Precursor.Charge","Proteotypic","Min. "+str(min_peptides)+" Peptides","Zero "+values,"Imputed"]
     #reordered to same order as filtering steps
-    mask_description_df["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence","Zero "+values,"Precursor.Charge","excessing_NaNs","Min. "+str(min_peptides)+" Peptides","missing not at random","Imputed"]
+    mask_description_df["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence","Zero "+values,"Precursor.Charge","sample missingness","precursor missingness","Min. "+str(min_peptides)+" Peptides","Min. "+str(min_precursors)+" Precursors","Imputed"]
     mask_description_df["value"]=range(0,len(mask_description_df))
     #write mask description into logfile
     log += "\nFiltering matrix to keep track over excluded precursors and proteins created.\nReasons for exclusion of precursors as specified in filter mask\n" + mask_description_df.to_string(index=False) +"\n-----------------------------------------------\n\n"
     mask_description_df.set_index("filter",inplace=True)
     mask_description_df.loc["Imputed","value"]=99
     return([mask_df,mask_description_df,log])
+
 
 
 def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",sample_col="sample"):
