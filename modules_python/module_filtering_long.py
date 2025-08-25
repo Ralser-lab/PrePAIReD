@@ -35,6 +35,7 @@ import pandas as pd
 import numpy as np
 import time
 import os
+import re
 #from modules_python import module_helper as helper
 import module_helper as helper
 
@@ -443,7 +444,8 @@ def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stri
     """
     Replaces NaN in protein_col of id_mapping_df with values from the column replace_id_col in the dataframe from which id_mapping was initially generated (file at input_fp).
     Remaining NaN are replaced with "UnknownProteinX" where X is a unique integer, thus loosing the information whether Precursors with missing protein_col belonged to the same protein.
-
+    author: BZ
+    
     Parameters
     ----------
     id_mapping_df : pd.DataFrame
@@ -480,10 +482,29 @@ def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stri
     id_mapping_df[protein_col] = protein_groups
     return(id_mapping_df)
 
+def create_peptide_ids(precursors):
+    """
+    strips precursors from charge state to create peptide ids.
+    author: BZ
+    
+    Parameters
+    ----------
+    precursors : list
+        list of precursor ids.
+
+    Returns
+    -------
+    list
+        peptide ids matching precursors.
+
+    """
+    return [re.sub(r"\d+$","",x) for x in precursors]
+
 
 def clean_mask_description_df(mask_description_df,filters_dict):
     """
     removes filters which were not applied from mask_description_df.
+    author: BZ
 
     Parameters
     ----------
@@ -691,6 +712,7 @@ def create_profiles(file, ids, values, profile_annotation_df, analysis_folder, s
 def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="Precursor.Id",value_col="Precursor.Quantity",input_filename_col="File.Name",metadata_filename_col="File.Name",metadata_sample_col="Sample.Name"):
     """
     Transforms long format data frame to wide format. 
+    author: BZ
 
     Parameters
     ----------
@@ -838,6 +860,9 @@ if __name__ == "__main__":
                                                   ids_list=ids_list, 
                                                   protein_col=parameters_dict["protein_col"], 
                                                   replace_id_col=parameters_dict["alternative_protein_col"])
+        # Create a column "Peptide.Id" with peptide ids in id_mapping_df, which contains precursor ids without charge state
+        if parameters_dict["peptide_col"] not in id_mapping_df.columns:
+            id_mapping_df[parameters_dict["peptide_col"]] = create_peptide_ids(id_mapping_df[parameters_dict["precursor_col"]])
                  
         # Precursor filtering (DIA-NN specific)
         input_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
