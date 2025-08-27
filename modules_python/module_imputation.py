@@ -2,15 +2,22 @@
 Input: wide-format data
 Output: imputed wide-format data
 
-update function overview #TODO
-    - impute_missing_peptides: self-made graph-based imputation strategy
-    - getIndexes: returns a list of positions where element exists in the given dataframe
-    - knn_imputation: performs k-nearest-neighbour imputation on dataframe
-    - minval_imputation: performs modified minimum value imputation on dataframe
-    - meanval_imputation: performs mean value imputation on dataframe
-    - bpca_imputation: performs Bayesian PCA imputation on dataframe
-
-Adjust fitting of intensity-dependent missingness evaluation with SB sampling and BZ lower cap + threshold #TODO
+Missingness estimation functions
+    - assign_missingness: determines whether no precursor per protein is measured
+    - detection_probability_curve: Fits logistic regression to precursor detection probability and calculates a decision boundary for missingness classification
+    - intensity_dependent_missingness_estimation: models Completeness over precursor intensity to classify precursor missingness into missing at random or not at random.
+Imputation functions
+    - graphbased_imputation: Graph-based approach to impute missing precursors.
+    - knn_imputation: k-nearest neighbours imputation on peptide or protein matrix.
+    - minval_imputation: minimum value imputation on peptide or protein matrix.
+    - meanval_imputation: mean value imputation on peptide or protein matrix.
+    - medianval_imputation: median value imputation on peptide or protein matrix.
+    - bpca_fill: Bayesian PCA imputation on peptide or protein matrix.
+Additional helper and logging functions
+    - getIndexes: returns a list of positions where element exists in the dataframe
+    - check_imputation_table_on_completeness: controls imputation_table on completeness for defined levels and values.
+    - obtain_missingness_for_log: obtains list of tuples with positions of missing values and numbers of total and missing values in the given data_df.
+    - update_mask: given a list of position tuples (locs) updates mask_df by adding mask_value.
 
 """
 
@@ -39,6 +46,9 @@ from sklearn.preprocessing import SplineTransformer
 import module_helper as helper
 
 
+########################################################################
+# Missingness estimation functions
+########################################################################
 
 def assign_missingness(data_df,id_mapping_df,missingness_type="ProtAbsence",mask_df=None,precursor_col="Precursor.Id",protein_col="Protein.Group",on_filter_mask=True):
     """
@@ -103,15 +113,12 @@ def assign_missingness(data_df,id_mapping_df,missingness_type="ProtAbsence",mask
     missingness_df.replace(False,"",inplace=True)
     missingness_df.replace(True,missingness_type,inplace=True)
     return(missingness_df)
-
-
-
-
+    
 
 def detection_probability_curve(data_df, axis=1, boundary=0.5, detection_proportion_cap=1, method="logit-linear", n_knots=3):
     """
     Fits logistic regression to precursor detection probability and calculates a decision 
-    boundary for missingness classification.
+    boundary for missingness classification. Adapted from Li and Smyth, https://academic.oup.com/bioinformatics/article/39/5/btad200/7126416
 
     author: SB, BZ
 
@@ -199,14 +206,27 @@ def detection_probability_curve(data_df, axis=1, boundary=0.5, detection_proport
         logit_completeness = func4_logitlinear_biascorrected(res_df.dropna(),*popt)
         popt, pcov = curve_fit(func1_logitlinear,res_df.loc[indices,"Avg Log2 Abundance"],logit_completeness)
         res_df.loc[indices,"Completeness pred"] = 1/(1+np.exp(-func1_logitlinear(res_df.loc[indices,"Avg Log2 Abundance"],*popt)))
+    elif method=="response-binned-splines": #from SB
+        # Spline the response variable (Detection Probability) using pd.qcut()
+        res_df['response_bin'] = pd.qcut(res_df['Completeness'], q=100, duplicates='drop')
+        # Compute mean abundance and mean detection probability per bin
+        grouped = res_df.groupby('response_bin').agg(abundance_mean=('Avg Log2 Abundance', 'median'),detection_mean=('Completeness', 'median')).dropna()
+        # Prepare data for GLM
+        X = sm.add_constant(grouped['abundance_mean'])
+        y = grouped['detection_mean']
+        # Fit binomial GLM (using proportions directly with freq_weights)
+        model = sm.GLM(y, X, family=sm.families.Binomial())
+        result = model.fit()
+        # Decision boundary calculation
+        intercept, coef = result.params
+        res_df["Completeness pred"] = 1/(1+np.exp(-func1_logitlinear(res_df["Avg Log2 Abundance"],intercept,coef)))
+    elif method=="logit-linear-capped-two-sides":
+        #include asymptotic cap on lower completeness and/or weighting by thresholding lower completeness values
+        pass #TODO 
+        
     decision_boundary = res_df.loc[(res_df["Completeness pred"].dropna()>=boundary).idxmax(),"Avg Log2 Abundance"]
     
     return round(decision_boundary, 2), res_df
-
-
-
-
-
 
 
 def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, detection_proportion_cap=1, method="logit-linear", n_knots=3):
@@ -269,7 +289,9 @@ def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, de
     return missingness_mask_df, regression_df, decision_boundary
 
 
-
+########################################################################
+# Imputation functions
+########################################################################
 
 def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",precursor_col="Precursor.Id",impute_modifications=True,estimate_threshold=1,weighting=False):
     """
@@ -442,7 +464,6 @@ def minval_imputation(data_df,axis=1,add_noise=True):
     return(data_df)
     
 
-
 def meanval_imputation(data_df,axis=1,add_noise=True):
     """
     mean value imputation on peptide or protein profiles. Each missing value is imputed by the mean of the row, if add_noise=True with a value between mean - standard deviation and mean + standard deviation.
@@ -523,16 +544,23 @@ def medianval_imputation(data_df,axis=1,add_noise=True):
     return(data_df)
 
 
-
-#downloaded from https://github.com/unifey/bPCAfill, 18.03.2024 17:08, credit to unifey
-def table(x): 
-    try: return pd.DataFrame(x)
-    except: return pd.DataFrame(list(x.items()))
-
-
-#Bayesian PCA imputation on peptide or protein profiles as described by Oba et al. https://doi.org/10.1093/bioinformatics/btg287
-#downloaded from https://github.com/unifey/bPCAfill, 18.03.2024 17:08, credit to unifey
 def bpca_fill(dX, max_iter = 200):
+     """
+    Bayesian PCA imputation on peptide or protein profiles as described by Oba et al. https://doi.org/10.1093/bioinformatics/btg287
+    downloaded from https://github.com/unifey/bPCAfill, 18.03.2024 17:08, credit to unifey
+
+    Parameters
+    ----------
+    dX : pd.DataFrame
+        rows equal samples, columns ids (precursors or proteins).
+    max_iter : int, optional
+        maximum number of iterations. The default is 200.
+
+    Returns
+    -------
+    dX_filled : pd.DataFrame
+        rows equal samples, columns ids (precursors or proteins).
+    """
     y = dX.copy() # Just following the conventions used in the original paper by Oba et al. (2003)
     cols = y.columns #.tolist()
     indices = y.index
@@ -640,12 +668,14 @@ def bpca_fill(dX, max_iter = 200):
     return dX_filled
 
 
-#copied from https://www.geeksforgeeks.org/find-location-of-an-element-in-pandas-dataframe-in-python/ , access 10.02.2023, 11:44
+########################################################################
+# Additional helper and logging functions
+########################################################################
+
 def getIndexes(dfObj, value):
     """
-    This function will return a list of positions where element exists in the dataframe.
-    
-    author: BZ
+    Returns a list of positions where element exists in the dataframe.
+    copied from https://www.geeksforgeeks.org/find-location-of-an-element-in-pandas-dataframe-in-python/ , access 10.02.2023, 11:44
     
     Parameters
     ----------
@@ -715,7 +745,7 @@ def check_imputation_table_on_completeness(impu_table_df,metadata_df,data_df=Non
 
 def obtain_missingness_for_log(data_df):
     """
-    Obtains list of tuples with positions of missing values and numbers of total and missing values in the given data_df
+    Obtains list of tuples with positions of missing values and numbers of total and missing values in the given data_df.
 
     Parameters
     ----------
@@ -741,7 +771,7 @@ def obtain_missingness_for_log(data_df):
 
 def update_mask(mask_df, locs, mask_value):
     """
-    Given a list of position tuples (locs) updates mask_df by adding mask_value
+    Given a list of position tuples (locs) updates mask_df by adding mask_value.
 
     Parameters
     ----------
