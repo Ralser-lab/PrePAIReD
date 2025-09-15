@@ -16,10 +16,10 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
-source("~/MyStuff/preprocessing/Code/Common/Preprocessing/modules_R/helper_functions_R.R")
+source("/mnt/c/MyStuff/preprocessing/Code/Common/Preprocessing/modules_R/helper_functions_R.R")
 
 
-
+options(error = function() traceback(2))
 
 
 #' @description
@@ -42,7 +42,7 @@ normalize_vsn <- function(DM_df){
   # Missingness warning (as percentage)
   prop_na <- mean(is.na(DM_mat))
   warning(sprintf(
-    "The provided dataset contains %.1f%%%% missing values. Any value over 20%%%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
+    "The provided dataset contains %.1f%% missing values. Any value over 20%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
     prop_na * 100
   ))
   
@@ -107,13 +107,16 @@ normalize_cyclic_loess <- function(DM_df,
   # Missingness warning (as percentage)
   prop_na <- mean(is.na(DM_mat))
   warning(sprintf(
-    "The provided dataset contains %.1f%%%% missing values. Any value over 20%%%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
+    "The provided dataset contains %.1f%% missing values. Any value over 20%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
     prop_na * 100
   ))
   
   # Print message informing the user that normalization is starting, with time stamp
-  cat(sprintf("\n\n Starting cyclic LOESS normalization. [%s] \n",
-              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  cat(sprintf(
+    "\n\n Starting cyclic LOESS normalization (with %s method). [%s] \n",
+    parameters[["method_cyclic_loess"]],
+    format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  ))
   
   # Make sure the method chosen is a valid option
   method_str <- match.arg(parameters[["method_cyclic_loess"]],
@@ -193,14 +196,8 @@ main <- function() {
     set.seed(parameter_list[["seed"]] + args$counter)
   }
   
-  # Build input file path
-  input_file <- file.path(args$data, sprintf("data_%d.tsv", as.integer(args$counter) - 1))
-  if (!file.exists(input_file)) {
-    stop(sprintf("Input file not found: %s", input_file), call. = FALSE)
-  }
-  
   # Load data
-  DM_df <- as.data.frame(as.matrix(fread(input_file), rownames = 1))
+  DM_df <- as.data.frame(as.matrix(fread(args$data), rownames = 1))
   
   # Call normalize() with logging
   normalized_df <- run_with_logging(

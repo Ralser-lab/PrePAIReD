@@ -83,14 +83,35 @@ read_JSON <- function(parameter_file){
     return(parameter_list)
 } 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #' @title 
 #' Create a command-line argument parser for the R modules
 #'
 #' @desciption
 #' Constructs an \code{optparse::OptionParser} object that defines the
-#' command-line interface for the normalization R script. The parser specifies
-#' required and optional arguments such as the input data directory, parameter
-#' file, output directory, metadata file, IDs file, step counter, and log file.
+#' command-line interface for the R scripts. The parser specifies required and 
+#' optional arguments such as the input data directory, parameter file, output 
+#' directory, metadata file, IDs file, step counter, and log file.
 #'
 #' @return An \code{OptionParser} object, ready to be passed to
 #'   \code{optparse::parse_args()}.
@@ -98,20 +119,20 @@ read_JSON <- function(parameter_file){
 #' @details
 #' The following options are supported:
 #' \itemize{
-#'   \item \code{-d, --data}: Path to the input data directory (required).
+#'   \item \code{-d, --data}: Path to the input data file, a .tsv file (required).
 #'   \item \code{-p, --params}: Path to a JSON file with normalization parameters (required).
 #'   \item \code{-o, --out}: Path to the output directory (required).
-#'   \item \code{-m, --metadata}: Path to a metadata file (optional).
+#'   \item \code{--md, --metadata}: Path to a metadata file (optional).
 #'   \item \code{-i, --ids}: Path to an IDs file (optional).
 #'   \item \code{-c, --counter}: Pipeline step counter as an integer (required).
 #'   \item \code{-l, --log}: Path to a log file (required).
 #' }
 make_parser <- function() {
   option_list <- list(
-    make_option(c("-d","--data"),     type="character", help="Path to data directory"),
+    make_option(c("-d","--data"),     type="character", help="Path to data file"),
     make_option(c("-p","--params"),   type="character", help="Path to params JSON"),
     make_option(c("-o","--out"),      type="character", help="Output directory"),
-    make_option(c("-m","--metadata"), type="character", default = NULL, help="Path to metadata file (optional)"),
+    make_option(c("--md"), type="character", default = NULL, help="Path to metadata file (optional)"),
     make_option(c("-i","--ids"),      type="character", default = NULL, help="Path to IDs file (optional)"),
     make_option(c("-c","--counter"),  type="integer",   help="Pipeline step counter"),
     make_option(c("-l","--log"),      type="character", help="Log file path")
@@ -127,17 +148,17 @@ make_parser <- function() {
 #' Performs validation checks on the options returned by
 #' \code{optparse::parse_args()}. Ensures that required arguments are present,
 #' required files or directories exist, and that output/log directories are
-#' valid. Stops execution with a clear error message if validation fails.
+#' valid. Stops execution with an error message if validation fails.
 #'
 #' @param opt A list of options returned by \code{optparse::parse_args()}.
 #'
-#' @return Invisibly returns \code{NULL}. Called for its side effects of
-#'   validating input arguments and stopping with errors when invalid.
+#' @return Invisibly returns \code{NULL}. Its point is that it validates the 
+#' input arguments and stops with errors when any of them is invalid.
 #'
 #' @details
 #' Validation rules:
 #' \itemize{
-#'   \item \code{--data}: Must be provided and must be an existing directory.
+#'   \item \code{--data}: Must be provided and must be an existing file. 
 #'   \item \code{--params}: Must be provided and must be an existing file.
 #'   \item \code{--out}: Must be provided; will be created if it does not exist.
 #'   \item \code{--log}: Must be provided; parent directory must exist.
@@ -158,9 +179,9 @@ validate_opts <- function(opt) {
   if (is.null(opt$counter))
     stop("Missing required argument: --counter", call. = FALSE)
   
-  # Validate data directory
-  if (!dir.exists(opt$data))
-    stop(sprintf("Data directory not found: %s", opt$data), call. = FALSE)
+  # Validate data file
+  if (!file.exists(opt$data))
+    stop(sprintf("Data file not found: %s", opt$data), call. = FALSE)
   
   # Validate params JSON file
   if (!file.exists(opt$params))
