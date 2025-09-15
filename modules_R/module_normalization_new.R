@@ -16,10 +16,8 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
-source("/mnt/c/MyStuff/preprocessing/Code/Common/Preprocessing/modules_R/helper_functions_R.R")
+source("Scripts/helper_functions_R.R")
 
-
-options(error = function() traceback(2))
 
 
 #' @description
