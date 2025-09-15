@@ -12,7 +12,7 @@ source("~/Documents/Science/Projects/RalserLabPreprocessing/Preprocessing/module
 #' data with missing values. Columns correspond to variables and rows to
 #' observations.
 #' @param parampath Path to a JSON parameter file. Has to complete a element 
-#' /code{method} indicating the imputation method to use. Supported values:
+#' /code{method_impute} indicating the imputation method to use. Supported values:
 #' `"missforest"`, `"bpca"`, `"ppca"`, `"ppm"`, `"mnar"`.
 #' @param log_file Path to a file where logs  will be written.
 #' @param counter Step of the preprocessing pupeline currently run
