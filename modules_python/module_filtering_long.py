@@ -25,6 +25,8 @@ variable names + types
     int/float/bool/str: *
     filenames: *_fp
 
+#TODO
+include new possible filters by DIA-NN >= 2.
 
 """
 # %%
@@ -67,8 +69,11 @@ def read_input(filename,file_columns_list=None):
     #filesize = os.path.getsize(filename)
     #ram=psutil.virtual_memory()
     #if filesize<ram.available:
-    # read tsv file
-    file = pd.read_csv(filename, usecols=file_columns_list, sep="\t") # ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
+    #read parquet file
+    if "parquet" in filename.split("."):
+         file = pd.read_parquet(filename, columns=file_columns)
+    else: # read tsv file
+         file = pd.read_csv(filename, usecols=file_columns, sep="\t")# ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
     
     return(file)
 
