@@ -10,47 +10,47 @@ library(jsonlite)
 #'
 #' @return The result of evaluating \code{expr}, or stops if an error occurs.
 run_with_logging <- function(expr, log_path) {
-    
-    con <- file(log_path, open = "at")  # append mode
-    on.exit({
-        sink(type = "message")
-        sink(type = "output")
-        close(con)
-    }, add = TRUE)
-    
-    ## Add a time-stamped header 
-    cat(sprintf("\n\n--- Module in R -- START [%s] ---\n", 
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")), 
-        file = con)
-    
-    # Redirect both standard output and messages to log file
-    sink(con, type = "output")
-    sink(con, type = "message")
-    
-    result <- tryCatch(
-        withCallingHandlers(
-            expr(),
-            warning = function(w) {
-                message("###WARNING### : ", conditionMessage(w))
-                invokeRestart("muffleWarning")
-            },
-            message = function(m) {
-                message("MESSAGE: ", conditionMessage(m))
-                invokeRestart("muffleMessage")
-            }
-        ),
-        error = function(e) {
-            message("###ERROR###: ", conditionMessage(e))
-            return(NULL)  # safely continue execution
-        }
-    )
-    
-    ## Mark end of block
-    cat(sprintf("\n--- Module in R -- END [%s] ---\n", 
-                format(Sys.time(), "%Y-%m-%d %H:%M:%S")), 
-        file = con)
-    
-    return(result)
+  
+  con <- file(log_path, open = "at")  # append mode
+  on.exit({
+    sink(type = "message")
+    sink(type = "output")
+    close(con)
+  }, add = TRUE)
+  
+  ## Add a time-stamped header 
+  cat(sprintf("\n\n--- Module in R -- START [%s] ---\n", 
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")), 
+      file = con)
+  
+  # Redirect both standard output and messages to log file
+  sink(con, type = "output")
+  sink(con, type = "message")
+  
+  result <- tryCatch(
+    withCallingHandlers(
+      expr(),
+      warning = function(w) {
+        message("###WARNING### : ", conditionMessage(w))
+        invokeRestart("muffleWarning")
+      },
+      message = function(m) {
+        message("MESSAGE: ", conditionMessage(m))
+        invokeRestart("muffleMessage")
+      }
+    ),
+    error = function(e) {
+      message("###ERROR###: ", conditionMessage(e))
+      return(NULL)  # safely continue execution
+    }
+  )
+  
+  ## Mark end of block
+  cat(sprintf("\n--- Module in R -- END [%s] ---\n", 
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")), 
+      file = con)
+  
+  return(result)
 }
 
 #' @title Read JSON file and convert empty lists to NULL recursively
@@ -64,23 +64,23 @@ run_with_logging <- function(expr, log_path) {
 #' 
 #' @return The parameter file where empty lists are replaced with \code{NULL}.
 read_JSON <- function(parameter_file){
-    
-    ## read in parameter file
-    parameter_list <- jsonlite::fromJSON(parameter_file)
-    
-    # convert empty list elements to null
-    emptyListToNull <- function(x) {
-        if (is.list(x) && length(x) == 0) {
-            return(NULL)
-        } else if (is.list(x)) {
-            return(lapply(x, emptyListToNull))
-        } else {
-            return(x)
-        }
+  
+  ## read in parameter file
+  parameter_list <- jsonlite::fromJSON(parameter_file)
+  
+  # convert empty list elements to null
+  emptyListToNull <- function(x) {
+    if (is.list(x) && length(x) == 0) {
+      return(NULL)
+    } else if (is.list(x)) {
+      return(lapply(x, emptyListToNull))
+    } else {
+      return(x)
     }
-    parameter_list <- emptyListToNull(parameter_list)
-    
-    return(parameter_list)
+  }
+  parameter_list <- emptyListToNull(parameter_list)
+  
+  return(parameter_list)
 } 
 
 #' @title 
@@ -101,7 +101,7 @@ read_JSON <- function(parameter_file){
 #'   \item \code{-d, --data}: Path to the input data file, a .tsv file (required).
 #'   \item \code{-p, --params}: Path to a JSON file with normalization parameters (required).
 #'   \item \code{-o, --out}: Path to the output directory (required).
-#'   \item \code{--md, --metadata}: Path to a metadata file (optional).
+#'   \item \code{-m}: Path to a metadata file (optional).
 #'   \item \code{-i, --ids}: Path to an IDs file (optional).
 #'   \item \code{-c, --counter}: Pipeline step counter as an integer (required).
 #'   \item \code{-l, --log}: Path to a log file (required).
@@ -111,7 +111,7 @@ make_parser <- function() {
     make_option(c("-d","--data"),     type="character", help="Path to data file"),
     make_option(c("-p","--params"),   type="character", help="Path to params JSON"),
     make_option(c("-o","--out"),      type="character", help="Output directory"),
-    make_option(c("--md"), type="character", default = NULL, help="Path to metadata file (optional)"),
+    make_option(c("-m", "--metadata"), type="character", default = NULL, help="Path to metadata file (optional)"),
     make_option(c("-i","--ids"),      type="character", default = NULL, help="Path to IDs file (optional)"),
     make_option(c("-c","--counter"),  type="integer",   help="Pipeline step counter"),
     make_option(c("-l","--log"),      type="character", help="Log file path")

@@ -7,6 +7,7 @@ param_path="/mnt/c/MyStuff/preprocessing/Testing/Data/parameters_2.json"
 out_dir="/mnt/c/MyStuff/preprocessing/Testing/Data"
 counter=4
 log_file="/mnt/c/MyStuff/preprocessing/Testing/Data/log_file.txt"
+metadata_file="/mnt/c/MyStuff/preprocessing/Testing/Data/parameters.txt"
 
 # --- Call R script ---
 "/usr/bin/Rscript" "/mnt/c/MyStuff/preprocessing/Code/Common/Preprocessing/modules_R/module_normalization_new.R" \
@@ -14,4 +15,5 @@ log_file="/mnt/c/MyStuff/preprocessing/Testing/Data/log_file.txt"
     -p "$param_path" \
     -o "$out_dir" \
     -c "$counter" \
-    -l "$log_file"
+    -l "$log_file" \
+    -m "$metadata_file"

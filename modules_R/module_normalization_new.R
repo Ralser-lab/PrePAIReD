@@ -201,7 +201,7 @@ main <- function() {
   normalized_df <- run_with_logging(
     function() normalize(
       data   = DM_df,
-      method = parameter_list[["method_normalization_R"]],
+      method = parameter_list[["normalization_method"]],
       params = parameter_list
     ),
     args$log
