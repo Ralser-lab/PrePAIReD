@@ -1025,7 +1025,7 @@ def get_parser():
         "-o", "--outpath", required=True, 
         help="Filepath for outputfile") 
     parser.add_argument(
-        "-md", "--metapath", required=False, 
+        "-m", "--metapath", required=False, 
         help="Filepath to metadatafile") 
    # parser.add_argument(
    #     "-ma", "--maskpath", required=False,  #### CGenerate with datapath
