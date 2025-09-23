@@ -513,7 +513,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
         weights=[1,1,1]
 
     # unlog data
-    data_df=helper.unlog_transform(data_df)
+    #data_df=helper.unlog_transform(data_df)
     data_df.replace(np.nan,0,inplace=True)
     module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
         
@@ -689,7 +689,7 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #initiate variables for MaxLFQ
     n_runs=len(data_df.columns)
     #transform to long format
-    data_df=helper.unlog_transform(data_df)
+    #data_df=helper.unlog_transform(data_df)
     lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
     lf_df.replace(0,1,inplace=True) 
     #quantity_col = "value"
@@ -755,7 +755,7 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
     data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
     
-    data_df = 2**data_df
+    #data_df = 2**data_df
     data_df = data_df.groupby(by="index",level=0).sum()
     #data_df = np.log2(data_df).replace([np.inf, -np.inf], np.nan)
     
@@ -769,6 +769,10 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 if __name__ == "__main__":
     
     data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", metadata=True, id_mapping=True, mask=True)
+
+    # unlog data
+    data_df=helper.unlog_transform(data_df)
+    helper.save_data(data_df, out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")
     
     if parameters_dict["summarization_method"]=="MaxLFQ":
         data_processed_df, module_output = MaxLFQ_summarization(data_df, id_mapping_df, module_output, 
@@ -792,5 +796,9 @@ if __name__ == "__main__":
         
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
+    
+    # Save without log transformation
+    helper.save_data(data_processed_df, out_dir_fp, outname[:-4]+"_unlog.tsv")
+    data_processed_df = helper.log_transform(data_processed_df)
         
     helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
