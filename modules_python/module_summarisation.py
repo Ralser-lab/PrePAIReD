@@ -511,6 +511,9 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     
     if weights is None:
         weights=[1,1,1]
+
+    # unlog data
+    data_df=helper.unlog_transform(data_df)
     data_df.replace(np.nan,0,inplace=True)
     module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
         
@@ -594,6 +597,9 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     #pg_profiles.columns=pg_profiles.columns.get_level_values(0)
     #pg_profiles.columns.name=None
     #return(pg_profiles,filter_mask,mask_description,module_output)
+
+    # log data
+    #pg_profiles_df = log_transform(pg_profiles_df)
 
     return(pg_profiles_df.copy(),id_mapping_df_c,module_output)
 
@@ -751,7 +757,7 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     
     data_df = 2**data_df
     data_df = data_df.groupby(by="index",level=0).sum()
-    data_df = np.log2(data_df).replace([np.inf, -np.inf], np.nan)
+    #data_df = np.log2(data_df).replace([np.inf, -np.inf], np.nan)
     
     module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n"
     
