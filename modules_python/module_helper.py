@@ -168,12 +168,17 @@ def unlog_transform(
         specified base.
 
     """
+	# Check for invalid base values
+    if base <= 0 or base == 1:
+        raise ValueError("Base must be greater than 0 and not equal to 1")
     df = base**df
+	# Replace 1 with 0 to preserve zeros before transformation
+	df = df.replace(1,0)
     return(df)
 
 def mad(x):
     """
-    Xalculate median absolute deviation of a vector x
+    Calculate median absolute deviation of a vector x
     
     author: BZ
     
