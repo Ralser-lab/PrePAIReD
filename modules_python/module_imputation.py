@@ -1040,13 +1040,13 @@ if __name__ == "__main__":
                                 elif imputation_method == "bpca":
                                     data_part_df = bpca_fill(data_part_df.T).T
                                 elif imputation_method == "graphbased":
-                                    graphbased_imputation(data_df=data_part_df,
-                                                          id_mapping_df=id_mapping_df,
-                                                          protein_col=parameters_dict["protein_col"],
-                                                          precursor_col=parameters_dict["precursor_col"],
-                                                          impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
-                                                          estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
-                                                          weighting=parameters_dict["graphbased_imputation_weighting"])
+                                    data_part_df = graphbased_imputation(data_df=data_part_df,
+                                                                         id_mapping_df=id_mapping_df,
+                                                                         protein_col=parameters_dict["protein_col"],
+                                                                         precursor_col=parameters_dict["precursor_col"],
+                                                                         impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
+                                                                         estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
+                                                                         weighting=parameters_dict["graphbased_imputation_weighting"])
     
                                 #only allow imputed values for selected missingness type
                                 #missingness_mask_df = imputation_mask_df.loc[precursors,samples]
@@ -1122,13 +1122,13 @@ if __name__ == "__main__":
                     elif imputation_method == "bpca":
                         data_df = bpca_fill(data_df.T).T
                     elif imputation_method == "graphbased":
-                        graphbased_imputation(data_df=data_df,
-                                              id_mapping_df=id_mapping_df,
-                                              protein_col=parameters_dict["protein_col"],
-                                              precursor_col=parameters_dict["precursor_col"],
-                                              impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
-                                              estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
-                                              weighting=parameters_dict["graphbased_imputation_weighting"])
+                        data_df = graphbased_imputation(data_df=data_df,
+                                                        id_mapping_df=id_mapping_df,
+                                                        protein_col=parameters_dict["protein_col"],
+                                                        precursor_col=parameters_dict["precursor_col"],
+                                                        impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
+                                                        estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
+                                                        weighting=parameters_dict["graphbased_imputation_weighting"])
                     # remember which and how many values are missing after imputation
                     still_total_num_values,num_still_missing_values,still_missing_val_locs = obtain_missingness_for_log(data_df=data_df)
                     #update mask_df with imputed values
