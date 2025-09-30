@@ -237,8 +237,8 @@ def set_aspect_equal(ax):
 ### Coloring
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
-# Imputation: mean intensities and summed intensities (log) -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata = False):
+# Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2):
 
     ### Examples:
     ### Drift correction
@@ -250,19 +250,32 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     #continuous = False
     #column_color = "MS.Batch"
     #column_color = "Sample.Type"
-
+    
+    if not use_metadata_coloring:
+        if not continuous:
+            continuous = True
+            print("No discrete coloring implemented without use_metadata_color==True. Used continuous=True instead.")
+    
     if continuous:
         cmap = "viridis"
     else:
         cmap = "Spectral"
     
     data_origin[data_origin==0] = np.nan
-    if not use_metadata:
-        column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
+    if not use_metadata_coloring:
+        if coloring_property == "Missingness":
+            column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
+        elif coloring_property=="Mean_Intensities":
+            column_values_origin = np.nanmean(data_origin.values,axis=0)
+        elif coloring_property=="Median_Intensities":
+            column_values_origin = np.nanmedian(data_origin.values,axis=0)
+        elif coloring_property=="Sum_Intensities":
+            column_values_origin = np.log(np.nansum(base**(data_origin.values),axis=0))/np.log(base)
+        else:
+            raise ValueError(coloring_property+" for coloring type not defined")
     data_origin = data_origin.copy().dropna()
-    #labels_origin = data_origin.columns
     data_origin_scaled = StandardScaler().fit_transform(data_origin.T)
-    if use_metadata:
+    if use_metadata_coloring:
         column_values_origin = metadata.loc[data_origin.columns,column_color].values
     
     pca_origin = PCA()
@@ -271,12 +284,18 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     
     if data_processed is not None:
         data_processed[data_processed==0] = np.nan
-        if not use_metadata:
-            column_values_processed = np.sum(~np.isnan(data_processed.values),axis=0)
+        if not use_metadata_coloring:
+            if coloring_property == "Missingness":
+                column_values_processed = np.sum(~np.isnan(data_processed.values),axis=0)
+            elif coloring_property=="Mean_Intensities":
+                column_values_processed = np.nanmean(data_processed.values,axis=0)
+            elif coloring_property=="Median_Intensities":
+                column_values_processed = np.nanmedian(data_processed.values,axis=0)
+            elif coloring_property=="Sum_Intensities":
+                column_values_processed = np.log(np.nansum(base**(data_processed.values),axis=0))/np.log(base)
         data_processed = data_processed.copy().dropna()
-        #labels_processed = data_origin.columns
         data_processed_scaled = StandardScaler().fit_transform(data_processed.T)
-        if use_metadata:
+        if use_metadata_coloring:
             column_values_processed = metadata.loc[data_processed.columns,column_color].values
         
         pca_processed = PCA()
@@ -301,6 +320,8 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
         if data_processed is not None:
             column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
+            
+    print(coloring_property)
     
     colors_origin = [cmap_(norm(el)) for el in column_values_origin]
     if data_processed is not None:
@@ -312,20 +333,17 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     for i in range(n_components-1):
         for j in range(i+1,n_components):
             ax = fig.add_subplot(gs[j,i])  
-            #ax.plot([0,i+1],[0,j+1])
             ax.scatter(data_origin_transformed[:,i],data_origin_transformed[:,j],alpha=0.5, c=colors_origin)
     
             ax.tick_params(labelsize = fontsize)
             set_aspect_equal(ax)
             if i != 0:
                 ax.set_yticklabels([])
-                #pass
             else:
                 ax.set_ylabel("PC "+str(j+1)+" ("+"{:.1f}".format(var_origin[j]*100)+"%)", fontsize = fontsize, labelpad = 5)
                 ax.yaxis.get_major_locator().set_params(integer=True) 
             if j != n_components-1:
                 ax.set_xticklabels([])
-                #pass
             else:
                 ax.set_xlabel("PC "+str(i+1)+" ("+"{:.1f}".format(var_origin[i]*100)+"%)", fontsize = fontsize, labelpad = 5)
                 ax.xaxis.get_major_locator().set_params(integer=True) 
@@ -335,7 +353,6 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             
             if data_processed is not None:
                 ax = fig.add_subplot(gs[i,j])
-                #ax.plot([0,j+1],[0,i+1])
                 ax.scatter(data_processed_transformed[:,j],data_processed_transformed[:,i],alpha=0.5, c=colors_processed)
     
                 ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
@@ -351,13 +368,11 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     
                 if j != n_components-1:
                     ax.set_yticklabels([])
-                    #pass
                 else:
                     ax.set_ylabel("PC "+str(i+1)+" ("+"{:.1f}".format(var_processed[i]*100)+"%)", fontsize = fontsize, labelpad = 5)
                     
                 if i != 0:
                     ax.set_xticklabels([])
-                    #pass
                 else:
                     ax.set_xlabel("PC "+str(j+1)+" ("+"{:.1f}".format(var_processed[j]*100)+"%)", fontsize = fontsize, labelpad = 5)
         
@@ -370,25 +385,26 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         s_max = 1 - s_min
         fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
         fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
-        #if column_color:
-        #line = plt.Line2D((.05,.95-(.95/n_components)),
-        #                  (.95,.05+(.95/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
         line = plt.Line2D((s_min,s_max-(.9/n_components)),
                           (s_max,s_min+(.9/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
     
-        #else:
-        #    line = plt.Line2D((.05,.95),(.95,.05+line_offset), color="k", linewidth=1, linestyle=":")
-            
         fig.add_artist(line)
     
     cax = fig.add_subplot(gs[j,j])
     cax.set_visible(False)
     cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm,cmap=cmap), ax=cax, aspect = 10, fraction = 0.8)
     cbar.ax.tick_params(labelsize=fontsize)
-    if use_metadata:
+    if use_metadata_coloring:
         cbar.ax.set_ylabel(column_color, fontsize=fontsize_label, labelpad=10)
     else:
-        cbar.ax.set_ylabel("# not NaN", fontsize=fontsize_label, labelpad=10)
+        if coloring_property == "Missingness":
+            cbar.ax.set_ylabel("# not NaN", fontsize=fontsize_label, labelpad=10)
+        elif coloring_property == "Mean_Intensities":
+            cbar.ax.set_ylabel("logarithmic\nmean intensities", fontsize=fontsize_label, labelpad=10)
+        elif coloring_property == "Median_Intensities":
+            cbar.ax.set_ylabel("logarithmic\nmedian intensities", fontsize=fontsize_label, labelpad=10)
+        elif coloring_property=="Sum_Intensities":
+            cbar.ax.set_ylabel("logarithmic\nsum of intesities", fontsize=fontsize_label, labelpad=10)
     if not continuous:
         cbar.ax.set_yticks(list(values_dict.values()))
         cbar.ax.set_yticklabels(values_dict.keys())
