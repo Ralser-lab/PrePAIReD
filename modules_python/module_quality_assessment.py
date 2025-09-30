@@ -226,8 +226,6 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_column = "S
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-
-
 def set_aspect_equal(ax):
     x_lim = ax.get_xlim()
     y_lim = ax.get_ylim()
@@ -367,11 +365,16 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             ax.grid()
     
     if data_processed is not None:
-        fig.text(1.5/(2*n_components),(2*n_components-1.5)/(2*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
-        fig.text(1.5/(2*n_components),(2*n_components-1.5)/(2*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
+        s = 2.5*(np.log2(n_components)+1)/n_components
+        s_min = 0.01*n_components
+        s_max = 1 - s_min
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
         #if column_color:
-        line = plt.Line2D((.05,.95-(.95/n_components)),
-                          (.95,.05+(.95/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
+        #line = plt.Line2D((.05,.95-(.95/n_components)),
+        #                  (.95,.05+(.95/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
+        line = plt.Line2D((s_min,s_max-(.9/n_components)),
+                          (s_max,s_min+(.9/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
     
         #else:
         #    line = plt.Line2D((.05,.95),(.95,.05+line_offset), color="k", linewidth=1, linestyle=":")
