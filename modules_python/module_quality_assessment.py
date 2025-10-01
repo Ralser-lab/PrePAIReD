@@ -143,27 +143,47 @@ def get_CV_log(values, base=2):
     return cv
 
 # For Imputation, Normalization, Correction, Summarization
-def plot_CV_violin(data_origin, metadata, data_processed=None, group_column = "Sample.Type", size=(5,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png"):
+def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95):
     
-    group_dict = {group:metadata[metadata[group_column]==group].index for group in np.unique(metadata[group_column].values)}
-    cvs_lognormal_origin = [[get_CV_log(data_origin.loc[index,group_dict[group]]) for index in data_origin.index] for group in group_dict.keys()]
+    group_dict_comp = {str(group_column)+"__"+str(group):metadata[metadata[group_column]==group].index for group_column in group_columns for group in np.unique(metadata[group_column].values)}
+    group_dict = {}
+    
+    keys = list(group_dict_comp.keys())
+    for ind,key in enumerate(keys):
+        for key_2 in keys[ind+1:]:
+            if key.split("__")[0] != key_2.split("__")[0]:
+                group_dict.update({key+"___"+key_2:list(set(group_dict_comp[key])&set(group_dict_comp[key_2]))})
+    if not group_dict:
+        group_dict = group_dict_comp
+                    
+    #cvs_lognormal_origin = [[get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index] for group in group_dict.keys()]
+    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
+    cvs_lognormal_origin = [item if item or sum(item)>0 else [np.nan]*2 for item in cvs_lognormal_origin]
     
     if data_processed is not None:
-        cvs_lognormal_processed = [[get_CV_log(data_processed.loc[index,group_dict[group]]) for index in data_processed.index] for group in group_dict.keys()]
-    
+        #cvs_lognormal_processed = [[get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index] for group in group_dict.keys()]
+        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
+        cvs_lognormal_processed = [item if item else [np.nan]*2 for item in cvs_lognormal_processed]
+        
     if calc_widths:
-        widths_origin = [np.max(np.histogram(cvs_lognormal_origin[ind],bins=25, range=(np.min(cvs_lognormal_origin),np.max(cvs_lognormal_origin)))[0]) for ind in range(len(cvs_lognormal_origin))]
+        min_origin = np.nanmin([el for item in cvs_lognormal_origin for el in item])
+        max_origin = np.nanmax([el for item in cvs_lognormal_origin for el in item])
+        widths_origin = [np.nanmax(np.histogram(cvs_lognormal_origin[ind],bins=25, range=(min_origin,max_origin))[0]) for ind in range(len(cvs_lognormal_origin)) if cvs_lognormal_origin[ind]]
         if data_processed is not None:
-            widths_processed = [np.max(np.histogram(cvs_lognormal_processed[ind],bins=25, range=(np.min(cvs_lognormal_processed),np.max(cvs_lognormal_processed)))[0]) for ind in range(len(cvs_lognormal_processed))]
+            min_processed = np.nanmin([el for item in cvs_lognormal_processed for el in item])
+            max_processed = np.nanmax([el for item in cvs_lognormal_processed for el in item])
+            widths_processed = [np.nanmax(np.histogram(cvs_lognormal_processed[ind],bins=25, range=(min_processed,max_processed))[0]) for ind in range(len(cvs_lognormal_processed)) if cvs_lognormal_processed[ind]]
             
             scale = max(max(widths_origin),max(widths_processed))
-            widths_origin = widths_origin/scale*0.8
-            widths_processed = widths_processed/scale*0.8
+            widths_origin = widths_origin/scale*scale_max
+            widths_processed = widths_processed/scale*scale_max
         else:
-            widths_origin = widths_origin/max(widths_origin)*0.8
+            widths_origin = widths_origin/max(widths_origin)*scale_max
     else:
-        widths_origin = 0.8
-        widths_processed = 0.8
+        widths_origin = scale_max
+        widths_processed = scale_max
+    
+    size = ((size[0]*len(group_dict))+1,size[1])
     
     fig,ax = plt.subplots()
     fig.set_size_inches(size)
@@ -216,7 +236,7 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_column = "S
         fig.text(0.52,0.9,"After "+step, ha="left", va="bottom",color="orange", fontsize = fontsize_title)
         
     ax.set_xticks(np.arange(1,len(group_dict)+1))
-    ax.set_xticklabels(group_dict.keys(), fontsize = fontsize, rotation = 45, ha = "right")
+    ax.set_xticklabels([item.replace("___","\n").replace("__",":") for item in group_dict.keys()], fontsize = fontsize, rotation = 45, ha = "right")
     ax.set_ylabel("Coefficient of variation", fontsize = fontsize)
     ax.tick_params(axis="y", labelsize = fontsize)
     
