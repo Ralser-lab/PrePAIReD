@@ -17,7 +17,13 @@ import matplotlib as mpl
 ### Generalize colors as an input_variable
 
 ### For all modules to check how either plot changes, adjust labels for summarization
-def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type="QC", sample_type_column="Sample.Type", size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png"):
+def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
+    
+    if not cmap:
+        if continuous:
+            cmap = "viridis"
+        else:
+            cmap = "Spectral"
     
     fig = plt.figure(figsize=size)
     if data_processed is not None:
@@ -31,10 +37,53 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
     if data_processed is not None:
         ax_numbers_processed = fig.add_subplot(gs[0,1])
         ax_boxplot_processed = fig.add_subplot(gs[1,1])
-
-    indices_origin = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type if index in data_origin.columns]
+    
+    if sample_type_column:
+        if not sample_type:
+            raise ValueError("sample_type is not defined.")
+        indices_origin = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_processed.columns]
+    else:
+        indices_origin = [index for index in metadata.index if index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if index in data_processed.columns]
+    
+    if use_metadata_coloring:
+        if column_color not in metadata.columns:
+            raise ValueError("Column not found in metadata")
+        column_values_origin = metadata.loc[indices_origin,column_color]
+        if data_processed is not None:
+            column_values_processed = metadata.loc[indices_processed,column_color]
+    
+        cmap_ = mpl.cm.get_cmap(cmap)
+        
+        if continuous:
+            if data_processed is not None:
+                vmin = min(min(column_values_origin),min(column_values_processed))
+                vmax = max(max(column_values_origin),max(column_values_processed))
+            else:
+                vmin = min(column_values_origin)
+                vmax = max(column_values_origin)
+            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+        else:
+            values = set(column_values_origin)
+            values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
+            column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
+            bounds = np.linspace(0,1,len(values)+1)
+            norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
+            if data_processed is not None:
+                column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
+            
+        colors_origin = [cmap_(norm(el)) for el in column_values_origin]
+        if data_processed is not None:
+            colors_processed = [cmap_(norm(el)) for el in column_values_processed]
+    
     y_origin = [sum(~np.isnan(data_origin[column].values)) for column in indices_origin]
-    ax_numbers_origin.scatter(np.arange(len(indices_origin)),y_origin)
+    if use_metadata_coloring:
+        ax_numbers_origin.scatter(np.arange(len(indices_origin)),y_origin, c = colors_origin)
+    else:
+        ax_numbers_origin.scatter(np.arange(len(indices_origin)),y_origin)
     ax_numbers_origin.set_xticks(np.arange(len(indices_origin)))
     ax_numbers_origin.set_xticklabels([])
     ax_numbers_origin.set_ylabel(ylabel_int, fontsize=fontsize)
@@ -43,9 +92,11 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
     ax_numbers_origin.tick_params(labelsize=fontsize)
     
     if data_processed is not None:
-        indices_processed = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type if index in data_processed.columns]
         y_processed = [sum(~np.isnan(data_processed[column].values)) for column in indices_processed]
-        ax_numbers_processed.scatter(np.arange(len(indices_processed)),y_processed)
+        if use_metadata_coloring:
+            ax_numbers_processed.scatter(np.arange(len(indices_processed)),y_processed, c=colors_processed)
+        else:
+            ax_numbers_processed.scatter(np.arange(len(indices_processed)),y_processed)
         ax_numbers_processed.set_xticks(np.arange(len(indices_processed)))
         ax_numbers_processed.set_xticklabels([])
         ax_numbers_processed.set_yticklabels([])
@@ -69,7 +120,12 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
         ax_numbers_processed.set_xlim(-1,len(indices_processed))
 
     data_origin_filtered = [data_origin[column].copy().dropna().values for column in indices_origin]
-    ax_boxplot_origin.boxplot(data_origin_filtered, patch_artist=True, medianprops=dict(color="w"))
+    bplot = ax_boxplot_origin.boxplot(data_origin_filtered, patch_artist=True, medianprops=dict(color="w"))
+    
+    if use_metadata_coloring:
+        for patch, color in zip(bplot['boxes'], colors_origin):
+            patch.set_facecolor(color)
+    
     ax_boxplot_origin.set_ylabel(y_label_box, fontsize=fontsize)
     ax_boxplot_origin.set_xticklabels([])
     ax_boxplot_origin.set_xlabel(x_label, fontsize=fontsize)
@@ -79,7 +135,12 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
 
     if data_processed is not None:
         data_processed_filtered = [data_processed[column].copy().dropna().values for column in indices_processed]
-        ax_boxplot_processed.boxplot(data_processed_filtered, patch_artist=True, medianprops=dict(color="w"))
+        bplot = ax_boxplot_processed.boxplot(data_processed_filtered, patch_artist=True, medianprops=dict(color="w"))
+        
+        if use_metadata_coloring:
+            for patch, color in zip(bplot['boxes'], colors_processed):
+                patch.set_facecolor(color)
+        
         ax_boxplot_processed.set_xticklabels([])
         ax_boxplot_processed.set_xlabel(x_label, fontsize=fontsize)
         ax_boxplot_processed.set_yticklabels([])
@@ -258,7 +319,7 @@ def set_aspect_equal(ax):
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None):
 
     ### Examples:
     ### Drift correction
@@ -276,10 +337,11 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             continuous = True
             print("No discrete coloring implemented without use_metadata_color==True. Used continuous=True instead.")
     
-    if continuous:
-        cmap = "viridis"
-    else:
-        cmap = "Spectral"
+    if not cmap:
+        if continuous:
+            cmap = "viridis"
+        else:
+            cmap = "Spectral"
     
     data_origin[data_origin==0] = np.nan
     if not use_metadata_coloring:
@@ -340,9 +402,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
         if data_processed is not None:
             column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
-            
-    print(coloring_property)
-    
+                
     colors_origin = [cmap_(norm(el)) for el in column_values_origin]
     if data_processed is not None:
         colors_processed = [cmap_(norm(el)) for el in column_values_processed]
