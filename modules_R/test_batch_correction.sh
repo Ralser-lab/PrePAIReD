@@ -18,14 +18,15 @@ set -Eeuo pipefail
 # Helper loader path for R (portable if you export this on other machines)
 export PIPELINE_HELPERS_R="${PIPELINE_HELPERS_R:-/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/helper_functions_R.R}"
 
-: "${PROJECT_ROOT:="/Users/rozsurmiz/Desktop/PreprocessingPipeline"}"
+: "${PROJECT_ROOT:="/Users/rozsurmiz/Desktop/Projects/PreprocessingPipeline/PreprocessingPipeline"}"
+: "${METHOD:="limma"}"  # "limma", "combat" or "harmony"
 : "${DATA_DIR:="${PROJECT_ROOT}/04_NORMALIZATION"}"
 : "${OUT_DIR:="${PROJECT_ROOT}/05_CORRECTION"}"
 : "${METADATA:="${PROJECT_ROOT}/Metadata.tsv"}"
-: "${PARAMS:="${PROJECT_ROOT}/Parameters/05_CORRECTION_parameters copy.json"}"
+: "${PARAMS:="${PROJECT_ROOT}/Parameters/05_CORRECTION_parameters.${METHOD}.json"}" #path/to/05_CORRECTION_parameters.combat.json" #/path/to/05_CORRECTION_parameters.harmony.json"
 : "${IDS:="${PROJECT_ROOT}/04_NORMALIZATION/id_mapping.tsv"}"   # <-- new
 : "${LOG:="${PROJECT_ROOT}/bash_log_rerun_05_correction.txt"}"
-: "${MODULE:="/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/module_batch_correction_new.r"}"
+: "${MODULE:="/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/module_batch_correction.r"}"
 : "${RSCRIPT_BIN:="Rscript"}"
 
 # ---- Auto-detect COUNTER ----
@@ -47,7 +48,7 @@ if [[ -n "${COUNTER_OVERRIDE:-}" ]]; then
 fi
 
 INPUT_FILE="${DATA_DIR}/data_$(printf "%02d" $((10#${COUNTER} - 1))).tsv"
-OUTPUT_FILE="${OUT_DIR}/data_${COUNTER}.tsv"
+OUTPUT_FILE="${OUT_DIR}/data_${METHOD}_${COUNTER}.tsv"
 
 # ---- Preflight checks ----
 command -v "${RSCRIPT_BIN}" >/dev/null 2>&1 || { echo "ERROR: ${RSCRIPT_BIN} not found" >&2; exit 1; }

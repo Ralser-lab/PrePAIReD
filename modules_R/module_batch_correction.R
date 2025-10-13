@@ -15,15 +15,15 @@
 #      │                                   │
 #      │                                   │
 #Python wrapper                        Command-line call
-#(called from your                     (run Rscript directly)
+#(called from                        (run Rscript directly)
 #cross-language pipeline)
 #    │                                   │
 #     ▼                                   ▼
 #┌─────────────────┐                 ┌─────────────┐
 #│ batchcorrect()  │◄────────────────┤  main()     │
-#│  (Public entry  │   function call  │  (CLI)      │
+#│  (Public entry  │   function call │  (CLI)      │
 #│   point)        │────────────────►│             │
-#└─────────────────┘   passes args    └─────────────┘
+#└─────────────────┘   passes args   └─────────────┘
 #     │
 #      ▼
 #┌───────────────────────────┐
@@ -232,7 +232,7 @@ batchcorrect_harmony <- function(Data, batchER) {
 
 # Dispatcher
 .dispatch_batch <- function(Data, batchER) {
-  method <- toupper(batchER$method %||% "LIMMA")
+  method <- toupper(batchER$correct_/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/test_batch_correction.shmethod %||% "LIMMA")
   if (method == "LIMMA")   return(batchcorrect_limma(Data, batchER))
   if (method == "COMBAT")  return(batchcorrect_combat(Data, batchER))
   if (method == "HARMONY") return(batchcorrect_harmony(Data, batchER))
@@ -264,14 +264,14 @@ batchcorrect <- function(data_df_fp,
   log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
 
   # Params normalization (Python-like keys supported)
-  method     <- toupper(params$method %||% "LIMMA")
+  method     <- toupper(params$correct_method %||% "LIMMA")
   batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
   if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
   batch1 <- batch_cols[[1]]
   batch2 <- if (length(batch_cols) >= 2) batch_cols[[2]] else NULL
 
   batchER <- list(
-    method      = method,
+    correct_method = method,
     batch       = batch1,
     batch2      = batch2,
     covariates  = params$covariates %||% params$combat_cols_adjust_meta %||% NULL,
@@ -318,14 +318,14 @@ batch_correct <- function(data_df, meta_df, params) {
   meta_df <- ali$meta_df
   log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
 
-  method     <- toupper(params$method %||% "LIMMA")
+  method     <- toupper(params$correct_method %||% "LIMMA")
   batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
   if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
   batch1 <- batch_cols[[1]]
   batch2 <- if (length(batch_cols) >= 2) batch_cols[[2]] else NULL
 
   batchER <- list(
-    method      = method,
+    correct_method = method,
     batch       = batch1,
     batch2      = batch2,
     covariates  = params$covariates %||% params$combat_cols_adjust_meta %||% NULL,
