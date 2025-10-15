@@ -156,7 +156,7 @@ batchcorrect_limma <- function(Data, batchER) {
 # sva::ComBat (optional)
 batchcorrect_combat <- function(Data, batchER) {
   if (!requireNamespace("sva", quietly = TRUE)) {
-    stop("Package 'sva' is required for method 'COMBAT' but is not installed.")
+    stop("Package 'sva' is required for method 'COMBAT_R' but is not installed.")
   }
   set.seed(42)
   DM <- Data$Matrix; md <- Data$MetaData
@@ -204,7 +204,7 @@ batchcorrect_combat <- function(Data, batchER) {
 # harmony::HarmonyMatrix over PCA (optional)
 batchcorrect_harmony <- function(Data, batchER) {
   if (!requireNamespace("harmony", quietly = TRUE)) {
-    stop("Package 'harmony' is required for method 'HARMONY' but is not installed.")
+    stop("Package 'harmony' is required for method 'HARMONY_R' but is not installed.")
   }
   set.seed(42)
   DM <- Data$Matrix; md <- Data$MetaData
@@ -232,10 +232,10 @@ batchcorrect_harmony <- function(Data, batchER) {
 
 # Dispatcher
 .dispatch_batch <- function(Data, batchER) {
-  method <- toupper(batchER$correct_/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/test_batch_correction.shmethod %||% "LIMMA")
-  if (method == "LIMMA")   return(batchcorrect_limma(Data, batchER))
-  if (method == "COMBAT")  return(batchcorrect_combat(Data, batchER))
-  if (method == "HARMONY") return(batchcorrect_harmony(Data, batchER))
+  method <- toupper(batchER$correct_/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/test_batch_correction.shmethod %||% "LIMMA__R")
+  if (method == "LIMMA_R")   return(batchcorrect_limma(Data, batchER))
+  if (method == "COMBAT_R")  return(batchcorrect_combat(Data, batchER))
+  if (method == "HARMONY_R") return(batchcorrect_harmony(Data, batchER))
   stop("Unknown batch correction method: ", method)
 }
 
@@ -264,7 +264,7 @@ batchcorrect <- function(data_df_fp,
   log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
 
   # Params normalization (Python-like keys supported)
-  method     <- toupper(params$correct_method %||% "LIMMA")
+  method     <- toupper(params$correct_method %||% "LIMMA_R")
   batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
   if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
   batch1 <- batch_cols[[1]]
@@ -318,7 +318,7 @@ batch_correct <- function(data_df, meta_df, params) {
   meta_df <- ali$meta_df
   log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
 
-  method     <- toupper(params$correct_method %||% "LIMMA")
+  method     <- toupper(params$correct_method %||% "LIMMA_R")
   batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
   if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
   batch1 <- batch_cols[[1]]
