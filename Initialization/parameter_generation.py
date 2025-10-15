@@ -23,7 +23,7 @@ import sys
 # Parser to access from terminal
 #"""
 parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
-parser.add_argument("-i","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
+parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
 parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
 args = parser.parse_args()
 
@@ -34,7 +34,7 @@ try:
 except:
     raise ValueError("###ERROR###: Input file not found")
     sys.exit(1)
-# Set output
+# Set output‚
 outpath = args.output_path
     
 if not os.path.isdir(outpath):
