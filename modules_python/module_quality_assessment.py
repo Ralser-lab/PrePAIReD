@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib as mpl
+from scipy.interpolate import UnivariateSpline
 
 ### Generalize colors as an input_variable
 
@@ -467,7 +468,6 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
         line = plt.Line2D((s_min,s_max-(.9/n_components)),
                           (s_max,s_min+(.9/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
-    
         fig.add_artist(line)
     
     cax = fig.add_subplot(gs[j,j])
@@ -492,3 +492,85 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     plt.savefig(outfile, bbox_inches="tight")
     return
 
+def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "../Out/Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e+3, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
+
+    fig = plt.figure(figsize=size)
+    fig.set_size_inches(size)
+    
+    if data_processed is not None:
+        gs = GridSpec(1,2, width_ratios = [0.5,0.5], hspace = 0.05, wspace = 0.05)
+    else:
+        gs = GridSpec(1,1, hspace= 0.05)
+    
+    ax_origin = fig.add_subplot(gs[0,0])
+    
+    if data_processed is not None:
+        max_val = max(data_origin.max().max(),data_processed.max().max())
+        min_val = min(data_origin.min().min(),data_processed.min().min())
+    else:
+        max_val = data_origin.max().max()
+        min_val = data_origin.min().min()
+    
+    if sample_type_column:
+        if not sample_type:
+            raise ValueError("sample_type is not defined.")
+        indices_origin = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_processed.columns]
+    else:
+        indices_origin = [index for index in metadata.index if index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if index in data_processed.columns]
+    
+    distribution_origin = [np.histogram(data_origin[column],bins=nbins,range=(min_val,max_val))[0] for column in indices_origin]
+    
+    xs = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),nbins)
+    xs_fine = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),250)
+    
+    cmap_ = mpl.cm.get_cmap(cmap)
+    norm = mpl.colors.Normalize(vmin=0, vmax=1)
+    color_values_origin = np.linspace(0,1,len(indices_origin))
+    colors_origin = [cmap_(norm(el)) for el in color_values_origin] 
+    
+    max_y = 0
+    
+    for item, color in zip(distribution_origin,colors_origin):
+        spl = UnivariateSpline(xs,item)
+        spl.set_smoothing_factor(smoothing_factor)
+        y_mod = spl(xs_fine)
+        ax_origin.plot(xs_fine,y_mod,color=color,alpha=0.5)
+        if max(y_mod) > max_y:
+            max_y = max(y_mod)
+            
+    ax_origin.tick_params(labelsize = fontsize)
+    ax_origin.set_xlabel(xlabel,fontsize=fontsize)
+    ax_origin.set_ylabel("Occurence",fontsize=fontsize)
+    ax_origin.grid(axis="y")
+    ax_origin.set_xlim(min_val,max_val)
+    ax_origin.set_ylim(0,max_y*1.05)
+    
+    if data_processed is not None:
+        ax_processed = fig.add_subplot(gs[0,1])
+        distribution_processed = [np.histogram(data_processed[column],bins=nbins,range=(min_val,max_val))[0] for column in indices_processed]
+        color_values_processed = np.linspace(0,1,len(indices_processed))
+        colors_processed = [cmap_(norm(el)) for el in color_values_processed] 
+        for item, color in zip(distribution_processed,colors_processed):
+            spl = UnivariateSpline(xs,item)
+            spl.set_smoothing_factor(smoothing_factor)
+            y_mod = spl(xs_fine)
+            ax_processed.plot(xs_fine,y_mod,color=color,alpha=0.5)
+            if max(y_mod) > max_y:
+                max_y = max(y_mod)   
+        ax_processed.set_xlim(min_val,max_val)
+        ax_processed.set_ylim(0,max_y*1.05)
+        
+        ax_origin.set_title("Before "+step, fontsize=fontsize)
+        ax_processed.set_title("After "+step, fontsize=fontsize)
+    
+    ax_processed.tick_params(labelsize = fontsize)
+    ax_processed.set_xlabel(xlabel,fontsize=fontsize)
+    ax_processed.set_yticklabels([])
+    ax_processed.grid(axis="y")
+    
+    plt.savefig(outfile, bbox_inches="tight")
+    return
