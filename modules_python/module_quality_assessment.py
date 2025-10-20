@@ -17,9 +17,99 @@ from scipy.interpolate import UnivariateSpline
 
 ### Generalize colors as an input_variable
 
+def get_CV_log(values, base=2):
+    cv = np.sqrt(base**(np.std(values)**2)-1)
+    return cv
+
+def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
+    
+    if sample_type_column:
+        if not sample_type:
+            raise ValueError("sample_type is not defined.")
+        indices_origin = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_processed.columns]
+    else:
+        indices_origin = [index for index in metadata.index if index in data_origin.columns]
+        if data_processed is not None:
+            indices_processed = [index for index in metadata.index if index in data_processed.columns]
+            
+    if data_processed is not None:
+        return indices_origin, indices_processed
+    else:
+        return indices_origin
+
+def get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, column_values_origin=None, column_values_processed=None, cmap="viridis", continuous=False):
+    
+    if column_values_origin is None:
+        if column_color not in metadata.columns:
+            raise ValueError("Column not found in metadata")
+        column_values_origin = metadata.loc[indices_origin,column_color]
+        if indices_processed is not None:
+            column_values_processed = metadata.loc[indices_processed,column_color]
+            
+    if indices_processed is not None:            
+        colors_origin, colors_processed, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed, cmap=cmap, continuous=continuous)
+        return colors_origin, colors_processed, norm, values_dict
+    else:
+        colors_origin, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed=None, cmap=cmap, continuous=continuous)
+        return colors_origin, norm, values_dict
+
+def get_colors_selection(column_values_origin, column_values_processed=None, cmap="viridis", continuous=False):
+
+    cmap_ = mpl.cm.get_cmap(cmap)
+    
+    if continuous:
+        if column_values_processed is not None:
+            vmin = min(min(column_values_origin),min(column_values_processed))
+            vmax = max(max(column_values_origin),max(column_values_processed))
+        else:
+            vmin = min(column_values_origin)
+            vmax = max(column_values_origin)
+        norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+        values_dict = {}
+    else:
+        values = set(column_values_origin)
+        values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
+        column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
+        bounds = np.linspace(0,1,len(values)+1)
+        norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
+        if column_values_processed is not None:
+            column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
+        
+    colors_origin = [cmap_(norm(el)) for el in column_values_origin]
+    if column_values_processed is not None:
+        colors_processed = [cmap_(norm(el)) for el in column_values_processed]
+        return colors_origin, colors_processed, norm, values_dict
+    return colors_origin, norm, values_dict
+
+def get_color_values_by_property(data_origin, coloring_property, data_processed=None, base=2):
+    if coloring_property == "Missingness":
+        column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
+    elif coloring_property=="Mean_Intensities":
+        column_values_origin = np.nanmean(data_origin.values,axis=0)
+    elif coloring_property=="Median_Intensities":
+        column_values_origin = np.nanmedian(data_origin.values,axis=0)
+    elif coloring_property=="Sum_Intensities":
+        column_values_origin = np.log(np.nansum(base**(data_origin.values),axis=0))/np.log(base)
+    else:
+        raise ValueError(coloring_property+" for coloring type not defined")
+    if data_processed is not None:
+        if coloring_property == "Missingness":
+            column_values_processed = np.sum(~np.isnan(data_processed.values),axis=0)
+        elif coloring_property=="Mean_Intensities":
+            column_values_processed = np.nanmean(data_processed.values,axis=0)
+        elif coloring_property=="Median_Intensities":
+            column_values_processed = np.nanmedian(data_processed.values,axis=0)
+        elif coloring_property=="Sum_Intensities":
+            column_values_processed = np.log(np.nansum(base**(data_processed.values),axis=0))/np.log(base)
+        return column_values_origin, column_values_processed
+    return column_values_origin
+
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
     
+    # Setup
     if not cmap:
         if continuous:
             cmap = "viridis"
@@ -39,47 +129,20 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
         ax_numbers_processed = fig.add_subplot(gs[0,1])
         ax_boxplot_processed = fig.add_subplot(gs[1,1])
     
-    if sample_type_column:
-        if not sample_type:
-            raise ValueError("sample_type is not defined.")
-        indices_origin = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_origin.columns]
-        if data_processed is not None:
-            indices_processed = [index for index in metadata.index if metadata.loc[index,sample_type_column]==sample_type and index in data_processed.columns]
+    # sample_type selection
+    if data_processed is not None:
+        indices_origin, indices_processed = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
     else:
-        indices_origin = [index for index in metadata.index if index in data_origin.columns]
-        if data_processed is not None:
-            indices_processed = [index for index in metadata.index if index in data_processed.columns]
+        indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
     
+    # metadata coloring
     if use_metadata_coloring:
-        if column_color not in metadata.columns:
-            raise ValueError("Column not found in metadata")
-        column_values_origin = metadata.loc[indices_origin,column_color]
         if data_processed is not None:
-            column_values_processed = metadata.loc[indices_processed,column_color]
-    
-        cmap_ = mpl.cm.get_cmap(cmap)
-        
-        if continuous:
-            if data_processed is not None:
-                vmin = min(min(column_values_origin),min(column_values_processed))
-                vmax = max(max(column_values_origin),max(column_values_processed))
-            else:
-                vmin = min(column_values_origin)
-                vmax = max(column_values_origin)
-            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+            colors_origin, colors_processed, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=indices_processed, cmap=cmap, continuous=continuous)
         else:
-            values = set(column_values_origin)
-            values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
-            column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
-            bounds = np.linspace(0,1,len(values)+1)
-            norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
-            if data_processed is not None:
-                column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
-            
-        colors_origin = [cmap_(norm(el)) for el in column_values_origin]
-        if data_processed is not None:
-            colors_processed = [cmap_(norm(el)) for el in column_values_processed]
+            colors_origin, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, cmap=cmap, continuous=continuous)
     
+    # Plotting
     y_origin = [sum(~np.isnan(data_origin[column].values)) for column in indices_origin]
     if use_metadata_coloring:
         ax_numbers_origin.scatter(np.arange(len(indices_origin)),y_origin, c = colors_origin)
@@ -199,10 +262,6 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
         
     plt.savefig(outfile, bbox_inches="tight")
     return
-
-def get_CV_log(values, base=2):
-    cv = np.sqrt(base**(np.std(values)**2)-1)
-    return cv
 
 # For Imputation, Normalization, Correction, Summarization
 def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95):
@@ -343,19 +402,16 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             cmap = "viridis"
         else:
             cmap = "Spectral"
-    
+            
+    # Coloring property
     data_origin[data_origin==0] = np.nan
-    if not use_metadata_coloring:
-        if coloring_property == "Missingness":
-            column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
-        elif coloring_property=="Mean_Intensities":
-            column_values_origin = np.nanmean(data_origin.values,axis=0)
-        elif coloring_property=="Median_Intensities":
-            column_values_origin = np.nanmedian(data_origin.values,axis=0)
-        elif coloring_property=="Sum_Intensities":
-            column_values_origin = np.log(np.nansum(base**(data_origin.values),axis=0))/np.log(base)
-        else:
-            raise ValueError(coloring_property+" for coloring type not defined")
+    if data_processed is not None:
+        data_processed[data_processed==0] = np.nan
+        if not use_metadata_coloring:
+            column_values_origin, column_values_processed = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
+    else:
+        column_values_origin = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
+
     data_origin = data_origin.copy().dropna()
     data_origin_scaled = StandardScaler().fit_transform(data_origin.T)
     if use_metadata_coloring:
@@ -366,16 +422,6 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     var_origin = pca_origin.explained_variance_ratio_[:n_components]
     
     if data_processed is not None:
-        data_processed[data_processed==0] = np.nan
-        if not use_metadata_coloring:
-            if coloring_property == "Missingness":
-                column_values_processed = np.sum(~np.isnan(data_processed.values),axis=0)
-            elif coloring_property=="Mean_Intensities":
-                column_values_processed = np.nanmean(data_processed.values,axis=0)
-            elif coloring_property=="Median_Intensities":
-                column_values_processed = np.nanmedian(data_processed.values,axis=0)
-            elif coloring_property=="Sum_Intensities":
-                column_values_processed = np.log(np.nansum(base**(data_processed.values),axis=0))/np.log(base)
         data_processed = data_processed.copy().dropna()
         data_processed_scaled = StandardScaler().fit_transform(data_processed.T)
         if use_metadata_coloring:
@@ -385,29 +431,12 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         data_processed_transformed = pca_processed.fit_transform(data_processed_scaled)[:,:n_components]
         var_processed = pca_processed.explained_variance_ratio_[:n_components]    
     
-    cmap_ = mpl.cm.get_cmap(cmap)
-    
-    if continuous:
-        if data_processed is not None:
-            vmin = min(min(column_values_origin),min(column_values_processed))
-            vmax = max(max(column_values_origin),max(column_values_processed))
-        else:
-            vmin = min(column_values_origin)
-            vmax = max(column_values_origin)
-        norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    else:
-        values = set(column_values_origin)
-        values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
-        column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
-        bounds = np.linspace(0,1,len(values)+1)
-        norm = mpl.colors.BoundaryNorm(bounds, cmap_.N)
-        if data_processed is not None:
-            column_values_processed = np.vectorize(values_dict.get)(column_values_processed)
-                
-    colors_origin = [cmap_(norm(el)) for el in column_values_origin]
     if data_processed is not None:
-        colors_processed = [cmap_(norm(el)) for el in column_values_processed]
-    
+        colors_origin, colors_processed, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed=column_values_processed, cmap=cmap, continuous=continuous)
+    else:
+        colors_origin, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed=None, cmap=cmap, continuous=continuous)
+
+    # Plotting
     fig = plt.figure(figsize=(n_components*2.5,n_components*2.5))
     gs = GridSpec(n_components,n_components, hspace= 0.1, wspace = 0.1)
     
@@ -476,6 +505,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     cbar.ax.tick_params(labelsize=fontsize)
     if use_metadata_coloring:
         cbar.ax.set_ylabel(column_color, fontsize=fontsize_label, labelpad=10)
+    
     else:
         if coloring_property == "Missingness":
             cbar.ax.set_ylabel("# not NaN", fontsize=fontsize_label, labelpad=10)
