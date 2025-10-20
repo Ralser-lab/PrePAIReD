@@ -373,7 +373,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
                 log += "###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet"#IMPLEMENT IF NECCESSARY
-            input_df = input_df[input_df["Ms1.Profile_df.Corr"] + 0.5 *
+            input_df = input_df[input_df["Ms1.Profile.Corr"] + 0.5 *
                         input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"] = len(input_df)
