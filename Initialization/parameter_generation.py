@@ -18,6 +18,8 @@ import sys
 ##### Check of parser and config need to deal with run/rerun -> DONE
 ### Write function to check if all parameters are present -> Implement in parameter check
 ### Add parser -> DONE
+
+### Add value if no imputation should be done like "no_imputation" -> Add to table
 #%%
 
 # Parser to access from terminal
@@ -91,7 +93,7 @@ dict_flags["IMPUTATION_setup"] = {"simple_imputation":{"Options":[1,0],
                                                             "Comment":"use one (1) or missingness type specific method (0)"},
                                         "imputation_method":{"Options":dict_flags["IMPUTATION"]["imputation_method"]["Options"],
                                                              "Default":dict_flags["IMPUTATION"]["imputation_method"]["Default"],
-                                                             "Comment": "imputation_setup == complex only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"])}
+                                                             "Comment": "imputation_setup == 0 only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"])}
                                         }
 
 #%%
@@ -222,9 +224,10 @@ for ind,block in enumerate(blocks):
         #elif imputation_method in dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]:
         # replace Imputation_setup with Imputation
         setup = "IMPUTATION"
+        block_new.append("### IMPORTANT NOTE: Imputation methods set to default. Please adjust if necessary.")
         for flag in dict_flags[setup]:
-            if imputation_method in dict_flags["IMPUTATION"]["imputation_method"]["Options"]:
-                if simple:
+            if simple:
+                if imputation_method in dict_flags["IMPUTATION"]["imputation_method"]["Options"]:
                     # Distinguish between R and Python: Python-specific flags
                     if imputation_method not in ["missforest","bpca_R","ppca","ppm","MNAR"]:
                         if flag not in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation"]:
@@ -241,24 +244,19 @@ for ind,block in enumerate(blocks):
                         block_new.append("## Options: "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]).replace("\'",""))
                         block_new.append("imputation_method = "+imputation_method)
                 else:
-                    # Setup type specific flags (Python)
-                    if flag not in ["imputation_method"]:
-                        if flag in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation"]:
-                            block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
-                            block_new.append(flag+" = "+imputation_method) #### maybe change later for different default methods
-                        else:
-                            if type(dict_flags[setup][flag]["Comment"]) is str: 
-                                block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))    
-                            block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")) 
-                            block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])) 
-            else:
-                # Error catching if method does not exist
-                if simple:
                     raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]+dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]).replace("\'",""))
-                    sys.exit(1)
-                else:
-                    raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]).replace("\'",""))
-                    sys.exit(1)
+                    sys.exit(1)             
+            else:
+                # Setup type specific flags (Python)
+                if flag not in ["imputation_method"]:
+                    #if flag in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation"]:
+                    #    block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
+                    #    block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])) #### maybe change later for different default methods ##### set ProtAbsence to None or use PrimaryDefault here
+                    #else:
+                    if type(dict_flags[setup][flag]["Comment"]) is str: 
+                        block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))    
+                    block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")) 
+                    block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])) 
         block_new.append("")
         blocks[ind] = block_new
       
