@@ -81,7 +81,7 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                     dict1[command.strip()] = description  # generate dictionary
                 # print(dict1)
                 json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
-                params_folder_file = open(f"{path_to_project_directory}/Parameter_Files/{module_folder}.json", "w")
+                params_folder_file = open(f"{path_to_project_directory}/Parameter_Files/{module_folder}_parameters.json", "w")
                 json.dump(dict1, params_folder_file, indent=4, sort_keys=False)  # write to parameters folder
                 txt_to_json.close()
                 out_file.close()
