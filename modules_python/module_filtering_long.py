@@ -71,9 +71,9 @@ def read_input(filename,file_columns_list=None):
     #if filesize<ram.available:
     #read parquet file
     if "parquet" in filename.split("."):
-         file = pd.read_parquet(filename, columns=file_columns)
+         file = pd.read_parquet(filename, columns=file_columns_list)
     else: # read tsv file
-         file = pd.read_csv(filename, usecols=file_columns, sep="\t")# ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
+         file = pd.read_csv(filename, usecols=file_columns_list, sep="\t")# ,dtype={"Q.Value":float,"GG.Q.Value":float,"PG.Q.Value":float,"Protein.Q.Value":float,"Lib.Q.Value":float})
     
     return(file)
 
