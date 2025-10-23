@@ -797,7 +797,7 @@ def weighted_median(arr,W):
     ----------
     arr : np.array
         array for which the median should be calculated.
-    W : TYPE
+    W : np.array
         weights for every element of arr.
 
     Returns
