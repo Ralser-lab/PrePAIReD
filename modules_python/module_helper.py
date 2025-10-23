@@ -3,29 +3,41 @@ Input: X
 Output: X
 
 functions:
-    - create_analysis_folder: if not existent, creates a folder for analysis
-    - replace_invalid_characters: replaces characters that cannot be decoded in standard encoding
-    - create_logfile: creates a textfile documenting the filtering and pre-processing analysis
-    - create_filtering_matrix: creates a wide-format .tsv file which keeps track for every ID in every sample if it has been measured, filtered (and why) or imputed
-    - rename_filter_mask_columns: renames filenames in filtering_matrix to shorter sample names as in the filtered output
-    - create_filename_annotations_file: if no metadata present, creates a metadata .tsv file containing the original filenames, shorter sample names and sample groups
-    - check_filename_annotations_on_unique_indices: sample and group names in created metadata can be assigned manually (e.g. via Excel). This function checks whether sample names are unique
-    - load_metadata: loads existing metadata, either automatically generated tsv-file or manually curated xlsx-file
-    - weighted_median: calculate the weighted median for an array with given weights
-    - weighted_nanmedian: calculate the weighted median for an array with given weights ignoring NaNs
-    - insert_column_level: inserts a new level to MultiIndex columns
-    - annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles
-    - logger: adds function-log to existing logfile
-    - init_module: initializes module
-    	- get_parser: generates the parser
-     	- get_parser_arguments: define pathes based on parsed arguments
-	- load_data: read in .tsv file
- 	- load_parameters: read in .-json parameter file
-  	- load_id_mapping: read in precursor to protein mapping
-   	- get_seed: generates the seed based on the counter
-    	- add_parameters_to_log: writes parameters to the log_file
-     - close_module: write data to disk and close the module
-     	- save_data: write data to disk
+	- zscore_transformation: calculates z-scores based on mean and sd or median and median absolute deviation (MAD)
+	- log_transform: applies a logarithmic transformation to a DataFrame with the specified base
+	- unlog_transform: transforms intensities of wide-format precursor or protein intensities over samples from log-space to not-log-space for a specified base
+	- mad: calculate median absolute deviation
+	- (calculate_mean_over_refs: calculate a mean sample over reference samples specified via refstring and exclude original samples specified via refstring)
+	- (calculate_log2FC_to_ref: calculates log2 fold changes to a reference sample specified by ref)
+	- (calculate_log2foldchange: calculate the log2 fold change for each protein/precursor relative to the median (or mean) intensity across all samples)
+	- class OverwriteException: class for raising OverwriteException
+	- create_directory: creates (if not existent) a directory
+	- replace_invalid_characters: replaces characters that cannot be decoded in standard encoding, e.g. replace greek letters
+	- create_logfile: creates a logfile following changes during pre-processing => DO WE NEEDED?
+	- create_filtering_matrix: creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
+	- rename_filter_mask_columns: renames diann_sample_column ("File.Name" or "Run") in filter mask columns to shorter sample names
+	- create_filename_annotations_file: automatically create metadata with mappings between diann_sample_column, shorter run names and sample group
+	- (check_filename_annotations_on_unique_indices: control if metadata has unique entries)
+	- load_metadata: load the metadata file (tsv or Excel)
+	- weighted_median: calculate the weighted median for an array with weights W
+	- weighted_nanmedian: calculate weighted median ignoring NaNs and zero weights
+	- (insert_column_level: inserts a new level to MultiIndex columns)
+	- (annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles)
+	- create_imputation_table: create a template for an involved table to define different impuation methods across sample and precursor hierarchies
+	- logger: iteratively callable function to add information to the existing logfile of the current preprocessing run
+	- get_parser: generates the parser to parse arguments from the terminal to the Python Code
+	- get_parser_arguments: extraction of parser arguments
+	- load_data: loads data for processing
+	- load_parameters: read in parameter *.json file
+	- load_id_mapping: reads in ID mapping
+	- get_seed: generate the seed for the module
+	- add_parameters_to_log: writes parameters for the module to the log file
+	- load_mask: loads the filtering/imputation mask
+	- load_mask_description: loads description for the mask identifers
+	- save_mask: saves (updated) mask to disk
+	- save_data: saves data after processing to disk
+	- init_module: initializes the module and reads in all necessary data and arguments
+	- close_module: saves data to disk and exits the module
 
 """
 
