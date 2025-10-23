@@ -856,7 +856,7 @@ if __name__ == "__main__":
         
         
         # Extract ID mapping
-        id_mapping_df = input_df[ids_list].drop_duplicates()
+        id_mapping_df = input_df[ids_list + ["Proteotypic"]].drop_duplicates()
 
         # Rename missing values in protein_col
         if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
