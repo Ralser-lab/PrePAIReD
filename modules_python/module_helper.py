@@ -34,8 +34,6 @@ import numpy as np
 import pandas as pd
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
-import pandas as pd
-import numpy as np
 import os.path
 import os
 import glob
@@ -173,7 +171,7 @@ def unlog_transform(
         raise ValueError("Base must be greater than 0 and not equal to 1")
     df = base**df
 	# Replace 1 with 0 to preserve zeros before transformation
-	df = df.replace(1,0)
+    df = df.replace(1,0)
     return(df)
 
 def mad(x):
@@ -1019,6 +1017,15 @@ def logger(log_file, module_output=str):
     return
 
 def get_parser():
+    """
+    Generates the parser to parse arguments from the terminal to the Python Code
+
+    Returns
+    -------
+    parser : object
+        Parser containing input arguments for the initialization.
+    """
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-d", "--datapath", required=True, 
@@ -1047,6 +1054,34 @@ def get_parser():
     return parser
 
 def get_parser_arguments(parser):
+    """
+    Extraction of parser arguments
+
+    Parameters
+    ----------
+    parser : object
+        Parser containing input arguments for the initialization.
+
+    Returns
+    -------
+    data_df_fp : str
+        File path to input data that should be processed.
+    param_fp : str
+        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
+    out_dir_fp : str
+        Directory for files generated during the module.
+    meta_df_fp : str
+        File path to the metadata file.
+    log_file : str
+        Log file.
+    idmap_fp : str
+        File path ID mapping file.
+    counter : int
+        Counter for the step, used to modfiy the seed and output file naming.
+    outname : str
+        Name of the output file: data_${counter}.tsv using a two digit counter.
+    """
+    
     args = parser.parse_args()
     data_df_fp = args.datapath.replace("\\","/")
     param_fp = args.parampath.replace("\\","/")
@@ -1065,21 +1100,100 @@ def get_parser_arguments(parser):
     return data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, int(counter), outname
 
 def load_data(data_df_fp):
+    """
+    Loads data for processing.
+    NOTE: At the moment only *.tsv is supported. This will be adapted in the future.
+
+    Parameters
+    ----------
+    data_df_fp : str
+        File path to input data that should be processed.
+
+    Returns
+    -------
+    data_df : pd.DataFrame()
+        Data Frame containing the data that are processed.
+    """
+    
     return pd.read_csv(data_df_fp,sep="\t",index_col=0)
     
 def load_parameters(param_fp,out_dir_fp):
+    """
+    Read in parameter *.json file.
+
+    Parameters
+    ----------
+    param_fp : str
+        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
+    out_dir_fp : str
+        Directory for files generated during the module.
+
+    Returns
+    -------
+    parameters_dict : dict
+        Dictionary containg parameters used for the model.
+    """
+    
     with open(os.path.join(param_fp,out_dir_fp.split("/")[-1]+"_parameters.json")) as f:
             parameters_dict = json.load(f)
     #### In python: 1==True and 0==False -> No need for conversion here!
     return parameters_dict
   
 def load_id_mapping(idmap_fp):
+    """
+    Reads in ID mapping.
+
+    Parameters
+    ----------
+    idmap_fp : str
+        File path ID mapping file.
+
+    Returns
+    -------
+    id_mapping_df : pd.DataFrame()
+        Data frame for mapping precursors to proteins.
+
+    """
     return pd.read_csv(idmap_fp,sep="\t")
     
 def get_seed(parameters_dict, counter):
+    """
+    Generate the seed for the module.
+
+    Parameters
+    ----------
+    parameters_dict : dict
+        Dictionary containg parameters used for the model.
+    counter : int
+        Counter for the step, used to modfiy the seed and output file naming.
+
+    Returns
+    -------
+    seed : int
+        Seed used for the module calculated as parameters_dict["seed"] + counter.
+
+    """
     return parameters_dict["seed"] + counter
 
 def add_parameters_to_log(log_file, module, parameters_dict):
+    """
+    Writes parameters for the module to the log file
+
+    Parameters
+    ----------
+    log_file : str
+        Log file.
+    module : str
+        Module name.
+    parameters_dict : dict
+        Dictionary containg parameters used for the model.
+
+    Returns
+    -------
+    module_output : str
+        Resets module output after parameters are saved.
+
+    """
     module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started.\n"
     module_output += "Parameters\n------------\n"
     for key,value in parameters_dict.items():
@@ -1096,25 +1210,149 @@ def load_metadata(meta_df_fp, encoding="utf-8"):
 """
 ### Load Mask
 def load_mask(data_df_fp):
+    """
+    Loads the filtering/imputation mask.
+
+    Parameters
+    ----------
+    data_df_fp : str
+        File path to input data that should be processed. Name of the mask is generated as ${data_df_fp[:-4]}_mask.tsv.
+
+    Returns
+    -------
+    masked_df : pd.DataFrame()
+        DataFrame containing identifiers for masking steps.
+    """
+    
     return pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
 
 def load_mask_description(data_df_fp):
+    """
+    Loads description for the mask identifers
+
+    Parameters
+    ----------
+    data_df_fp : str
+        File path to input data that should be processed. Name of the mask description is generated as ${data_df_fp[:-4]}_mask_description.tsv.
+
+    Returns
+    -------
+    mask_description_df : pd.DataFrame()
+        Mapping of identifiers to corresponding operations.
+    """
+    
     return pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
 	
 ### Save mask
 def save_mask(masked_df, out_dir_fp, outname):
+    """
+    Saves (updated) mask to disk,
+
+    Parameters
+    ----------
+    masked_df : pd.DataFrame()
+        DataFrame containing identifiers for masking steps.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    outname : str
+        Name of the output file: ${outname}_mask.tsv using a two digit counter.
+
+    Returns
+    -------
+    """
+    
     masked_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask.tsv"),sep="\t")
     return
 
 def save_mask_description(mask_description_df, out_dir_fp, outname):
+    """
+    Saves (updated) mask description to disk,
+
+    Parameters
+    ----------
+    mask_description_df : pd.DataFrame()
+        Mapping of identifiers to corresponding operations.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    outname : str
+        Name of the output file: ${outname}_mask_description.tsv using a two digit counter.
+
+    Returns
+    -------
+    """
+    
     mask_description_df.to_csv(os.path.join(out_dir_fp,outname[:-4] + "_mask_description.tsv"),sep="\t")
     return
 
 def save_data(data_processed_df, out_dir_fp, outname):
+    """
+    Saves data after processing to disk. 
+    Loads data for processing.
+    NOTE: At the moment only *.tsv is supported. This will be adapted in the future.
+
+    Parameters
+    ----------
+    data_processed_df : pd.DataFrame
+        DataFrame containing the processed data.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    outname : str
+        Name of the output file.
+
+    Returns
+    -------
+    """
+    
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
 
 def init_module(module, metadata=False, id_mapping=False, mask=False, return_data_fp=False):
+    """
+    Initialized the module and reads in all necessary data and arguments.
+
+    Parameters
+    ----------
+    module : str
+        Name of the module.
+    metadata : bool, optional
+        Switch to True to read-in metadata. The default is False.
+    id_mapping : bool, optional
+        Switch to True to read-in id_mapping. The default is False.
+    mask : bool, optional
+        Switch to True to read-in the mask. The default is False.
+    return_data_fp : bool, optional
+        Switch to True to read-in the mask. The default is False.
+
+    Returns
+    -------
+    data_df : pd.DataFrame()
+        Data Frame containing the data that are processed. Only returned if return_data_fp==False.
+    arameters_dict : dict
+        Dictionary containg parameters used for the model.
+    id_mapping_df : pd.DataFrame()
+        Data frame for mapping precursors to proteins.
+    seed : int
+        Seed used for the module calculated as parameters_dict["seed"] + counter.
+    module_output : str
+        Resets module output after parameters are saved.
+    metadata_df : pd.DataFrame()
+        DataFrame containing the metadata.
+    masked_df : pd.DataFrame()
+        DataFrame containing identifiers for masking steps.
+    mask_description_df : pd.DataFrame()
+        Mapping of identifiers to corresponding operations.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    outname : str
+        Name of the output file: data_${counter}.tsv using a two digit counter.
+    log_file : str
+        Log file.
+    counter : int
+        Counter for the step, used to modfiy the seed and output file naming.
+    data_df_fp : str
+        File path to input data that should be processed. Only returned in module_filtering_long.py (return_data_fp==True).
+    """
+    
     # Parser
     parser = get_parser() 
     data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
@@ -1157,6 +1395,32 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
 	    
 	    
 def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False):
+    """
+    Saves data to disk and exits the module.
+
+    Parameters
+    ----------
+    data_processed_df : pd.DataFrame()
+        Data Frame containing processed data that are processed.
+    masked_df : pd.DataFrame()
+        DataFrame containing identifiers for masking steps.
+    mask_description_df : pd.DataFrame()
+        Mapping of identifiers to corresponding operations.
+    log_file : str
+        Log file.
+    module_output : str
+        Module output to be written to the log file.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    outname : str
+        Name of the output file: data_${counter}.tsv using a two digit counter.
+    mask : bool, optional
+        Save the mask to disk. The default is False.
+
+    Returns
+    -------
+    """
+    
     # Update log file
     logger(log_file, module_output=module_output)
     # Save data
