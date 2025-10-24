@@ -52,7 +52,9 @@ outfile = "Parameters_test.txt"
 config_file_path = "Config.txt"
 """
 # Account for different seperators
-setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace(",,",",").replace(",,",",")
+setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace("\/",",").replace("\\",",")
+while ",," in setup_str:
+    setup_str.replace(",,",",")
 # Get step order
 setup_order = setup_str.split(",")
 # Remove empty lines
