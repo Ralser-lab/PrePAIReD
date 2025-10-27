@@ -14,6 +14,9 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib as mpl
 from scipy.interpolate import UnivariateSpline
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from scipy.stats import pearsonr, spearmanr, pointbiserialr
+from matplotlib.ticker import FormatStrFormatter
 
 ### Generalize colors as an input_variable
 
@@ -105,6 +108,34 @@ def get_color_values_by_property(data_origin, coloring_property, data_processed=
             column_values_processed = np.log(np.nansum(base**(data_processed.values),axis=0))/np.log(base)
         return column_values_origin, column_values_processed
     return column_values_origin
+
+def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous"):
+    ### TODO
+    ### Add mean/median abundance
+    if plot_by == "Missingness":
+        property_peptide = data[indices].isna().T.sum()
+    elif plot_by == "CV":
+        property_peptide = pd.Series(index=data.index, data=[get_CV_log(data.loc[index,indices]) for index in data.index])
+    elif plot_by == "norm_MAE":
+        property_peptide = pd.Series(index=data.index, data = [mean_absolute_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data.index])
+    elif plot_by == "norm_MSE":
+        property_peptide = pd.Series(index=data.index, data = [mean_squared_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data.index])
+    elif plot_by in ["Correlation","Corr_pvalue"]:
+        if metadata is None or not column_metadata:
+            raise ValueError("Metadata or Metadata column or not defined.")
+        if data_type == "continuous":
+            stats = [pearsonr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
+        elif data_type == "ordinal":
+            stats = [spearmanr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
+        elif data_type == "nominal":
+            stats = [pointbiserialr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
+        if plot_by == "Correlation":
+            property_peptide = pd.Series(index=data.index, data=[abs(el[0]) for el in stats])
+        elif plot_by == "Corr_pvalue":
+            property_peptide = pd.Series(index=data.index, data=[-1*np.log10(el[1]) for el in stats])
+        else:
+            raise ValueError("data_type not defined.")
+    return property_peptide
 
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
@@ -266,7 +297,10 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
 # For Imputation, Normalization, Correction, Summarization
 def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95):
     
-    group_dict_comp = {str(group_column)+"__"+str(group):metadata[metadata[group_column]==group].index for group_column in group_columns for group in np.unique(metadata[group_column].values)}
+    ### TODO
+    ### Add ylim
+    
+    group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
     group_dict = {}
     
     keys = list(group_dict_comp.keys())
@@ -603,4 +637,92 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     ax_processed.grid(axis="y")
     
     plt.savefig(outfile, bbox_inches="tight")
+    return
+
+def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, base = 2):
+    ### TODO
+    ### Plot linear regression
+    ### change to dummy conversion in future????
+    try:
+        metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
+    except:
+        raise TypeError("Meta data column needs to be numeric.")
+    
+    # sample_type selection
+    if data_processed is not None:
+        indices_origin, indices_processed = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
+    else:
+        indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
+        
+    # Calculate property
+    property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type)
+    # Get n top hits
+    selection = property_peptide.sort_values(ascending=False).index[:top_n]
+    
+    if data_processed is not None:
+        size = (size[0]*2,(size[1]*top_n)+1)
+    else:
+        size = (size[0],(size[1]*top_n)+1)
+    
+    if not cmap:
+            if continuous:
+                cmap = "viridis"
+            else:
+                cmap = "Spectral"
+    
+    if use_metadata_coloring:
+            if data_processed is not None:
+                colors_origin, colors_processed, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=indices_processed, cmap=cmap, continuous=continuous)
+            else:
+                colors_origin, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, cmap=cmap, continuous=continuous)
+    
+    fig = plt.figure(figsize=size)
+    if data_processed is not None:
+        gs = GridSpec(top_n,2, width_ratios = [0.5,0.5], wspace = 0.05, hspace = 0.05)
+    else:
+        gs = GridSpec(top_n,1, hspace = 0.05)
+    
+    for ind, el in enumerate(selection):
+        
+        # estimate y_lim
+        if data_processed is not None:
+            y_lim = (np.min([np.min(data_origin.loc[el,indices_origin]),np.min(data_processed.loc[el,indices_processed])])*0.98,np.max([np.max(data_origin.loc[el,indices_origin]),np.max(data_processed.loc[el,indices_processed])])*1.02)
+        else:
+            y_lim = (np.min(data_origin.loc[el,indices_origin])*0.98,np.max(data_origin.loc[el,indices_origin])*1.02)
+            
+        ax_scatter_origin = fig.add_subplot(gs[ind,0])
+        if use_metadata_coloring:
+            ax_scatter_origin.scatter(metadata.loc[indices_origin,column_metadata], data_origin.loc[el,indices_origin], c=colors_origin)
+        else:
+            ax_scatter_origin.scatter(metadata.loc[indices_origin,column_metadata], data_origin.loc[el,indices_origin])
+        
+        if not ind == top_n-1:
+            ax_scatter_origin.set_xticklabels([])
+        else:
+            ax_scatter_origin.set_xlabel(column_metadata, fontsize=fontsize)
+        ax_scatter_origin.set_ylim(y_lim)
+        ax_scatter_origin.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+        ax_scatter_origin.set_ylabel(ylabel+"\n"+el, fontsize=fontsize)
+        ax_scatter_origin.set_axisbelow(True)
+        ax_scatter_origin.grid(axis="y")
+        ax_scatter_origin.tick_params(labelsize=fontsize)
+        
+        if data_processed is not None:
+            ax_scatter_processed = fig.add_subplot(gs[ind,1])
+            if use_metadata_coloring:
+                ax_scatter_processed.scatter(metadata.loc[indices_processed,column_metadata], data_processed.loc[el,indices_processed], c=colors_processed)
+            else:
+                ax_scatter_processed.scatter(metadata.loc[indices_processed,column_metadata], data_processed.loc[el,indices_processed])
+            
+            if not ind == top_n-1:
+                ax_scatter_processed.set_xticklabels([])
+            else:
+                ax_scatter_processed.set_xlabel(column_metadata, fontsize=fontsize)
+            ax_scatter_processed.set_ylim(y_lim)
+            ax_scatter_processed.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            ax_scatter_processed.set_yticklabels([])
+            ax_scatter_processed.yaxis.tick_right()
+            ax_scatter_processed.set_axisbelow(True)
+            ax_scatter_processed.grid(axis="y")
+            ax_scatter_processed.tick_params(labelsize=fontsize)
     return
