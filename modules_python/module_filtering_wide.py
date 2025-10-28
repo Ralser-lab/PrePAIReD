@@ -958,7 +958,7 @@ if __name__ == "__main__":
                 #log filtering progress
                 helper.logger(log_file,log)
 
-            elif method == "filter_proteotypic_precursors":
+            elif method == "filter_nonproteotypic_precursors":
                 #log filtering method
                 log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['proteotypicity_col']} not in {parameters_dict['proteotypicity_value']}.\n"
                 helper.logger(log_file,log)
