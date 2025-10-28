@@ -239,7 +239,7 @@ def get_normalization_factors(df, axis:int=0):
     if axis not in [0, 1]:
         raise ValueError("Axis must be either 0 (rows) or 1 (columns)")
 
-    return np.nanmedian(np.nanmedian(df, axis=axis))/np.nanmedian(df,axis=axis)
+    return np.nanmedian(np.nanmedian(df, axis=axis))-np.nanmedian(df,axis=axis)
 
 def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_dir_fp,normlabel=None,precursor_col="Precursor.Id",peptide_col="Stripped.Sequence",normalization_on_intersecting_precs=True,nan_intersect_thresh=0.9,exclude_outlier_nfs=False,rel_threshold=2,on_mad=False,min_nf=1/2,max_nf=2,axis=0):
     """
@@ -326,9 +326,9 @@ def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_d
        #save final normalization factors
        normalization_factors_df = pd.DataFrame(index=normprecursors_trim_df.columns,columns=["NormalizationFactor"],data=nfs)
        normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors_trim.tsv"),sep="\t")
-       data_norm_df = data_df[normprecursors_trim_df.coluns] * nfs
+       data_norm_df = data_df[normprecursors_trim_df.coluns] + nfs
     else:
-       data_norm_df = data_df * nfs
+       data_norm_df = data_df + nfs
        
     return([data_norm_df,log])
 
