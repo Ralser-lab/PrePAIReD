@@ -8,6 +8,7 @@ functions:
     - filter_precursors_by_detection_proportion: Removes precursors that are detected less than a specified or automated threshold value (missing proportion).
     - filter_precursors_by_exclusionlist: Removes precursors that are specified in a user-provided list (e.g. contaminants) or precursors that map to ids in respective list
     - filter_proteins_by_id_count: Removes precursors or peptides mapping to proteins identified by less than a minimum number of unique precursors or peptides. 
+    - filter_precursors_by_metadata: selects precursors with aid of id_mapping_df, e.g. only proteotypic precursors
     - filter_precursors_by_peptide_labels: Removes precursors that contain specific substrings (e.g., SILAC labels like "(SILAC-K-H)").
     - replace_labelled_precursors: Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
     - condition_on_detection_proportion: Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
@@ -418,6 +419,48 @@ def filter_proteins_by_precursor_count(data_df, id_mapping_df, min_precursors=1,
 
     return filtered_df, log
 '''
+
+
+def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precursor.Id", filter_col="Proteotypic", filter_value=True):
+    """
+    Exclude precursors in data_df with filter_col not equalling filter_value in id_mapping_df (precursor metadata). Can be used to filter i.e. all non-proteotypic precursors
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        wide-format profiles, columns are samples
+    id_mapping_df : pd.DataFrame
+        dataframe that stores mapping of precursors and proteins and additional metadata for precursors such as i.e. proteotypicity. 
+    precursor_col : str, optional
+        Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
+    filter_col : str, optional
+        name of column in id_mapping_df to perform filter on. The default is "Proteotypic".
+    filter_value : str/int/float/..., optional
+        value in filter_col specifying precursors to keep.
+
+    Returns
+    -------
+    filtered_df : pd.DataFrame
+        filtered wide-format profiles, columns are samples.
+
+    """
+    # Helper function
+    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
+    log = ""
+    
+    #check if filter column is present
+    if filter_col not in id_mapping_df.columns:
+        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{filter_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+    if precursor_col not in id_mapping_df.columns:
+        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+    
+    # catch error and return
+    if "###ERRROR###" in log:
+        return data_df, log
+    
+    #apply filtering
+    filtered_df = data_df.loc[id_mapping_df[id_mapping_df[filter_col]==filter_value][precursor_col]]
+    return([filtered_df, log])
 
 
 ##############################################################################
@@ -888,11 +931,11 @@ if __name__ == "__main__":
                 helper.logger(log_file,log)
                 #apply filtering by minimum number of precursors per protein
                 data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
-                                                                            id_mapping_df=id_mapping_df, 
-                                                                            min_ids=parameters_dict["min_precursors"], 
-                                                                            protein_col=parameters_dict["protein_col"], 
-                                                                            precursor_col=parameters_dict["precursor_col"],
-                                                                            id_col=parameters_dict["precursor_col"])
+                                                                     id_mapping_df=id_mapping_df, 
+                                                                     min_ids=parameters_dict["min_precursors"], 
+                                                                     protein_col=parameters_dict["protein_col"], 
+                                                                     precursor_col=parameters_dict["precursor_col"],
+                                                                     id_col=parameters_dict["precursor_col"])
                 
                 #catch errors
                 if "###ERROR###" in log:
@@ -914,7 +957,35 @@ if __name__ == "__main__":
                 
                 #log filtering progress
                 helper.logger(log_file,log)
-            
+
+            elif method == "filter_proteotypic_precursors":
+                #log filtering method
+                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['proteotypicity_col']} not in {parameters_dict['proteotypicity_value']}.\n"
+                helper.logger(log_file,log)
+                #apply exclusion of nonproteotypic precursors
+                data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
+                                                                       id_mapping_df=id_mapping_df, 
+                                                                       precursor_col=parameters_dict["precursor_col"], 
+                                                                       filter_col=parameters_dict["proteotypicity_col"], 
+                                                                       filter_value=parameters_dict["proteotypicity_value"])
+                
+                #catch errors
+                if "###ERROR###" in log:
+                    helper.logger(log_file,log)
+                    sys.exit(log)
+                    
+                # update mask_df
+                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                  axis='precursors', 
+                                                                  method="Non-proteotypic precursors",
+                                                                  mask_df=mask_df, 
+                                                                  mask_description_df=mask_description_df, 
+                                                                  pre_method_columns=pre_method_columns,
+                                                                  pre_method_rows=pre_method_rows)
+                
+                #log filtering progress
+                helper.logger(log_file,log)
+                
             elif method == "filter_precursors_by_exclusion_list":
                 #log filtering method
                 log = f"{timestamp()}\tFiltering {parameters_dict['exclusion_list_id_col']} from data as provided by {parameters_dict['exclusion_list_fp']}.\n"
