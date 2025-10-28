@@ -977,7 +977,7 @@ if __name__ == "__main__":
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
                                                                   axis='precursors', 
-                                                                  method="Non-proteotypic precursors",
+                                                                  method="Proteotypic",
                                                                   mask_df=mask_df, 
                                                                   mask_description_df=mask_description_df, 
                                                                   pre_method_columns=pre_method_columns,
