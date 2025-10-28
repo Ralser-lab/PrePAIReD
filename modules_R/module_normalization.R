@@ -2,7 +2,7 @@
 # Normalization module in R
 # Provides the following options for normalization: VSN, CyclicLOESS
 # Author: Álvaro Gómez Pérez (based on Vadim Farztdinov´s)
-# Tested on R version ...
+# Tested on R version 4.5.1 (2025-06-13) -- "Great Square Root"
 ###############################################################################
 
 
@@ -16,10 +16,11 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
+source("Scripts/helper_functions_R.R")
 
+# For my testing internally
+#source("/home/alvaro/MyStuff/preprocessing/Old_just_in_case/Testing_Nooshin/Code/helper_functions_R.R")
 
-# These is for my testing locally, will remove later
-#source("/mnt/c/MyStuff/preprocessing/Testing_Nooshin/Code/helper_functions_R.R")
 
 
 
@@ -65,6 +66,12 @@ normalize_vsn <- function(DM_df){
   
   # Return output
   return(as.data.frame(DM_mat, stringsAsFactors = FALSE))
+  
+  ### Do we want to keep this verbose possibility?
+  # if (normalize$verbose) {
+  #   print("Properties of data matrix vsn normalized mean distribution. Summary: ")
+  #   print(summary(apply(DM,1,mean, na.rm=TRUE)))
+  # }
 }
 
 
@@ -92,11 +99,11 @@ normalize_cyclic_loess <- function(DM_df,
                                    parameters) {
   # Basic checks
   if (!is.matrix(DM_df) && !is.data.frame(DM_df)) {
-    stop("normalize_vsn(): input must be a matrix or data.frame.", call. = FALSE)
+    stop("normalize_cyclic_loess(): input must be a matrix or data.frame.", call. = FALSE)
   }
   DM_mat <- as.matrix(DM_df)
   if (!is.numeric(DM_mat)) {
-    stop("normalize_vsn(): all values must be numeric.", call. = FALSE)
+    stop("normalize_cyclic_loess(): all values must be numeric.", call. = FALSE)
   }
   
   # Missingness warning (as percentage)
@@ -113,9 +120,28 @@ normalize_cyclic_loess <- function(DM_df,
     format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   ))
   
-  # Make sure the method chosen is a valid option
-  method_str <- match.arg(parameters[["method_cyclic_loess"]],
-                          choices = c("fast", "affy", "pairs"))
+  # Check that parameters for cyclic loess are provided, otherwise fill in with the default ones
+  ## Check for method_cyclic_loess
+  if ("method_cyclic_loess" %in% names(parameters)) {
+    # If so, make sure the method chosen is a valid option
+    method_str <- match.arg(parameters[["method_cyclic_loess"]],
+                            choices = c("fast", "affy", "pairs"))
+  } else {
+    # Fill in with the default
+    parameters[["method_cyclic_loess"]] <- "fast"
+  }
+  
+  ## Check for span
+  if (!("span_cyclic_loess" %in% names(parameters))) {
+    parameters[["span_cyclic_loess"]] <- 0.7
+  }
+  
+  ## Check for iterations
+  if (!("iter_cyclic_loess" %in% names(parameters))) {
+    parameters[["iter_cyclic_loess"]] <- 3
+  }
+  
+  
   
   # Perform the normalization
   library(limma)
@@ -188,7 +214,7 @@ main <- function() {
   
   # Set seed
   if (!is.null(parameter_list[["seed"]])) {
-    set.seed(parameter_list[["seed"]] + args$counter)
+    set.seed(parameter_list[["seed"]] + as.numeric(args$counter))
   }
   
   # Load data
@@ -206,7 +232,7 @@ main <- function() {
   
   # Write output
   normalized_df <- as.data.frame(normalized_df)
-  output_file <- file.path(args$out, sprintf("data_%d.tsv", as.integer(args$counter)))
+  output_file <- file.path(args$out, sprintf("data_%s.tsv", as.character(args$counter)))
   fwrite(normalized_df, output_file, row.names = TRUE)
 }
 
