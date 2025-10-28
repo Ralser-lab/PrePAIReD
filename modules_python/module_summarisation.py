@@ -328,6 +328,7 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     # Sum up the quantity of the 3 most intense peptides for each run per protein
     print("Calculating reference intensities...")
     reference = get_reference_intensities(df, ms2_quantity, accession, run)
+    reference.replace(-np.inf,np.nan,inplace=True) #added by BZ                             
     print("--done.")
 
     # Compute occurrence matrix i.e.,
@@ -691,7 +692,8 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #transform to long format
     #data_df=helper.unlog_transform(data_df)
     lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
-    lf_df.replace(0,1,inplace=True) 
+    #lf_df.replace(0,1,inplace=True) 
+    lf_df.replace(0,np.nan,inplace=True)
     #quantity_col = "value"
     #caclulate maxlfq
     #log10_protein_profiles = estimate_protein_profile_from_dataframe(precursor_df=lf_df, run_id_column=run_col, protein_accession_column=protein_col, precursor_seq_column=seq_col, quantity_column=quantity_col, n_runs=n_runs)
