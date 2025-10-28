@@ -101,7 +101,7 @@ read_JSON <- function(parameter_file){
 #'   \item \code{-d, --data}: Path to the input data file, a .tsv file (required).
 #'   \item \code{-p, --params}: Path to a JSON file with normalization parameters (required).
 #'   \item \code{-o, --out}: Path to the output directory (required).
-#'   \item \code{--md}: Path to a metadata file (optional).
+#'   \item \code{-m, --md}: Path to a metadata file (optional).
 #'   \item \code{-i, --ids}: Path to an IDs file (optional).
 #'   \item \code{-c, --counter}: Pipeline step counter as an integer (required).
 #'   \item \code{-l, --log}: Path to a log file (required).
@@ -111,7 +111,7 @@ make_parser <- function() {
     make_option(c("-d","--data"),     type="character", help="Path to data file"),
     make_option(c("-p","--params"),   type="character", help="Path to params JSON"),
     make_option(c("-o","--out"),      type="character", help="Output directory"),
-    make_option(c("--md"), type="character", default = NULL, help="Path to metadata file (optional)"),
+    make_option(c("-m", "--md"), type="character", default = NULL, help="Path to metadata file (optional)"),
     make_option(c("-i","--ids"),      type="character", default = NULL, help="Path to IDs file (optional)"),
     make_option(c("-c","--counter"),  type="character",   help="Pipeline step counter"),
     make_option(c("-l","--log"),      type="character", help="Log file path")
