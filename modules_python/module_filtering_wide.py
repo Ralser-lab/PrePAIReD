@@ -746,10 +746,12 @@ if __name__ == "__main__":
     '''
     
     #load 
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
-                                                                                                                                                                         metadata=True, 
-                                                                                                                                                                         id_mapping=True, 
-                                                                                                                                                                         mask=True)
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
+                                                                                                                                                                           load_metadata=True, 
+                                                                                                                                                                           load_id_mapping=True, 
+                                                                                                                                                                           load_mask=True, 
+                                                                                                                                                                           return_data_fp_only=False)
+ 
 
     #helper functions
     timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
