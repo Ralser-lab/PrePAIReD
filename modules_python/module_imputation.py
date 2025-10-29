@@ -795,8 +795,12 @@ def update_mask(mask_df, locs, mask_value):
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Correction", metadata=True, id_mapping=True, mask=True, return_data_fp=False)
-
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Imputation", 
+                                                                                                                                                                           load_metadata=True, 
+                                                                                                                                                                           load_id_mapping=True, 
+                                                                                                                                                                           load_mask=True, 
+                                                                                                                                                                           return_data_fp_only=False)
+ 
         
     #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
     '''
