@@ -333,12 +333,12 @@ def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_d
     return([data_norm_df,log])
 
 
-def normalize_median(df):
+def median_centering(df):
     """
     median normalization 
-    substracting median of every column, resulting in column medians of 0.
+    centers at median and shift data to overall median.
     
-    author: BZ
+    author: BZ, OL
     
     Parameters
     ----------
@@ -356,12 +356,12 @@ def normalize_median(df):
     return df.sub(df.median(axis=0),axis=1)+df.median().median()
 
 
-def normalize_mean(df):
+def mean_centering(df):
     """
     mean normalization 
-    (substracting mean of every column, resulting in column means of 0).
+    centers at mean and shift data to overall mean.
     
-    author: BZ
+    author: BZ, OL
     
     Parameters
     ----------
@@ -576,9 +576,9 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 if __name__ == "__main__":
  
     try:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=False)
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", load_metadata=True, load_id_mapping=True, load_mask=True, return_data_fp_only=False)
     except:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp = helper.init_module(module = "Normalisation", metadata=True, id_mapping=True, mask=True, return_data_fp=True)
+        data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", load_metadata=True, load_id_mapping=True, load_mask=True, return_data_fp_only=True)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
@@ -640,11 +640,11 @@ if __name__ == "__main__":
     
         elif parameters_dict["normalization_method"] == "median":
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
-            data_processed_df = normalize_median(data_df)
+            data_processed_df = median_centering(data_df)
             
         elif parameters_dict["normalization_method"] == "mean":
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing mean normalization.\n"
-            data_processed_df = normalize_mean(data_df)
+            data_processed_df = mean_centering(data_df)
     
         elif parameters_dict["normalization_method"] == "delayed":
             #### Not properly tested
