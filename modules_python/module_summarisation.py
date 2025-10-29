@@ -771,31 +771,40 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", metadata=True, id_mapping=True, mask=True)
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
+                                                                                                                                                                           load_metadata=True, 
+                                                                                                                                                                           load_id_mapping=True, 
+                                                                                                                                                                           load_mask=True, 
+                                                                                                                                                                           return_data_fp_only=False)
 
     # unlog data
     data_df=helper.unlog_transform(data_df)
     helper.save_data(data_df, out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")
-    
-    if parameters_dict["summarization_method"]=="MaxLFQ":
-        data_processed_df, module_output = MaxLFQ_summarization(data_df, id_mapping_df, module_output, 
-                                                                seq_col=parameters_dict["seq_col"], 
-                                                                protein_col = parameters_dict["protein_col"])
-    elif parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
-        data_processed_df, id_mapping_df, module_output = topN_summarization(data_df, id_mapping_df, masked_df, module_output, 
-                                                                             top_n_peptides=parameters_dict["top_n_peptides"],
-                                                                             weights=parameters_dict["weights"],
-                                                                             pooling=parameters_dict["summarization_method"],
-                                                                             min_peptides=parameters_dict["min_peptides"], 
-                                                                             seq_col=parameters_dict["seq_col"], 
-                                                                             protein_col = parameters_dict["protein_col"])
-    elif parameters_dict["summarization_method"]=="sum":
-        data_processed_df, module_output = precursor_sum(data_df, id_mapping_df, module_output, 
-                                                         seq_col=parameters_dict["seq_col"], 
-                                                         protein_col = parameters_dict["protein_col"])
-    else:
-        data_processed_df = data_df
-        module_output += "###WARNING###: Summarization method not found. Skipped module."
+
+    try:
+        if parameters_dict["summarization_method"]=="MaxLFQ":
+            data_processed_df, module_output = MaxLFQ_summarization(data_df, id_mapping_df, module_output, 
+                                                                    seq_col=parameters_dict["seq_col"], 
+                                                                    protein_col = parameters_dict["protein_col"])
+        elif parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+            data_processed_df, id_mapping_df, module_output = topN_summarization(data_df, id_mapping_df, masked_df, module_output, 
+                                                                                 top_n_peptides=parameters_dict["top_n_peptides"],
+                                                                                 weights=parameters_dict["weights"],
+                                                                                 pooling=parameters_dict["summarization_method"],
+                                                                                 min_peptides=parameters_dict["min_peptides"], 
+                                                                                 seq_col=parameters_dict["seq_col"], 
+                                                                                 protein_col = parameters_dict["protein_col"])
+        elif parameters_dict["summarization_method"]=="sum":
+            data_processed_df, module_output = precursor_sum(data_df, id_mapping_df, module_output, 
+                                                             seq_col=parameters_dict["seq_col"], 
+                                                             protein_col = parameters_dict["protein_col"])
+        else:
+            data_processed_df = data_df
+            module_output += "###WARNING###: Summarization method not found. Skipped module."
+    except Exception as e:
+        helper.logger(log_file, "###ERROR###: Module ran into an error.")
+        helper.logger(log_file, "###ERROR###: "+e)
+        sys.exit(1)
         
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
