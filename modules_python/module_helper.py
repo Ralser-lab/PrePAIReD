@@ -1318,7 +1318,8 @@ def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
 
-def init_module(module, metadata=False, id_mapping=False, mask=False, return_data_fp=False):
+def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=False, return_data_fp_only=False,
+                skip_parser=False, data_df_fp=None, param_fp=None, out_dir_fp=None, meta_df_fp=None, log_file=None, idmap_fp=None, counter=None, outname=None):
     """
     Initialized the module and reads in all necessary data and arguments.
 
@@ -1326,20 +1327,38 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     ----------
     module : str
         Name of the module.
-    metadata : bool, optional
+    load_metadata : bool, optional
         Switch to True to read-in metadata. The default is False.
-    id_mapping : bool, optional
+    load_id_mapping : bool, optional
         Switch to True to read-in id_mapping. The default is False.
-    mask : bool, optional
+    load_mask : bool, optional
         Switch to True to read-in the mask. The default is False.
-    return_data_fp : bool, optional
+    return_data_fp_only : bool, optional
         Switch to True to read-in the mask. The default is False.
+    skip_parser : bool, optional
+        Switch to True to skip the parser and provide parser arguments manually
+    data_df_fp : str, optional
+        If skip_parser==True required. File path to input data that should be processed.
+    param_fp : str, optional
+        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
+    out_If skip_parser==True required. dir_fp : str, optional
+        If skip_parser==True required. Directory for files generated during the module.
+    meta_df_fp : str, optional
+        If skip_parser==True and load_metadata==True required. File path to the metadata file.
+    log_file : str, optional
+        If skip_parser==True required. Log file.
+    idmap_fp : str, optional
+        If skip_parser==True and load_id_mapping ==True required. File path ID mapping file.
+    counter : int, optional
+        If skip_parser==True required. Counter for the step, used to modfiy the seed and output file naming.
+    outname : str, optional
+        If skip_parser==True required. Name of the output file: data_${counter}.tsv using a two digit counter.
 
     Returns
     -------
     data_df : pd.DataFrame()
         Data Frame containing the data that are processed. Only returned if return_data_fp==False.
-    arameters_dict : dict
+    parameters_dict : dict
         Dictionary containg parameters used for the model.
     id_mapping_df : pd.DataFrame()
         Data frame for mapping precursors to proteins.
@@ -1366,17 +1385,35 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     """
     
     # Parser
-    parser = get_parser() 
-    data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
+    if skip_parser:
+        if not data_df_fp:
+            raise ValueError("###ERROR###: data_df_fp required.")
+        if not param_fp:
+            raise ValueError("###ERROR###: param_fp required.")
+        if not out_dir_fp:
+            raise ValueError("###ERROR###: out_dir_fp required.")
+        if not meta_df_fp and load_metadata:
+            raise ValueError("###ERROR###: meta_df_fp required.")
+        if not log_file:
+            raise ValueError("###ERROR###: log_file required.")
+        if not idmap_fp and load_id_mapping:
+            raise ValueError("###ERROR###: idmap_fp required.")
+        if not counter:
+            raise ValueError("###ERROR###: counter required.")
+        if not outname:
+            raise ValueError("###ERROR###: outname required.")
+    else:
+       parser = get_parser() 
+       data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
     # Load data
-    if not return_data_fp:
+    if not return_data_fp_only:
         data_df = load_data(data_df_fp)
     else:
         data_df = None
     # Load parameters
     parameters_dict = load_parameters(param_fp,out_dir_fp)
     # Load ID mapping
-    if id_mapping:
+    if load_id_mapping:
         id_mapping_df = load_id_mapping(idmap_fp)
     else:
         id_mapping_df = []
@@ -1385,7 +1422,7 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     # Write Parameters to log-file
     module_output = add_parameters_to_log(log_file, module, parameters_dict)
     # Load meta data
-    if metadata:
+    if load_metadata:
         metadata_df, log = load_metadata(metadata_fp=meta_df_fp,
                                          metadata_sheet=parameters_dict["metadata_sheet"], 
                                          filename_col=parameters_dict["metadata_filename_column"], 
@@ -1394,14 +1431,14 @@ def init_module(module, metadata=False, id_mapping=False, mask=False, return_dat
     else:
         metadata_df = []
     # Load mask
-    if mask:
+    if load_mask:
         masked_df = load_mask(data_df_fp)
         mask_description_df = load_mask_description(data_df_fp)
     else:
         masked_df = []
         mask_description_df = []
-    if return_data_fp:
-        return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter, data_df_fp
+    if return_data_fp_only:
+        return data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
     else:
         return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
 	    
