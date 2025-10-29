@@ -687,13 +687,16 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #for id_type in protein_id_types:
     #    gene_prot_df[id_type]=peptide_profiles.index.get_level_values(id_type)
     #gene_prot_df.drop_duplicates(inplace=True)
+
+    #remember zero values
+    peptide_sums = data_df.groupby(by="index",level=0).sum()
+    #remove precursors without any measured value
+    data_df = data_df.replace(0,np.nan).dropna(axis=0,how="all")
     #initiate variables for MaxLFQ
     n_runs=len(data_df.columns)
     #transform to long format
     #data_df=helper.unlog_transform(data_df)
     lf_df, id_mapping_df_c = transform_profiles_to_longformat_table(data_df.copy(),id_mapping_df, protein_col, seq_col)
-    #lf_df.replace(0,1,inplace=True) 
-    lf_df.replace(0,np.nan,inplace=True)
     #quantity_col = "value"
     #caclulate maxlfq
     #log10_protein_profiles = estimate_protein_profile_from_dataframe(precursor_df=lf_df, run_id_column=run_col, protein_accession_column=protein_col, precursor_seq_column=seq_col, quantity_column=quantity_col, n_runs=n_runs)
@@ -709,8 +712,6 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #set proteins whose all precursors had zero values back to zero
     
     data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
-    
-    peptide_sums = data_df.groupby(by="index",level=0).sum()
     
     # Reorder to remove temporary replacement
     indices_prot = [index for index in peptide_sums.index if index in data_prot_df.index]
