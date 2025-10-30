@@ -21,12 +21,11 @@ from matplotlib.ticker import FormatStrFormatter
 ### Generalize colors as an input_variable
 
 def get_CV_log(values, base=2):
-    cv = np.sqrt(base**(np.std(values)**2)-1)
+    cv = np.sqrt(float(base**(np.std(values)**2)-1))
     return cv
 
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
-    ### TODO
-    ### Implement check that indices origin is not empty
+
     if sample_type_column:
         if not sample_type:
             raise ValueError("sample_type is not defined.")
@@ -37,7 +36,13 @@ def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_
         indices_origin = [index for index in metadata.index if index in data_origin.columns]
         if data_processed is not None:
             indices_processed = [index for index in metadata.index if index in data_processed.columns]
-            
+    
+    if not indices_origin:
+        raise ValueError("No indices for selection in original found.")
+    if data_processed is not None:
+        if not indices_processed:
+            raise ValueError("No indices for selection in processed found.")
+    
     if data_processed is not None:
         return indices_origin, indices_processed
     else:
@@ -111,10 +116,13 @@ def get_color_values_by_property(data_origin, coloring_property, data_processed=
     return column_values_origin
 
 def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous"):
-    ### TODO
-    ### Add mean/median abundance
+
     if plot_by == "Missingness":
         property_peptide = data[indices].isna().T.sum()
+    elif plot_by == "Mean":
+        property_peptide = data[indices].T.mean()
+    elif plot_by == "Median":
+        property_peptide = data[indices].T.median()
     elif plot_by == "CV":
         property_peptide = pd.Series(index=data.index, data=[get_CV_log(data.loc[index,indices]) for index in data.index])
     elif plot_by == "norm_MAE":
@@ -296,13 +304,12 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     return
 
 # For Imputation, Normalization, Correction, Summarization
-def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95):
+def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None):
     
-    ### TODO
-    ### Add ylim
-    ### Add index check
-    
-    group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
+    if data_processed is not None:
+        group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns and index in data_processed.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
+    else:
+        group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
     group_dict = {}
     
     keys = list(group_dict_comp.keys())
@@ -313,15 +320,18 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     if not group_dict:
         group_dict = group_dict_comp
                     
-    #cvs_lognormal_origin = [[get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index] for group in group_dict.keys()]
-    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index if group in data_origin.columns] if not np.isnan(el)] for group in group_dict.keys()]
+    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
     cvs_lognormal_origin = [item if item or sum(item)>0 else [np.nan]*2 for item in cvs_lognormal_origin]
     
     if data_processed is not None:
-        #cvs_lognormal_processed = [[get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index] for group in group_dict.keys()]
-        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index if group in data_processed.columns] if not np.isnan(el)] for group in group_dict.keys()]
+        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
         cvs_lognormal_processed = [item if item else [np.nan]*2 for item in cvs_lognormal_processed]
-        
+    
+    if y_lim:
+        cvs_lognormal_origin = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_origin]
+        if data_processed is not None:
+            cvs_lognormal_processed = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_processed]
+    
     if calc_widths:
         min_origin = np.nanmin([el for item in cvs_lognormal_origin for el in item])
         max_origin = np.nanmax([el for item in cvs_lognormal_origin for el in item])
@@ -396,6 +406,9 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     ax.set_xticklabels([item.replace("___","\n").replace("__",":") for item in group_dict.keys()], fontsize = fontsize, rotation = 45, ha = "right")
     ax.set_ylabel("Coefficient of variation", fontsize = fontsize)
     ax.tick_params(axis="y", labelsize = fontsize)
+    
+    if y_lim:
+        ax.set_ylim(y_lim)
     
     ax.set_axisbelow(True)
     ax.grid(axis="y")
@@ -642,8 +655,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     return
 
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
-    ### TODO
-    ### Plot linear regression
+
     ### change to dummy conversion in future????
     try:
         metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
