@@ -877,7 +877,8 @@ if __name__ == "__main__":
                                                         default_impu_method_ProtAbsenceMNAR=parameters_dict["imputation_method_ProtAbsenceMNAR"],
                                                         default_knn_k=parameters_dict["knn_k"])
                 impu_table_df.to_csv(imputation_table_fp,sep="\t",index=False)
-            
+
+            '''
             #extract missingness types 
             missingness_types_all = impu_table_df["missingness_type"].drop_duplicates().tolist()
             if parameters_dict["remember_missingness_type_in_mask"]:
@@ -885,7 +886,8 @@ if __name__ == "__main__":
                 missingness_types_df["filter"] = missingness_types_all
                 missingness_types_df["value"] = [x/10 for x in range(1,(len(missingness_types_all)+1))]
                 mask_description_df = pd.concat([mask_description_df,missingness_types_df.set_index("filter")],axis=0)
-                
+            '''
+            
         # Process data
         try:
             # create a mask to store missingness type (thus imputation approach neccessary), 0 equals no imputation applied
@@ -976,6 +978,15 @@ if __name__ == "__main__":
             #Logging missing value types
             log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMissingness types and corresponding numbers of values:\n\t\t\t\t" + str(Counter(imputation_mask_df.to_numpy().flatten())) + "\n"
             helper.logger(log_file, module_output=log)
+
+            #extract missingness types
+            if parameters_dict["remember_missingness_type_in_mask"]:
+                missingness_types_all = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
+                missingness_types_df = pd.DataFrame(columns=["filter","value"])
+                missingness_types_df["filter"] = missingness_types_all
+                missingness_types_df["value"] = [x/10 for x in range(1,(len(missingness_types_all)+1))]
+                mask_description_df = pd.concat([mask_description_df,missingness_types_df.set_index("filter")],axis=0)
+            
             #remember which and how many values were missing initially
             total_num_values0,num_missing_values0,missing_val_locs0 = obtain_missingness_for_log(data_df=data_df)
             # hierarchical imputation
