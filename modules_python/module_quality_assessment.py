@@ -25,7 +25,8 @@ def get_CV_log(values, base=2):
     return cv
 
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
-    
+    ### TODO
+    ### Implement check that indices origin is not empty
     if sample_type_column:
         if not sample_type:
             raise ValueError("sample_type is not defined.")
@@ -204,9 +205,9 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
         ax_numbers_processed.set_title("After "+step, fontsize=fontsize)
     
     if data_processed is not None:
-        y_lim = (np.min([np.min(y_origin),np.min(y_processed)])*0.95,np.max([np.max(y_origin),np.max(y_processed)])*1.05)
+        y_lim = (np.nanmin([np.nanmin(y_origin),np.nanmin(y_processed)])*0.95,np.nanmax([np.nanmax(y_origin),np.nanmax(y_processed)])*1.05)
     else:
-        y_lim = (np.min(y_origin)*0.95,np.max(y_origin)*1.05)
+        y_lim = (np.nanmin(y_origin)*0.95,np.nanmax(y_origin)*1.05)
         
     ax_numbers_origin.set_ylim(y_lim)
     ax_numbers_origin.set_xlim(-1,len(indices_origin))
@@ -299,6 +300,7 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     
     ### TODO
     ### Add ylim
+    ### Add index check
     
     group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
     group_dict = {}
@@ -312,12 +314,12 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
         group_dict = group_dict_comp
                     
     #cvs_lognormal_origin = [[get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index] for group in group_dict.keys()]
-    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
+    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,group_dict[group]], base=base) for index in data_origin.index if group in data_origin.columns] if not np.isnan(el)] for group in group_dict.keys()]
     cvs_lognormal_origin = [item if item or sum(item)>0 else [np.nan]*2 for item in cvs_lognormal_origin]
     
     if data_processed is not None:
         #cvs_lognormal_processed = [[get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index] for group in group_dict.keys()]
-        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
+        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,group_dict[group]], base=base) for index in data_processed.index if group in data_processed.columns] if not np.isnan(el)] for group in group_dict.keys()]
         cvs_lognormal_processed = [item if item else [np.nan]*2 for item in cvs_lognormal_processed]
         
     if calc_widths:
@@ -639,7 +641,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, base = 2):
+def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
     ### TODO
     ### Plot linear regression
     ### change to dummy conversion in future????
@@ -707,6 +709,13 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         ax_scatter_origin.grid(axis="y")
         ax_scatter_origin.tick_params(labelsize=fontsize)
         
+        if plot_linreg:
+            indices_origin_nonan = [index for index in indices_origin if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_origin.loc[el,index])]
+            coef = np.polyfit(metadata.loc[indices_origin_nonan,column_metadata], data_origin.loc[el,indices_origin_nonan],1) #### NaN Handling
+            x = [np.min(metadata.loc[indices_origin_nonan,column_metadata]),np.max(metadata.loc[indices_origin_nonan,column_metadata])]
+            linreg = np.poly1d(coef)
+            ax_scatter_origin.plot(x,linreg(x),c="k")
+        
         if data_processed is not None:
             ax_scatter_processed = fig.add_subplot(gs[ind,1])
             if use_metadata_coloring:
@@ -725,4 +734,11 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
             ax_scatter_processed.set_axisbelow(True)
             ax_scatter_processed.grid(axis="y")
             ax_scatter_processed.tick_params(labelsize=fontsize)
+            
+            if plot_linreg:
+                indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index])]
+                coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
+                x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
+                linreg = np.poly1d(coef)
+                ax_scatter_processed.plot(x,linreg(x),c="k")
     return
