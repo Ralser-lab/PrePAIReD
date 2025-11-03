@@ -56,6 +56,57 @@ suppressPackageStartupMessages({
   suppressWarnings(suppressMessages(requireNamespace("harmony", quietly = TRUE)))
 })
 
+# ---- Scale handling helpers ---------------------------------------------------
+.scale_normalize <- function(x, center=TRUE, scale=FALSE) {
+  if (center || scale) {
+    x <- t(scale(t(x), center = center, scale = scale))
+  }
+  x
+}
+
+.safe_eps <- function() 1e-12
+
+.is_scale <- function(params, name) {
+  sc <- params$input_scale
+  if (is.null(sc)) sc <- params$data_scale
+  if (is.null(sc)) sc <- "log2"
+  tolower(sc) == tolower(name)
+}
+
+.to_log2_if_needed <- function(mat, params) {
+  if (.is_scale(params, "linear")) {
+    return(log2(pmax(mat, .safe_eps())))
+  }
+  mat
+}
+
+.to_linear_if_needed <- function(mat, params, method) {
+  # For methods that expect linear space; currently none of LIMMA/ComBat/Harmony do.
+  # Keep as placeholder for future methods (e.g., multiplicative scaling in linear space).
+  expects_linear <- FALSE
+  if (is.character(method)) {
+    m <- toupper(method)
+    expects_linear <- m %in% c()  # empty for now
+  }
+  if (expects_linear && !.is_scale(params, "linear")) {
+    return(2^mat)
+  }
+  mat
+}
+
+.relog_if_needed <- function(mat, params, method) {
+  expects_linear <- FALSE
+  if (is.character(method)) {
+    m <- toupper(method)
+    expects_linear <- m %in% c()
+  }
+  if (expects_linear && !.is_scale(params, "linear")) {
+    return(log2(pmax(mat, .safe_eps())))
+  }
+  mat
+}
+# ------------------------------------------------------------------------------
+
 # ---- Load your helpers (must define read_JSON(), run_with_logging()) ----
 # ---- Portable helper loader (no hard-coded paths) --------------------------
 .load_helpers <- function() {
@@ -232,11 +283,24 @@ batchcorrect_harmony <- function(Data, batchER) {
 
 # Dispatcher
 .dispatch_batch <- function(Data, batchER) {
-  method <- toupper(batchER$correct_/Users/rozsurmiz/Documents/GitHub/Preprocessing/modules_R/test_batch_correction.shmethod %||% "LIMMA__R")
-  if (method == "LIMMA_R")   return(batchcorrect_limma(Data, batchER))
-  if (method == "COMBAT_R")  return(batchcorrect_combat(Data, batchER))
-  if (method == "HARMONY_R") return(batchcorrect_harmony(Data, batchER))
-  stop("Unknown batch correction method: ", method)
+  # pick method from common keys, default LIMMA_R
+  pick <- function(...) {
+    keys <- list(...)
+    for (k in keys) if (!is.null(k) && length(k) == 1 && !is.na(k)) return(k)
+    return(NULL)
+  }
+  m <- pick(batchER$correct_method, batchER$method, batchER$Method, "LIMMA_R")
+  # normalize (remove stray paths/characters and uppercase)
+  m <- toupper(gsub("[^A-Za-z0-9_]+", "", as.character(m)))
+  # fix common typos/aliases
+  if (m %in% c("LIMMA","LIMMAR","REMOVEBATCHEFFECT")) m <- "LIMMA_R"
+  if (m %in% c("COMBAT","COMBATR","SVA_COMBAT","SVACOMBAT")) m <- "COMBAT_R"
+  if (m %in% c("HARMONY","HARMONYR")) m <- "HARMONY_R"
+
+  if (m == "LIMMA_R")   return(batchcorrect_limma(Data, batchER))
+  if (m == "COMBAT_R")  return(batchcorrect_combat(Data, batchER))
+  if (m == "HARMONY_R") return(batchcorrect_harmony(Data, batchER))
+  stop("Unknown batch correction method: ", m)
 }
 
 #===========================================================
@@ -282,7 +346,15 @@ batchcorrect <- function(data_df_fp,
     covariates_preserve = params$combat_cols_preserve_meta %||% NULL,
     fitsamples  = params$fitsamples_idx_list %||% NULL
   )
-
+  # ---- Scale guard: ensure correct space per method ---------------------------
+  method_upper <- toupper(method)
+  # Methods that operate naturally on log-scale
+  requires_log <- method_upper %in% c("LIMMA_R","COMBAT_R","HARMONY_R")
+  if (requires_log) {
+    data_df <- .to_log2_if_needed(as.matrix(data_df), params)
+    data_df <- as.data.frame(data_df, check.names = FALSE)
+  }
+  # ----------------------------------------------------------------------------
   Data <- list(Matrix = as.matrix(data_df), MetaData = meta_df)
 
   # ---- RUN ----
@@ -336,7 +408,15 @@ batch_correct <- function(data_df, meta_df, params) {
     covariates_preserve = params$combat_cols_preserve_meta %||% NULL,
     fitsamples  = params$fitsamples_idx_list %||% NULL
   )
-
+  # ---- Scale guard: ensure correct space per method ---------------------------
+  method_upper <- toupper(method)
+  # Methods that operate naturally on log-scale
+  requires_log <- method_upper %in% c("LIMMA_R","COMBAT_R","HARMONY_R")
+  if (requires_log) {
+    data_df <- .to_log2_if_needed(as.matrix(data_df), params)
+    data_df <- as.data.frame(data_df, check.names = FALSE)
+  }
+  # ----------------------------------------------------------------------------
   Data <- list(Matrix = as.matrix(data_df), MetaData = meta_df)
   corrected <- .dispatch_batch(Data, batchER)
   M_out <- corrected$Matrix
