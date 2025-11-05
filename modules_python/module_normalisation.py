@@ -584,6 +584,15 @@ if __name__ == "__main__":
     if parameters_dict["normalization_method"] in ["delayed"]:
         data_arr = np.load(data_df_fp)
 
+    # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_file,module_output)
+    if metadata_df is None:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in module_output:
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+
+    
     try:
         # Process data
         if parameters_dict["normalization_method"] == "quantile":
