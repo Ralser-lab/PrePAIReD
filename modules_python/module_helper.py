@@ -1318,7 +1318,7 @@ def save_data(data_processed_df, out_dir_fp, outname):
     data_processed_df.to_csv(os.path.join(out_dir_fp,outname),sep="\t")
     return
 
-def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=False, return_data_fp_only=False,
+def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False, return_data_fp_only=False,
                 skip_parser=False, data_df_fp=None, param_fp=None, out_dir_fp=None, meta_df_fp=None, log_file=None, idmap_fp=None, counter=None, outname=None):
     """
     Initialized the module and reads in all necessary data and arguments.
@@ -1327,11 +1327,11 @@ def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=Fa
     ----------
     module : str
         Name of the module.
-    load_metadata : bool, optional
+    get_metadata : bool, optional
         Switch to True to read-in metadata. The default is False.
-    load_id_mapping : bool, optional
+    get_id_mapping : bool, optional
         Switch to True to read-in id_mapping. The default is False.
-    load_mask : bool, optional
+    get_mask : bool, optional
         Switch to True to read-in the mask. The default is False.
     return_data_fp_only : bool, optional
         Switch to True to read-in the mask. The default is False.
@@ -1392,11 +1392,11 @@ def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=Fa
             raise ValueError("###ERROR###: param_fp required.")
         if not out_dir_fp:
             raise ValueError("###ERROR###: out_dir_fp required.")
-        if not meta_df_fp and load_metadata:
+        if not meta_df_fp and get_metadata:
             raise ValueError("###ERROR###: meta_df_fp required.")
         if not log_file:
             raise ValueError("###ERROR###: log_file required.")
-        if not idmap_fp and load_id_mapping:
+        if not idmap_fp and get_id_mapping:
             raise ValueError("###ERROR###: idmap_fp required.")
         if not counter:
             raise ValueError("###ERROR###: counter required.")
@@ -1413,7 +1413,7 @@ def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=Fa
     # Load parameters
     parameters_dict = load_parameters(param_fp,out_dir_fp)
     # Load ID mapping
-    if load_id_mapping:
+    if get_id_mapping:
         id_mapping_df = load_id_mapping(idmap_fp)
     else:
         id_mapping_df = []
@@ -1422,7 +1422,7 @@ def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=Fa
     # Write Parameters to log-file
     module_output = add_parameters_to_log(log_file, module, parameters_dict)
     # Load meta data
-    if load_metadata:
+    if get_metadata:
         metadata_df, log = load_metadata(metadata_fp=meta_df_fp,
                                          metadata_sheet=parameters_dict["metadata_sheet"], 
                                          filename_col=parameters_dict["metadata_filename_column"], 
@@ -1431,7 +1431,7 @@ def init_module(module, load_metadata=False, load_id_mapping=False, load_mask=Fa
     else:
         metadata_df = []
     # Load mask
-    if load_mask:
+    if get_mask:
         masked_df = load_mask(data_df_fp)
         mask_description_df = load_mask_description(data_df_fp)
     else:
