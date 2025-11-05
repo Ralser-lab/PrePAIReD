@@ -776,6 +776,13 @@ if __name__ == "__main__":
                                                                                                                                                                            get_id_mapping=True, 
                                                                                                                                                                            get_mask=True, 
                                                                                                                                                                            return_data_fp_only=False)
+    # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_file,module_output)
+    if metadata_df is None:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in module_output:
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     # unlog data
     data_df=helper.unlog_transform(data_df)
