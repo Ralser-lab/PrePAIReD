@@ -746,13 +746,21 @@ if __name__ == "__main__":
     '''
     
     #load 
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
-                                                                                                                                                                           get_metadata=True, 
-                                                                                                                                                                           get_id_mapping=True, 
-                                                                                                                                                                           get_mask=True, 
-                                                                                                                                                                           return_data_fp_only=False)
+    data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
+                                                                                                                                                               get_metadata=True, 
+                                                                                                                                                               get_id_mapping=True, 
+                                                                                                                                                               get_mask=True, 
+                                                                                                                                                               return_data_fp_only=False)
  
 
+    # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_file,log)
+    if metadata_df is None:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in log:
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+    
     #helper functions
     timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     
