@@ -55,6 +55,7 @@ config_file_path = "Config.txt"
 setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace("/",",").replace("\\",",")
 while ",," in setup_str:
     setup_str = setup_str.replace(",,",",")
+setup_str = setup_str.replace("NORMALIZATION","NORMALISATION").replace("SUMMARIZATION","SUMMARISATION").replace("FILTERINGLONG","FILTERING_LONG").replace("FILTERINGWIDE","FILTERING_WIDE")
 # Get step order
 setup_order = setup_str.split(",")
 # Remove empty lines
