@@ -1094,10 +1094,12 @@ if __name__ == "__main__":
 
             if not parameters_dict["hierarchical_imputation"] or parameters_dict["impute_over_whole_dataset"]: #no hierarchical imputation
                 log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputing over entire dataset.\n"
+                helper.logger(log_file, module_output=log)
                 missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
                 notimplemented_missingness_types = set(missingness_types) - {"MAR","MNAR",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/MAR",parameters_dict["missingness_type_protein_absence"] + "/MNAR"}
                 if  notimplemented_missingness_types != set():
                     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
+                    helper.logger(log_file, module_output=log)
                 for missingness_type in missingness_types:
                     if missingness_type == "MAR":
                         imputation_method = parameters_dict["imputation_method_MAR"]
