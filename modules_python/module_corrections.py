@@ -833,11 +833,18 @@ def adjust_confounders_batchwise(
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Correction", 
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_string, counter = helper.init_module(module = "Correction", 
                                                                                                                                                                            get_metadata=True, 
                                                                                                                                                                            get_id_mapping=True, 
                                                                                                                                                                            get_mask=True, 
                                                                                                                                                                            return_data_fp_only=False)
+    # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_string,log)
+    if metadata_df is None:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in log:
+        helper.logger(log_string,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     log_string = time.strftime("%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
 
