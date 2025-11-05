@@ -785,9 +785,9 @@ if __name__ == "__main__":
     '''
     
     data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering long", 
-                                                                                                                                                                              load_metadata=True, 
-                                                                                                                                                                              load_id_mapping=False, 
-                                                                                                                                                                              load_mask=False, 
+                                                                                                                                                                              get_metadata=True, 
+                                                                                                                                                                              get_id_mapping=False, 
+                                                                                                                                                                              get_mask=False, 
                                                                                                                                                                               return_data_fp_only=True)
     
     # Check if loading was successful, else pass error to log and exit   
