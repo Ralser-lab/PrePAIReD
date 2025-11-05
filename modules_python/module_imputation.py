@@ -795,7 +795,7 @@ def update_mask(mask_df, locs, mask_value):
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Imputation", 
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Imputation", 
                                                                                                                                                                            load_metadata=True, 
                                                                                                                                                                            load_id_mapping=True, 
                                                                                                                                                                            load_mask=True, 
