@@ -964,28 +964,29 @@ if __name__ == "__main__":
                     regression_df.to_csv(out_dir_fp + "intensity_dependent_missingness_estimation_plot_data.tsv",sep="\t")
             else:
                 mar_mnar_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
-            # combine masks
-            imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + mar_mnar_mask_df.loc[data_df.index,data_df.columns]
-            #replace / in beginning or end
-            imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True)
-            #reset index to precursor id
-            imputation_mask_df.index = imputation_mask_df.index.get_level_values(parameters_dict["precursor_col"])
-            if parameters_dict["save_intermediate_output_for_QA"]:
-                imputation_mask_df.to_csv(out_dir_fp + "imputation_mask.tsv",sep="\t")
-                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created and saved.\n"
-            else:
-                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created.\n"
-            #Logging missing value types
-            log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMissingness types and corresponding numbers of values:\n\t\t\t\t" + str(Counter(imputation_mask_df.to_numpy().flatten())) + "\n"
-            helper.logger(log_file, module_output=log)
+            # combine masks if any distinguishment of missingness
+            if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
+                imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + mar_mnar_mask_df.loc[data_df.index,data_df.columns]
+                #replace / in beginning or end
+                imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True)
+                #reset index to precursor id
+                imputation_mask_df.index = imputation_mask_df.index.get_level_values(parameters_dict["precursor_col"])
+                if parameters_dict["save_intermediate_output_for_QA"]:
+                    imputation_mask_df.to_csv(out_dir_fp + "imputation_mask.tsv",sep="\t")
+                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created and saved.\n"
+                else:
+                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created.\n"
+                #Logging missing value types
+                log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMissingness types and corresponding numbers of values:\n\t\t\t\t" + str(Counter(imputation_mask_df.to_numpy().flatten())) + "\n"
+                helper.logger(log_file, module_output=log)
 
-            #extract missingness types
-            if parameters_dict["remember_missingness_type_in_mask"]:
-                missingness_types_all = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
-                missingness_types_df = pd.DataFrame(columns=["filter","value"])
-                missingness_types_df["filter"] = missingness_types_all
-                missingness_types_df["value"] = [x/10 for x in range(1,(len(missingness_types_all)+1))]
-                mask_description_df = pd.concat([mask_description_df,missingness_types_df.set_index("filter")],axis=0)
+                #extract missingness types
+                if parameters_dict["remember_missingness_type_in_mask"]:
+                    missingness_types_all = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
+                    missingness_types_df = pd.DataFrame(columns=["filter","value"])
+                    missingness_types_df["filter"] = missingness_types_all
+                    missingness_types_df["value"] = [x/10 for x in range(1,(len(missingness_types_all)+1))]
+                    mask_description_df = pd.concat([mask_description_df,missingness_types_df.set_index("filter")],axis=0)
             
             #remember which and how many values were missing initially
             total_num_values0,num_missing_values0,missing_val_locs0 = obtain_missingness_for_log(data_df=data_df)
@@ -1095,13 +1096,18 @@ if __name__ == "__main__":
             if not parameters_dict["hierarchical_imputation"] or parameters_dict["impute_over_whole_dataset"]: #no hierarchical imputation
                 log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputing over entire dataset.\n"
                 helper.logger(log_file, module_output=log)
-                missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
-                notimplemented_missingness_types = set(missingness_types) - {"MAR","MNAR",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/MAR",parameters_dict["missingness_type_protein_absence"] + "/MNAR"}
-                if  notimplemented_missingness_types != set():
-                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
-                    helper.logger(log_file, module_output=log)
+                if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
+                    missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
+                    notimplemented_missingness_types = set(missingness_types) - {"MAR","MNAR",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/MAR",parameters_dict["missingness_type_protein_absence"] + "/MNAR"}
+                    if  notimplemented_missingness_types != set():
+                        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
+                        helper.logger(log_file, module_output=log)
+                else: 
+                    missingness_types = ["simple"]
                 for missingness_type in missingness_types:
-                    if missingness_type == "MAR":
+                    if missingness_type == "simple": #no distinguishment of missingness types
+                        imputation_method = parameters_dict["imputation_method"]
+                    elif missingness_type == "MAR":
                         imputation_method = parameters_dict["imputation_method_MAR"]
                     elif missingness_type == "MNAR":
                         imputation_method = parameters_dict["imputation_method_MNAR"]
