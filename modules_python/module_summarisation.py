@@ -772,9 +772,9 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 if __name__ == "__main__":
     
     data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                           load_metadata=True, 
-                                                                                                                                                                           load_id_mapping=True, 
-                                                                                                                                                                           load_mask=True, 
+                                                                                                                                                                           get_metadata=True, 
+                                                                                                                                                                           get_id_mapping=True, 
+                                                                                                                                                                           get_mask=True, 
                                                                                                                                                                            return_data_fp_only=False)
 
     # unlog data
