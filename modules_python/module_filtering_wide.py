@@ -130,7 +130,7 @@ def filter_samples_by_detection_proportion(data_df, sample_thresh=None, sample_a
         missingness = condition_on_detection_proportion(data_df)
         
         optimal_threshold = sample_thresh * 100
-        log += f"{timestamp()}\tUsing user-defined thresholding at {optimal_threshold:.2f}% missing◙ess for sample filtering.\n"
+        log += f"{timestamp()}\tUsing user-defined thresholding at {optimal_threshold:.2f}% missingness for sample filtering.\n"
 
     else:
         # Validate allowed values for alpha_sample
