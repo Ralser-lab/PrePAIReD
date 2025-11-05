@@ -576,9 +576,9 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 if __name__ == "__main__":
  
     try:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", load_metadata=True, load_id_mapping=True, load_mask=True, return_data_fp_only=False)
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", get_metadata=True, get_id_mapping=True, get_mask=True, return_data_fp_only=False)
     except:
-        data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", load_metadata=True, load_id_mapping=True, load_mask=True, return_data_fp_only=True)
+        data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", get_metadata=True, get_id_mapping=True, get_mask=True, return_data_fp_only=True)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
