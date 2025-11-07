@@ -170,9 +170,9 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         # save final
         normalization_factors_df=pd.DataFrame(index=df_trim.columns,columns=["NormalizationFactor"],data=normalization_factors)
         normalization_factors_df.to_csv(os.path.join(out_dir_fp,"Normalization_factors_trim.tsv"),sep="\t")
-        df_norm=df_trim*normalization_factors
+        df_norm=df_trim+normalization_factors
     else:
-        df_norm=df*normalization_factors
+        df_norm=df+normalization_factors
         
     return df_norm, module_output
 
