@@ -188,8 +188,8 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if intersect_files.sum() == 0:
             intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
         if intersect_files.sum() == 0:
-            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly."
-            #sys.exit("###WARNING###: No overlap between samples in metadata and DIA-NN report. please check wheter filename_col is defined correctly.")
+            log += "\t\t\t\t###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly."
+            #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
             return([None,None,None,log])
         input_df = input_df[intersect_files]
         if len_input_df_before > len(input_df):
@@ -884,10 +884,11 @@ if __name__ == "__main__":
     elif parameters_dict["input_origin"]=="msfragger":
         pass # adjust here for other programs
         
-    # Check if filtering was successful, else pass error to log and exit    
-    if not input_df.empty:
-        log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
-        helper.logger(log_file,log)
+    # Check if filtering was successful, else pass error to log and exit
+    if input_df is not None:
+        if not input_df.empty:
+            log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
+            helper.logger(log_file,log)
     else:
         helper.logger(log_file,log)
         sys.exit("###ERROR###: Long format Filtering failed.")
