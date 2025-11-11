@@ -26,7 +26,6 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 import time
-from tqdm import tqdm
 
 #statistics and modelling
 import pycombat #CoAxLab
@@ -645,7 +644,7 @@ def adjust_confounders_batchwise(
             covariates, covariates_dtypes_list):
             processed_df_list=list()
             
-            for batch in tqdm(batch_levels):
+            for batch in batch_levels:
                 idx_batch_list = list(
                     metadata_df[
                         metadata_df[batch_level[0]]==batch].index)
@@ -671,7 +670,7 @@ def adjust_confounders_batchwise(
                 processed_df_list.append(data_processed_batch_df)
     else: #correct for all covariates at once
         processed_df_list=list()
-        for batch in tqdm(batch_levels):
+        for batch in batch_levels:
             idx_batch_list = list(
                     metadata_df[
                         metadata_df[batch_level[0]]==batch].index)
