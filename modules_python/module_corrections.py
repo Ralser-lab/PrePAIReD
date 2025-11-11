@@ -22,17 +22,14 @@ General comments:
 import os
 import sys
 import warnings
+warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 import time
 from tqdm import tqdm
 
-warnings.filterwarnings("ignore")
-
-
 #statistics and modelling
 import pycombat #CoAxLab
-
 from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
@@ -42,30 +39,26 @@ from sklearn import metrics
 
 import module_helper as helper
 
-
-
 def batchcorrect_harmony(
             data_df:pd.DataFrame, metadata_df:pd.DataFrame, 
-            batch_key:list, random_seed:int, **kwargs): 
+            batch_key:list, seed, **kwargs): 
 
     """
-    Applies the HARMONY batch correction algorithm to the input data.
+    This function takes an expression matrix and associated metadata, 
+    and performs batch correction using the Harmony algorithm based on the 
+    specified batch variables.
     The function does not accept Na's.
 
     author: BZ, CD
 
     As implemented here: https://pypi.org/project/harmony-pytorch/
 
-    This function takes an expression matrix and associated metadata, 
-    and performs batch correction using the Harmony algorithm based on the 
-    specified batch variables.
-
     Parameters
     ----------
         data_df (pd.DataFrame) : The data matrix (e.g., gene expression), with rows as samples and columns as features.
         metadata_df (pd.DataFrame) : Metadata for the samples, must align with `data_df` by index.
         batch_key (list) : List of column names in `metadata_df` that define batch groupings.
-        random_seed (int) : Random seed for reproducibility.
+        seed (int) : Random seed for reproducibility.
         **kwargs: Additional keyword arguments passed to the `harmonize` function
 
     Returns:
@@ -120,31 +113,23 @@ def batchcorrect_combat(
         
         Parameters
         ----------
-        profiles : pd.DataFrame
+        data_df : pd.DataFrame
             features (e.g. precursors) as rows, samples as columns
-        batchkey : str
+        batch_key : str
             column level to correct by (e.g. "batch")
-        fitsamples : list, optional
-            samples to use for fitting the combat class (e.g. QC-samples only), 
-            must be column names of profiles. 
-            The default is None, fitting with all samples in profiles.
-        covariates : list
+        fitsamples_idx_list : list, optional
+            List of sample indices to use for fitting the combat class (e.g. QC-samples only), 
+            Must be column names of profiles. 
+            The default is None, fitting with all samples.
+        cov_preserve_list : list
+            list of column levels with covariates to be left untouched
+        cov_adjust_list : list
             list of column levels with covariates to be corrected for
-        binlevel : bool
-            if True, bin the levels provided by batchkey
-        bins : int
-            number of bins for the binning of batchkey
-        sample_column : str
-            name of the column level with the sample names. The default is "sample".
-            
+
         Returns
         -------
-        pd.DataFrame, same shape as input profiles.
-
+        Corrected feature matrix as pd.DataFrame, same shape as input profiles.
         """
-
-        ### Function 
-
         log_string = ""
         log_string += time.strftime(
                 "%Y-%m-%d%t%H:%M:%S: "+"Start COMBAT batch correction.\n")
@@ -157,12 +142,6 @@ def batchcorrect_combat(
         if cov_adjust_list != None:
             c_df = metadata_df[cov_adjust_list]
 
-
-
-
-
-
-
         # Init combat Model
         combat_model=pycombat.Combat()
         # fit combat model on selected samples
@@ -170,9 +149,6 @@ def batchcorrect_combat(
             
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples.\n")
-
-            fitsamples_in_index_x = [s for s in fitsamples_idx_list if s in x_df.index]
-            fitsamples_in_index_c = [s for s in fitsamples_idx_list if s in c_df.index]
 
             Y_fit = data_df.loc[:, fitsamples_idx_list].T.to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
@@ -221,10 +197,6 @@ def batchcorrect_combat(
             index=data_df.index,
             columns=data_df.columns)
 
-
-        subset = data_df.loc[:, fitsamples_idx_list]
-
-
         # Check if output df consists of NA's exclusively
         # if so return error in Log and don't return processed df
         if data_processed_df.isna().all().all():
@@ -242,7 +214,7 @@ def batchcorrect_combat(
 
 def adjust_confounders(
                 data_df, metadata_df, model_string, adjust_cols_list,
-                adjust_cols_dtypes_list,  random_state, fitsamples_idx_list=None,
+                adjust_cols_dtypes_list, random_state, fitsamples_idx_list=None,
                 alpha_significance=0.05, alphas_models=[-3,3,7]
             ):
         
@@ -736,20 +708,24 @@ def adjust_confounders_batchwise(
         
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
     +f"Batchwise Adjustment finished!"
-
     return data_processed_df, log_string, corr_dfs    
 
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Correction", 
-                                                                                                                                                                           get_metadata=True, 
-                                                                                                                                                                           get_id_mapping=True, 
-                                                                                                                                                                           get_mask=True, 
-                                                                                                                                                                           return_data_fp_only=False)
+    (
+        data_df, parameters_dict, id_mapping_df, 
+        seed, module_output, metadata_df, masked_df, 
+        mask_description_df, out_dir_fp, outname, log_file, counter
+        ) = helper.init_module(
+            module = "Correction", 
+            get_metadata=True, 
+            get_id_mapping=True, 
+            get_mask=True, 
+            return_data_fp_only=False)
 
-    log_string = time.strftime("%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
-
+    log_string = time.strftime(
+        "%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
 
     # -------------------------------------------------------------------------#
     # Check Compatibility of feature and meta data                             #
@@ -776,7 +752,6 @@ if __name__ == "__main__":
     metadata_df = metadata_df.loc[common_idx_list]
     n_samples_data_int = len(data_df.columns)
     n_samples_meta_int = metadata_df.shape[0] # copy end
-
     
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
@@ -805,8 +780,6 @@ if __name__ == "__main__":
         log_string += time.strftime('%Y-%m-%d\t%H:%M:%S ') \
                 +f"{metadata_df.shape[0]} remain for analysis.\n"
         
-
-
     # Warn user that some samples do not have a batch annotation
     for batch_col in parameters_dict["batch_cols_meta"]:
         samples_na_list = []
@@ -853,7 +826,7 @@ if __name__ == "__main__":
         data_processed_df, log_string_harmony = batchcorrect_harmony(
             data_df, metadata_df, 
             parameters_dict["batch_cols_meta"],
-            random_seed=seed, 
+            seed=seed, 
             **harmony_kwargs_dict
         )
         log_string += log_string_harmony
@@ -1068,13 +1041,11 @@ if __name__ == "__main__":
             covariates_dtypes_list=parameters_dict["adjust_cols_dtypes"],
             alpha_significance=0.05, alphas_models=[-3,3,7],
             fitsamples_idx_list=fitsamples_idx_list, correct_one_by_one=parameters_dict["adjust_batchwise_onebyone"])
-        
-        
-        
     else:
-        
         data_processed_df = data_df.copy()
 
-    helper.close_module(data_processed_df=data_processed_df, masked_df=masked_df,
-                        mask_description_df=mask_description_df, log_file=log_file, module_output=module_output,
+    helper.close_module(data_processed_df=data_processed_df, 
+                        masked_df=masked_df, 
+                        mask_description_df=mask_description_df, 
+                        log_file=log_file, module_output=module_output,
                         out_dir_fp=out_dir_fp, outname=outname, mask=True)
