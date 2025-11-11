@@ -125,6 +125,8 @@ def batchcorrect_combat(
             list of column levels with covariates to be left untouched
         cov_adjust_list : list
             list of column levels with covariates to be corrected for
+        cov_adjust_list_dtypes : list 
+            list of dtypes for covariates
 
         Returns
         -------
@@ -150,7 +152,7 @@ def batchcorrect_combat(
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples.\n")
 
-            Y_fit = data_df.loc[:, fitsamples_idx_list].T.to_numpy()
+            Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
             X_fit = x_df.loc[fitsamples_idx_list]
             C_fit = c_df.loc[fitsamples_idx_list]
@@ -193,7 +195,7 @@ def batchcorrect_combat(
             C=C_all
         )
         data_processed_df = pd.DataFrame(
-            data_processed_arr.T,
+            data_processed_arr,
             index=data_df.index,
             columns=data_df.columns)
 
@@ -815,6 +817,8 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------#
     # Perform Batch Correction                                                 #
     # -------------------------------------------------------------------------#
+    data_df = data_df.T
+
 
     if parameters_dict["correct_method"] == "harmony":
 
@@ -1044,8 +1048,12 @@ if __name__ == "__main__":
     else:
         data_processed_df = data_df.copy()
 
+    data_processed_df = data_processed_df.T
+
     helper.close_module(data_processed_df=data_processed_df, 
                         masked_df=masked_df, 
                         mask_description_df=mask_description_df, 
                         log_file=log_file, module_output=module_output,
                         out_dir_fp=out_dir_fp, outname=outname, mask=True)
+
+# %%
