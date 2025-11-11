@@ -188,7 +188,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         if intersect_files.sum() == 0:
             intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
         if intersect_files.sum() == 0:
-            log += "\t\t\t\t###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly."
+            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly."
             #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
             return([None,None,None,log])
         input_df = input_df[intersect_files]
