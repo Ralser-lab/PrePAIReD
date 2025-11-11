@@ -79,7 +79,7 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                                 description = 1
                             if description == "FALSE":
                                 description = 0
-                            if description == "nan" or "Nan" or "NaN" or "NULL":
+                            if description == "nan" or description == "Nan" or description == "NaN" or description == "NULL":
                                 description = None
                             description = ast.literal_eval(description)  # check for right dtype
                         except:
@@ -107,7 +107,7 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                                 description = 1
                             if description == "FALSE":
                                 description = 0
-                            if description == "nan" or "Nan" or "NaN" or "NULL":
+                            if description == "nan" or description == "Nan" or description == "NaN" or description == "NULL":
                                 description = None
                             description = ast.literal_eval(description)  # check for right dtype
                         except:
