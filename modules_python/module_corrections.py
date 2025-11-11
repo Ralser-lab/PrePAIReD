@@ -29,13 +29,10 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
-#own scripts
-from modules_python import module_helper
 
 #statistics and modelling
 import pycombat #CoAxLab
 
-# import scanpy as sc
 from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
@@ -46,123 +43,6 @@ from sklearn import metrics
 import module_helper as helper
 
 
-##############################################################################
-# Batch correction using parametric ComBat
-# Author: SB
-##############################################################################
-
-def prepare_input_data(raw_data, log_transform=True):
-    """
-    Prepares data by optionally applying log2 transformation.
-
-    author: SB
-
-    Parameters
-    ----------
-    raw_data : pd.DataFrame
-        Raw data for batch correction.
-    log_transform : bool, optional
-        Applies log2 transform if True (default True).
-
-    Returns
-    -------
-    pd.DataFrame
-        Prepared data.
-    """
-    return np.log2(raw_data) if log_transform else raw_data.copy()
-
-def load_batch_metadata(input_data, meta_path, batchID):
-    """
-    Loads and merges batch metadata aligned with input data samples.
-
-    author: SB
-
-    Parameters
-    ----------
-    input_data : pd.DataFrame
-        DataFrame of input samples.
-    meta_path : str
-        Path to metadata Excel file.
-    batchID : str
-        Column identifier for batch information.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame of merged batch metadata.
-    """
-    metadata = pd.read_excel(meta_path, index_col=0)
-    batchdata = metadata[[batchID]].drop_duplicates()
-    input_batchdata = pd.DataFrame(index=input_data.index)
-    batchdata_merged = pd.merge(input_batchdata, batchdata, how='inner', left_index=True, right_index=True)
-    return batchdata_merged
-
-def parametric_combat(input_data, batchdata, batchID):
-    """
-    Performs batch correction using ComBat method from Scanpy.
-
-    author: SB
-
-    Parameters
-    ----------
-    input_data : pd.DataFrame
-        Input data to batch correct.
-    batchdata : pd.DataFrame
-        Batch information aligned to samples.
-    batchID : str
-        Identifier for batch information.
-
-    Returns
-    -------
-    pd.DataFrame
-        Batch-corrected data.
-    """
-    adata = sc.AnnData(X=input_data.values, 
-                       obs=batchdata, 
-                       var=pd.DataFrame(index=input_data.columns))
-
-    sc.pp.combat(adata, batchID)
-
-    corrected_data = pd.DataFrame(adata.X, 
-                                  index=adata.obs_names, 
-                                  columns=input_data.columns,
-                                  dtype=float)
-    return corrected_data
-
-def combat_batch_correction(data_in, metadata, batchID):
-    """
-    Integrated pipeline for preparing data, loading metadata, and performing ComBat batch correction.
-
-    author: SB
-
-    Parameters
-    ----------
-    data_in : pd.DataFrame
-        Data requiring batch correction.
-    metadata : str
-        Path to metadata Excel file.
-    batchID : str
-        Batch identifier column in metadata.
-
-    Returns
-    -------
-    pd.DataFrame
-        Batch-corrected dataset.
-    """
-
-    # Prepare input data
-    input_data = prepare_input_data(data_in, log_transform=True)
-
-    # Load metadata and merge
-    batchdata = load_batch_metadata(input_data, meta_path=metadata, batchID=batchID)
-
-    # Perform batch correction
-    corrected_data = parametric_combat(input_data, batchdata, batchID=batchID)
-
-    return corrected_data
-
-
-############################################
 
 def batchcorrect_harmony(
             data_df:pd.DataFrame, metadata_df:pd.DataFrame, 
@@ -277,6 +157,12 @@ def batchcorrect_combat(
         if cov_adjust_list != None:
             c_df = metadata_df[cov_adjust_list]
 
+
+
+
+
+
+
         # Init combat Model
         combat_model=pycombat.Combat()
         # fit combat model on selected samples
@@ -285,39 +171,61 @@ def batchcorrect_combat(
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples.\n")
 
+            fitsamples_in_index_x = [s for s in fitsamples_idx_list if s in x_df.index]
+            fitsamples_in_index_c = [s for s in fitsamples_idx_list if s in c_df.index]
+
+            Y_fit = data_df.loc[:, fitsamples_idx_list].T.to_numpy()
+            b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
+            X_fit = x_df.loc[fitsamples_idx_list]
+            C_fit = c_df.loc[fitsamples_idx_list]
+
             c_fit = combat_model.fit(
-                Y=data_df.loc[fitsamples_idx_list].to_numpy(),
-                b=metadata_df[batch_key].loc[fitsamples_idx_list].to_numpy(),
-                X=x_df.loc[fitsamples_idx_list], 
-                C=c_df.loc[fitsamples_idx_list]
+                Y=Y_fit,
+                b=b_fit,
+                X=X_fit,
+                C=C_fit
             )
+
         else:
             
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on all samples.\n")
 
             c_fit = combat_model.fit(
-                Y=data_df.to_numpy(),
+                Y=data_df.T.to_numpy(),
                 b=metadata_df[batch_key].to_numpy(),
                 X=x_df, 
                 C=c_df
             )
 
+
         log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Transform data.\n")
 
+        samples_all = data_df.columns
+        Y_all = data_df.T.to_numpy()
+        b_all = metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
+        X_all = x_df.loc[samples_all]
+        C_all = c_df.loc[samples_all]
+
+        assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+
         data_processed_arr = c_fit.transform(
-            Y=data_df.to_numpy(),
-            b=metadata_df[batch_key].to_numpy(),
-            X=x_df, 
-            C=c_df
+            Y=Y_all,
+            b=b_all,
+            X=X_all,
+            C=C_all
         )
         data_processed_df = pd.DataFrame(
-            data_processed_arr,
+            data_processed_arr.T,
             index=data_df.index,
             columns=data_df.columns)
 
-        # Check if output df consists of NA's exclusively 
+
+        subset = data_df.loc[:, fitsamples_idx_list]
+
+
+        # Check if output df consists of NA's exclusively
         # if so return error in Log and don't return processed df
         if data_processed_df.isna().all().all():
             log_string += time.strftime(
@@ -328,6 +236,7 @@ def batchcorrect_combat(
             log_string += time.strftime(
                 "%Y-%m-%d%t%H:%M:%S: "\
                 +"Finished COMBAT batch correction successfully.\n")
+
             return data_processed_df, log_string
         
 
@@ -833,18 +742,11 @@ def adjust_confounders_batchwise(
 
 if __name__ == "__main__":
     
-    data_df, parameters_dict, id_mapping_df, seed, log_string, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Correction", 
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Correction", 
                                                                                                                                                                            get_metadata=True, 
                                                                                                                                                                            get_id_mapping=True, 
                                                                                                                                                                            get_mask=True, 
                                                                                                                                                                            return_data_fp_only=False)
-    # Check if loading was successful, else pass error to log and exit   
-    helper.logger(log_file,log_string)
-    if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
-    if "###WARNING###" in log_string:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     log_string = time.strftime("%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
 
@@ -860,22 +762,27 @@ if __name__ == "__main__":
             helper.logger(log_file, log_string)
             sys.exit(1)
 
+    if "Sample.Name" in metadata_df.columns:
+        metadata_df = metadata_df.set_index("Sample.Name")
+
+
     # check if data and meta file consist of same samples
     # only keep intersect on index
-    common_idx_list = list(set(data_df.index) & set(metadata_df.index))
-    n_samples_data_int = data_df.shape[0]
-    n_samples_meta_int = metadata_df.shape[0]
-    drop_samples_data_lst = list(set(data_df.index) - set(metadata_df.index))
-    drop_samples_meta_lst = list(set(metadata_df.index) - set(data_df.index))
+    common_idx_list = list(set(data_df.columns) & set(metadata_df.index))  # copy here
+    drop_samples_data_lst = list(set(data_df.columns) - set(metadata_df.index))
+    drop_samples_meta_lst = list(set(metadata_df.index) - set(data_df.columns))
 
-    data_df = data_df.loc[common_idx_list]
+    data_df = data_df.loc[:, common_idx_list]
     metadata_df = metadata_df.loc[common_idx_list]
+    n_samples_data_int = len(data_df.columns)
+    n_samples_meta_int = metadata_df.shape[0] # copy end
+
     
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
-    if n_samples_data_int != data_df.shape[0]:
+    if n_samples_data_int != data_df.shape[1]:
         flag_sample_intersect_int = True
-        n_final_samples_data_int = n_samples_data_int - data_df.shape[0]
+        n_final_samples_data_int = n_samples_data_int - data_df.shape[1]
         warning_intersect_samples_str = \
                 time.strftime('%Y-%m-%d\t%H:%M:%S: ') \
                 +f"###WARNING###: {n_final_samples_data_int} sample(s) did not appear in meta data:"\
@@ -967,7 +874,6 @@ if __name__ == "__main__":
         combat_kwargs_dict = {
                 "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
                 if k.startswith("combat")}
-        
         fitsamples_idx_list = None
         if len(combat_kwargs_dict["fitsamples_meta"]) == 2:
             fit_col, fit_level = combat_kwargs_dict["fitsamples_meta"]
@@ -996,11 +902,11 @@ if __name__ == "__main__":
             metadata_df = metadata_df[
                 ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
                     list(levels_data-levels_fitsamples))]
-            data_df = data_df.loc[metadata_df.index]
+            data_df = data_df.loc[:, metadata_df.index]
 
-        # Perform ComBAT batch correction
+
         out = batchcorrect_combat(
-            data_df = data_df,
+            data_df = data_df,# possibly data_imputed_df
             metadata_df = metadata_df,
             batch_key = parameters_dict["batch_cols_meta"][0],
             fitsamples_idx_list=fitsamples_idx_list,
@@ -1169,11 +1075,6 @@ if __name__ == "__main__":
         
         data_processed_df = data_df.copy()
 
-    helper.close_module(
-        data_processed_df, 
-        masked_df, log_file, 
-        log_string, 
-        out_dir_fp, 
-        outname, 
-        mask=True)
-    
+    helper.close_module(data_processed_df=data_processed_df, masked_df=masked_df,
+                        mask_description_df=mask_description_df, log_file=log_file, module_output=module_output,
+                        out_dir_fp=out_dir_fp, outname=outname, mask=True)
