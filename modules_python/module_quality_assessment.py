@@ -21,7 +21,7 @@ from matplotlib.ticker import FormatStrFormatter
 ### Generalize colors as an input_variable
 
 def get_CV_log(values, base=2):
-    cv = np.sqrt(float(base**(np.std(values)**2)-1))
+    cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
     return cv
 
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
@@ -428,7 +428,7 @@ def set_aspect_equal(ax):
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "../Out/test.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None):
 
     ### Examples:
     ### Drift correction
@@ -571,7 +571,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "../Out/Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e+3, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
+def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e+3, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
 
     fig = plt.figure(figsize=size)
     fig.set_size_inches(size)
@@ -654,7 +654,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
+def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
 
     ### change to dummy conversion in future????
     try:
