@@ -663,7 +663,7 @@ if __name__ == "__main__":
             data_processed_df = data_df
             module_output += "###WARNING###: Normalzation method not implemented. Skipped module."
         
-        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\.n"
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.")
         helper.logger(log_file, "###ERROR###: "+e)
