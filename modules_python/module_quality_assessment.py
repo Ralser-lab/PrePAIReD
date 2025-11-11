@@ -753,4 +753,6 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
                 x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
                 linreg = np.poly1d(coef)
                 ax_scatter_processed.plot(x,linreg(x),c="k")
+    
+    plt.savefig(outfile, bbox_inches="tight")
     return
