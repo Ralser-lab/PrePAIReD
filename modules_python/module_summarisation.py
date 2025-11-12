@@ -807,12 +807,19 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 
 if __name__ == "__main__":
-    
-    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                           get_metadata=False, 
-                                                                                                                                                                           get_id_mapping=True, 
-                                                                                                                                                                           get_mask=True, 
-                                                                                                                                                                           return_data_fp_only=False)
+
+    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
+                                                                                                                                                                               get_metadata=False, 
+                                                                                                                                                                               get_id_mapping=True, 
+                                                                                                                                                                               get_mask=True, 
+                                                                                                                                                                               return_data_fp_only=False)
+    else:
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
+                                                                                                                                                                               get_metadata=False, 
+                                                                                                                                                                               get_id_mapping=True, 
+                                                                                                                                                                               get_mask=False, 
+                                                                                                                                                                               return_data_fp_only=False)
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
     #if metadata_df is None:
@@ -856,5 +863,8 @@ if __name__ == "__main__":
     # Save without log transformation
     helper.save_data(data_processed_df, out_dir_fp, outname[:-4]+"_unlog.tsv")
     data_processed_df = helper.log_transform(data_processed_df)
-        
-    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
+
+    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
+    else:
+        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False)
