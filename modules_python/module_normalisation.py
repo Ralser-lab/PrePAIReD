@@ -103,7 +103,7 @@ def normalize_quantile_ranked(df):
     return adj_df
 
 ## Median Scaling    
-def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_intersecting_precs=True, nan_intersect_thresh=0.8, exclude_outlier_nfs=False, rel_threshold=2, on_mad=True, min_nf=-1, max_nf=1, axis:int=0):
+def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_intersecting_precs=True, nan_intersect_thresh=0.8, exclude_outlier_nfs=False, rel_threshold=1, on_mad=True, min_nf=-1, max_nf=1, axis:int=0):
     """
 
     Parameters
@@ -122,7 +122,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
     exclude_outlier_nfs : bool, optional
         switch to True to exclude samples with outlier normalization factors as defined by rel_threshold, on_mad, min_nf, max_nf. The default is False.
     rel_threshold : float, optional
-        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 1.
     on_mad : bool, optional
         switch True if filter by median +/- rel_threshold * MAD. The default is True.
     min_nf : float, optional
@@ -176,7 +176,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         
     return df_norm, module_output
 
-def exclude_outlier_normalization_factors(profiles_group,normalization_factors,module_output,group,rel_threshold=2,on_mad=True,min_nf=0.5,max_nf=2):
+def exclude_outlier_normalization_factors(profiles_group,normalization_factors,module_output,group,rel_threshold=1,on_mad=True,min_nf=-1,max_nf=1):
     """
     determine samples with outlier normalization factors by median +- rel_threshold * MAD or by specified normalization factors.    
     Parameters
@@ -188,13 +188,13 @@ def exclude_outlier_normalization_factors(profiles_group,normalization_factors,m
     module_output: str
         Log file to be filled.
     rel_threshold : float, optional
-        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 2.
+        defines the threshold of acceptable normalization factors by median(normalization factors) +/- rel_threshold times the MAD. The default is 1.
     on_mad : bool, optional
         switch True if filter by median +/- rel_threshold * MAD. The default is True.
     min_nf : float, optional
-        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is -1.
     max_nf : float, optional
-        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 1.
 
     Returns
     -------
@@ -241,7 +241,7 @@ def get_normalization_factors(df, axis:int=0):
 
     return np.nanmedian(np.nanmedian(df, axis=axis))-np.nanmedian(df,axis=axis)
 
-def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_dir_fp,normlabel=None,precursor_col="Precursor.Id",peptide_col="Stripped.Sequence",normalization_on_intersecting_precs=True,nan_intersect_thresh=0.9,exclude_outlier_nfs=False,rel_threshold=2,on_mad=False,min_nf=1/2,max_nf=2,axis=0):
+def normalize_from_peptide_list(data_df,normpeptides_list,id_mapping_df,output_dir_fp,normlabel=None,precursor_col="Precursor.Id",peptide_col="Stripped.Sequence",normalization_on_intersecting_precs=True,nan_intersect_thresh=0.9,exclude_outlier_nfs=False,rel_threshold=1,on_mad=False,min_nf=-1,max_nf=1,axis=0):
     """
     Perform median scaling from a subset of peptides, e.g. an internal peptide standard.
     
