@@ -52,9 +52,13 @@ normalize_vsn <- function(DM_df){
   cat(sprintf("\n\n Starting VSN normalization. [%s] \n",
               format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   
-  # The data provided is log2 transformed, need to be transformed back to 
-  # raw intensities for VSN normalization
-  DM_mat <- as.matrix(2^DM_mat)
+  # The data needs to be in raw intensities, non-log2-transformed - let's check 
+  # how it was provided and leave it as raw intensities
+  if (diff(range(DM_mat, na.rm = T)) > 1000 || mean(DM_mat, na.rm = T) > 100) {
+    # Do nothing, this means it's not log2-transformed
+  } else {
+    DM_mat <- as.matrix(2^DM_mat)         # It's log2-transformed, transform back
+  }
   
   # Perform the normalization
   library(limma)
@@ -119,6 +123,14 @@ normalize_cyclic_loess <- function(DM_df,
     parameters[["method_cyclic_loess"]],
     format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   ))
+  
+  # The data needs to be log2-transformed - let's check how it was provided and 
+  # make sure it's in this format 
+  if (diff(range(DM_mat, na.rm = T)) > 1000 || mean(DM_mat, na.rm = T) > 100) {
+    DM_mat <- log2(DM_mat)
+  } else {
+    # Do nothing, this means it's already log2-transformed
+  }
   
   # Check that parameters for cyclic loess are provided, otherwise fill in with the default ones
   ## Check for method_cyclic_loess
@@ -220,6 +232,9 @@ main <- function() {
   # Load data
   DM_df <- as.data.frame(as.matrix(fread(args$data), rownames = 1))
   
+  # Load mask
+  mask <- as.data.frame(as.matrix(fread(sub("\\.tsv$", "_mask.tsv", args$data)), rownames = 1))
+  
   # Call normalize() with logging
   normalized_df <- run_with_logging(
     function() normalize(
@@ -233,7 +248,9 @@ main <- function() {
   # Write output
   normalized_df <- as.data.frame(normalized_df)
   output_file <- file.path(args$out, sprintf("data_%s.tsv", as.character(args$counter)))
+  output_file_mask <- file.path(args$out, sprintf("data_%s_mask.tsv", as.character(args$counter)))
   fwrite(normalized_df, output_file, row.names = TRUE)
+  fwrite(mask, output_file_mask, row.names = TRUE)
 }
 
 if (sys.nframe() == 0) main()
