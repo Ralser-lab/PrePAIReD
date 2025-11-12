@@ -666,7 +666,7 @@ if __name__ == "__main__":
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.")
-        helper.logger(log_file, "###ERROR###: "+e)
+        helper.logger(log_file, "###ERROR###: "+str(e))
         sys.exit(1)
 
     # Comparison for mask and logger what changed between both files
