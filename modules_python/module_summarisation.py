@@ -33,7 +33,7 @@ from itertools import combinations
 from inspect import getsourcefile
 from os.path import abspath
 import os
-#import platform
+import platform
 from numpy.ctypeslib import ndpointer
 from tqdm import tqdm
 
@@ -239,6 +239,9 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     On Windows
     $ g++ -c -fPIC maxlfq.cpp -O3 -o maxlfq.o
     $ g++ -shared -o maxlfq.dll -Wl,--out-implib,maxlfq.a -Wl,--export-all-symbols -Wl,--enable-auto-image-base maxlfq.o 
+                             
+    On Mac (Save way to avoid clashes due to Chip architecture)
+    $ clang++ -arch arm64 -arch x86_64 -dynamiclib maxlfq.cpp -o maxlfq.dylib
     
     Authors: Franziska Kistner, Vadim Demichev
     
@@ -282,8 +285,33 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
     lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
     #lib=lib.replace("/","/")
-    try:
+    if os.path.exists(lib_trim):
         cpp_library = cdll.LoadLibrary(lib_trim)
+        #libname = "maxlfq.dylib"
+        #script_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda: 0)))
+        #lib = os.path.join(script_dir, libname)
+        #cpp_library = cdll.LoadLibrary(lib)
+    else:
+        if platform.system() == "Windows":
+            libname = "maxlfq.dll"
+        elif platform.system() == "Darwin":
+            libname = "maxlfq.dylib"
+        else:
+            libname = "maxlfq.so"
+        script_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda: 0)))
+        lib_ = os.path.join(script_dir, libname)
+
+        if os.path.exists(lib_):
+            cpp_library = cdll.LoadLibrary(lib_)
+        elif os.path.exists(lib):
+            cpp_library = cdll.LoadLibrary(lib)
+        else:
+            lib = util.find_library("/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim)
+            if os.path.exists(lib):
+                cpp_library = cdll.LoadLibrary(lib)
+            else:
+                raise FileNotFoundError
+    """    
     except FileNotFoundError:
         # Ctypes initialization
         '''
@@ -292,12 +320,19 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
             if path_libcpp is not None:
                 CDLL(path_libcpp)
         '''
-        path_to_deps = "/".join(util.find_library("libgcc_s_seh-1").split("/")[:-1])
+        
+        libname = "maxlfq.dylib"
+        script_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda: 0)))
+        lib = os.path.join(script_dir, libname)
+        
+        print(lib)
+            
+        #path_to_deps = "/".join(util.find_library("libgcc_s_seh-1").split("/")[:-1])
         #os.environ['PATH'] = path_to_deps + os.pathsep + os.environ['PATH']
-        os.add_dll_directory(path_to_deps)
+        #os.add_dll_directory(path_to_deps)
         try:
-            lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
-            lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
+            #lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
+            #lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
             cpp_library = cdll.LoadLibrary(lib)
         except FileNotFoundError:
             try:
@@ -307,6 +342,7 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
             except FileNotFoundError:
                 lib = util.find_library("/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim)
                 cpp_library = cdll.LoadLibrary(lib)
+    """
             
     # Specify argument dtypes
     cpp_library.maxlfq.argtypes = [c_int, POINTER(c_double), POINTER(c_double), POINTER(c_double), c_int]
@@ -811,7 +847,7 @@ if __name__ == "__main__":
             module_output += "###WARNING###: Summarization method not found. Skipped module."
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.")
-        helper.logger(log_file, "###ERROR###: "+e)
+        helper.logger(log_file, "###ERROR###: "+str(e))
         sys.exit(1)
         
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
