@@ -773,14 +773,14 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 if __name__ == "__main__":
     
     data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                           get_metadata=True, 
+                                                                                                                                                                           get_metadata=False, 
                                                                                                                                                                            get_id_mapping=True, 
                                                                                                                                                                            get_mask=True, 
                                                                                                                                                                            return_data_fp_only=False)
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
-    if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+    #if metadata_df is None:
+    #    sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in module_output:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
