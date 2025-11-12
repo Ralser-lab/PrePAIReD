@@ -103,7 +103,7 @@ def normalize_quantile_ranked(df):
     return adj_df
 
 ## Median Scaling    
-def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_intersecting_precs=True, nan_intersect_thresh=0.8, exclude_outlier_nfs=False, rel_threshold=2, on_mad=True, min_nf=0.5, max_nf=2, axis:int=0):
+def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_intersecting_precs=True, nan_intersect_thresh=0.8, exclude_outlier_nfs=False, rel_threshold=2, on_mad=True, min_nf=-1, max_nf=1, axis:int=0):
     """
 
     Parameters
@@ -126,9 +126,9 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
     on_mad : bool, optional
         switch True if filter by median +/- rel_threshold * MAD. The default is True.
     min_nf : float, optional
-        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is 0.5.
+        if on_mad == False, min_nf defines the minimal accepted normalization factor. The default is -1.
     max_nf : float, optional
-        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 2.
+        if on_mad == False, max_nf defines the maximal accepted normalization factor. The default is 1.
     axis: int, optional
         Axis for calculation of the normalization factors. The default is 0.
 
