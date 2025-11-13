@@ -29,6 +29,8 @@ import scipy.stats as stats
 import module_helper as helper
 #from modules_python import module_helper as helper
 
+pd.set_option('future.no_silent_downcasting', True)
+
 ##############################################################################
 # Sample Thresholding Functions
 ##############################################################################
@@ -86,7 +88,7 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
     drop_cols = list(set(metadata_df_indexed[metadata_df_indexed[key_column]==key_value].index) & set(data_df.columns))
     data_df = data_df.drop(drop_cols,axis=1)
     #remove precursors with all missing values after sample exclusion
-    data_df.dropna(how="all",axis=0,inplace=True)
+    data_df = data_df.dropna(how="all",axis=0)
     return data_df, log
 
 
@@ -149,7 +151,7 @@ def filter_samples_by_detection_proportion(data_df, sample_thresh=None, sample_a
     #only keep samples with missingness below optimal_threshold
     data_df = data_df.loc[:, missingness < optimal_threshold]
     #remove precursors with all missing values after sample exclusion
-    data_df.dropna(how="all",axis=0,inplace=True)
+    data_df = data_df.dropna(how="all",axis=0)
     return data_df, log
 
 ##############################################################################
