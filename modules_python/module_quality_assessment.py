@@ -571,7 +571,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e+3, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
+def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
 
     fig = plt.figure(figsize=size)
     fig.set_size_inches(size)
@@ -601,7 +601,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
         if data_processed is not None:
             indices_processed = [index for index in metadata.index if index in data_processed.columns]
     
-    distribution_origin = [np.histogram(data_origin[column],bins=nbins,range=(min_val,max_val))[0] for column in indices_origin]
+    distribution_origin = [np.histogram(data_origin[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_origin]
     
     xs = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),nbins)
     xs_fine = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),250)
@@ -623,14 +623,14 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
             
     ax_origin.tick_params(labelsize = fontsize)
     ax_origin.set_xlabel(xlabel,fontsize=fontsize)
-    ax_origin.set_ylabel("Occurence",fontsize=fontsize)
+    ax_origin.set_ylabel("Density",fontsize=fontsize)
     ax_origin.grid(axis="y")
     ax_origin.set_xlim(min_val,max_val)
     ax_origin.set_ylim(0,max_y*1.05)
     
     if data_processed is not None:
         ax_processed = fig.add_subplot(gs[0,1])
-        distribution_processed = [np.histogram(data_processed[column],bins=nbins,range=(min_val,max_val))[0] for column in indices_processed]
+        distribution_processed = [np.histogram(data_processed[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_processed]
         color_values_processed = np.linspace(0,1,len(indices_processed))
         colors_processed = [cmap_(norm(el)) for el in color_values_processed] 
         for item, color in zip(distribution_processed,colors_processed):
@@ -654,6 +654,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
+### Lin Reg per selection -> flag if continuous = False
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
 
     ### change to dummy conversion in future????
