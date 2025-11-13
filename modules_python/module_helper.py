@@ -1079,7 +1079,7 @@ def get_parser_arguments(parser):
     data_df_fp : str
         File path to input data that should be processed.
     param_fp : str
-        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
+        File path to parameter file
     out_dir_fp : str
         Directory for files generated during the module.
     meta_df_fp : str
@@ -1129,16 +1129,14 @@ def load_data(data_df_fp):
     
     return pd.read_csv(data_df_fp,sep="\t",index_col=0)
     
-def load_parameters(param_fp,out_dir_fp):
+def load_parameters(param_fp):
     """
     Read in parameter *.json file.
 
     Parameters
     ----------
     param_fp : str
-        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
-    out_dir_fp : str
-        Directory for files generated during the module.
+        File path of the Parameter file.
 
     Returns
     -------
@@ -1146,7 +1144,7 @@ def load_parameters(param_fp,out_dir_fp):
         Dictionary containg parameters used for the model.
     """
     
-    with open(os.path.join(param_fp,out_dir_fp.split("/")[-1]+"_parameters.json")) as f:
+    with open(param_fp) as f:
             parameters_dict = json.load(f)
     #### In python: 1==True and 0==False -> No need for conversion here!
     return parameters_dict
@@ -1411,7 +1409,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
     else:
         data_df = None
     # Load parameters
-    parameters_dict = load_parameters(param_fp,out_dir_fp)
+    parameters_dict = load_parameters(param_fp)
     # Load ID mapping
     if get_id_mapping:
         id_mapping_df = load_id_mapping(idmap_fp)
