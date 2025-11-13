@@ -733,11 +733,12 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------#
     
     # check if batchcolumns in metafile
-    for batch_col in parameters_dict["batch_cols_meta"]:
-        if batch_col not in metadata_df.columns:
-            log_string += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
-            helper.logger(log_file, log_string)
-            sys.exit(1)
+    if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
+        for batch_col in parameters_dict["batch_cols_meta"]:
+            if batch_col not in metadata_df.columns:
+                log_string += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
+                helper.logger(log_file, log_string)
+                sys.exit(1)
 
     if "Sample.Name" in metadata_df.columns:
         metadata_df = metadata_df.set_index("Sample.Name")
@@ -782,35 +783,36 @@ if __name__ == "__main__":
                 +f"{metadata_df.shape[0]} remain for analysis.\n"
         
     # Warn user that some samples do not have a batch annotation
-    for batch_col in parameters_dict["batch_cols_meta"]:
-        samples_na_list = []
-        if metadata_df[batch_col].isna().sum() > 0:
-            count_na_int = metadata_df[batch_col].isna().sum()
-            samples_na_list = list(
-                metadata_df[metadata_df[batch_col].isna()].index)
-            warning_na_meta_str = \
-                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###WARNING###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
-                + "\nFollowing sample(s) has/have been dropped for analysis:" \
-                + "\n\t"+'\n\t'.join(samples_na_list) + "\n"
-            log_string += warning_na_meta_str
+    if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
+        for batch_col in parameters_dict["batch_cols_meta"]:
+            samples_na_list = []
+            if metadata_df[batch_col].isna().sum() > 0:
+                count_na_int = metadata_df[batch_col].isna().sum()
+                samples_na_list = list(
+                    metadata_df[metadata_df[batch_col].isna()].index)
+                warning_na_meta_str = \
+                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    +f"###WARNING###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
+                    + "\nFollowing sample(s) has/have been dropped for analysis:" \
+                    + "\n\t"+'\n\t'.join(samples_na_list) + "\n"
+                log_string += warning_na_meta_str
+    
+                # drop samples
+                if len(samples_na_list) > 0:
+                    drop_samples = set(samples_na_list) & set(data_df.index)
+                    data_df = data_df.drop(drop_samples, axis=0)
+                    metadata_df = metadata_df.drop(drop_samples, axis=0)
 
-            # drop samples
-            if len(samples_na_list) > 0:
-                drop_samples = set(samples_na_list) & set(data_df.index)
-                data_df = data_df.drop(drop_samples, axis=0)
-                metadata_df = metadata_df.drop(drop_samples, axis=0)
-
-    # Exit module if there are multiple levels in batch_cols of meta file
-    for b in parameters_dict["batch_cols_meta"]:
-        if len(np.unique(metadata_df[b])) == 1:
-            warning_batch_level_str = \
-                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###ERROR###: Batch Level {b} does only have 1 level:{np.unique(metadata_df[b])[0]} value:"\
-                + "\t\tMultiple levels are required to perform batch correction"  + "\n"
-            log_string += warning_batch_level_str
-            helper.logger(log_file, log_string)
-            sys.exit(1)
+        # Exit module if there are multiple levels in batch_cols of meta file
+        for b in parameters_dict["batch_cols_meta"]:
+            if len(np.unique(metadata_df[b])) == 1:
+                warning_batch_level_str = \
+                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    +f"###ERROR###: Batch Level {b} does only have 1 level:{np.unique(metadata_df[b])[0]} value:"\
+                    + "\t\tMultiple levels are required to perform batch correction"  + "\n"
+                log_string += warning_batch_level_str
+                helper.logger(log_file, log_string)
+                sys.exit(1)
     
     
     # -------------------------------------------------------------------------#
