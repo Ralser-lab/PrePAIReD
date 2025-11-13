@@ -808,13 +808,15 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
 
-    data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                           get_metadata=False, 
-                                                                                                                                                                           get_id_mapping=True, 
-                                                                                                                                                                           get_mask=False, 
-                                                                                                                                                                           return_data_fp_only=True)
+    (
+        data_df_fp, parameters_dict, 
+        id_mapping_df, seed, module_output, 
+        metadata_df, masked_df, mask_description_df, 
+        out_dir_fp, outname, log_file, counter) = helper.init_module(module = "Summarisation", 
+                                                                     get_metadata=False, get_id_mapping=True, 
+                                                                     get_mask=False, return_data_fp_only=True)
     
-    data_df = load_data(data_df_fp)
+    data_df = helper.load_data(data_df_fp)
     
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         masked_df = helper.load_mask(data_df_fp)
