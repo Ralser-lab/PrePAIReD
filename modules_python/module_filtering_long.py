@@ -826,7 +826,7 @@ if __name__ == "__main__":
             log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + "\n"
             helper.logger(log_file,log)
             input_df = read_input(filename=data_df_fp, file_columns_list=file_columns_list)
-        except KeyError:
+        except (ValueError,KeyError):
             #read complete input
             input_df = read_input(filename=data_df_fp, file_columns_list=None)
             #identify missing columns which lead to KeyError; DIA-NN specific!
@@ -846,15 +846,15 @@ if __name__ == "__main__":
                 #switch off filters linked to missing columns
                 for missing_col in missing_cols_set:
                     parameters_dict[columns_filter_dict[missing_col]] = False
-                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter " + columns_filter_dict[missing_col] + " set to False, because the column(s) "+", ".join(list(missing_cols_set) + " is/are missing in the DIA-NN output file.")
+                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter " + columns_filter_dict[missing_col] + " set to False, because the column(s) "+", ".join(list(missing_cols_set)) + " is/are missing in the DIA-NN output file."
             if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
                 parameters_dict["filter_by_MScorr_evidence_combined"]=False
             else:
                 #if missing columns are linked to ids, values, or sample columns raise a KeyError and exit
-                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(missing_cols_set) + " not in the selected input file.\n"
+                log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(list(missing_cols_set)) + " not in the selected input file.\n"
                 helper.logger(log_file,log)
                 #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
-                sys.exit("###ERROR###" + ", ".join(missing_cols_set) + " not in the selected input file.")
+                sys.exit("###ERROR### " + ", ".join(list(missing_cols_set)) + " not in the selected input file.")
         log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
         helper.logger(log_file,log)
         
