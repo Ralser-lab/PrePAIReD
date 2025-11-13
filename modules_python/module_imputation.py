@@ -545,7 +545,7 @@ def medianval_imputation(data_df,axis=1,add_noise=True):
 
 
 def bpca_fill(dX, max_iter = 200):
-     """
+    """
     Bayesian PCA imputation on peptide or protein profiles as described by Oba et al. https://doi.org/10.1093/bioinformatics/btg287
     downloaded from https://github.com/unifey/bPCAfill, 18.03.2024 17:08, credit to unifey
 
@@ -902,7 +902,7 @@ if __name__ == "__main__":
             # create a mask to store missingness type (thus imputation approach neccessary), 0 equals no imputation applied
             if parameters_dict["eval_missingness_on_protein_presence"]:
                 #check that parameters_dict["missingness_type_protein_absence"] is in missingness types
-                if parameters_dict["missingness_type_protein_absence"] not in missingness_types_all and parameters_dict["hierarchical_imputation"]:
+                if parameters_dict["missingness_type_protein_absence"] not in impu_table_df["missingness_type"].drop_duplicates().tolist() and parameters_dict["hierarchical_imputation"]:
                     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
                 else:
                     # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
@@ -1129,7 +1129,10 @@ if __name__ == "__main__":
                     else:
                         continue
                     #remember which and how many values were missing prior imputation
-                    missing_val_locs_m = getIndexes(imputation_mask_df == missingness_type,True)
+                    if missingness_type == "simple":
+                        missing_val_locs_m =  getIndexes(pd.isna(data_df),True)
+                    else:
+                        missing_val_locs_m = getIndexes(imputation_mask_df == missingness_type,True)
                     total_num_values,num_missing_values,missing_val_locs = obtain_missingness_for_log(data_df=data_df) # all missingness_types
                     missing_val_locs_m = list(set(missing_val_locs_m) & set(missing_val_locs))
                     num_missing_values_m = len(missing_val_locs_m)
@@ -1195,7 +1198,7 @@ if __name__ == "__main__":
             
 
         except Exception as e:
-            helper.logger(log_file, "###ERROR### Module ran into an error: " + e)
+            helper.logger(log_file, "###ERROR### Module ran into an error: " + str(e))
             sys.exit("Imputation exited with an error.")
     else:
         log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped.\n"
