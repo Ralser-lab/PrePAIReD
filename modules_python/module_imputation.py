@@ -809,7 +809,7 @@ if __name__ == "__main__":
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
- 
+    mask_df = mask_df.astype(float)
         
     #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
     '''
@@ -855,7 +855,6 @@ if __name__ == "__main__":
     log += "\n------------\n"  
     helper.logger(log_file, module_output=log)
     #log = ""
-    
     
     # replace zeros with NA
     if parameters_dict["replace_zeros_with_nan"]:
@@ -1000,6 +999,7 @@ if __name__ == "__main__":
             #remember which and how many values were missing initially
             total_num_values0,num_missing_values0,missing_val_locs0 = obtain_missingness_for_log(data_df=data_df)
             # hierarchical imputation
+            
             if parameters_dict["hierarchical_imputation"]:
                 #IMPORTANT: hierarchy values should be unique, e.g. there cannot be plate "1" in several batches, or name them as "batch1_plate1" and "batch2_plate2" etc. by concatenating hierarchies
                 sample_hierarchies = impu_table_df.columns.tolist()

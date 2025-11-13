@@ -599,9 +599,6 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             hmean_df["norm. Correlation"]=corrs_hmean/np.max(corrs_hmean) #division by zero if all precursors correlate zero
             hmean_df["norm. Imputation"]=measured_precs/measured_precs.max() #division by zero if all values are imputed for precursor => should be excluded in remove_peptides_with_excessing_nans
             hmean_df["hmean"]=[weighted_harmonic_mean(hmean_df.loc[x],weights) for x in hmean_df.index]
-            
-            ##### Check what this line is doing
-            #temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].sum()
         
             #set indices for filter_mask
             if pooling=="mean":
@@ -808,13 +805,11 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
 
-    (
-        data_df_fp, parameters_dict, 
-        id_mapping_df, seed, module_output, 
-        metadata_df, masked_df, mask_description_df, 
-        out_dir_fp, outname, log_file, counter) = helper.init_module(module = "Summarisation", 
-                                                                     get_metadata=False, get_id_mapping=True, 
-                                                                     get_mask=False, return_data_fp_only=True)
+    data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
+                                                                                                                                                                           get_metadata=False, 
+                                                                                                                                                                           get_id_mapping=True, 
+                                                                                                                                                                           get_mask=False, 
+                                                                                                                                                                           return_data_fp_only=True)
     
     data_df = helper.load_data(data_df_fp)
     
@@ -855,7 +850,7 @@ if __name__ == "__main__":
             data_processed_df = data_df
             module_output += "###WARNING###: Summarization method not found. Skipped module."
     except Exception as e:
-        helper.logger(log_file, "###ERROR###: Module ran into an error.")
+        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
         helper.logger(log_file, "###ERROR###: "+str(e))
         sys.exit(1)
         
