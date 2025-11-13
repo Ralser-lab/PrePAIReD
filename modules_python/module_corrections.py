@@ -28,12 +28,12 @@ import numpy as np
 import time
 
 #statistics and modelling
-import pycombat #CoAxLab
-from harmony import harmonize
+#import pycombat #CoAxLab
+#from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
 from sklearn import linear_model
-from skmisc import loess
+#from skmisc import loess
 from sklearn import metrics
 
 import module_helper as helper
@@ -749,12 +749,13 @@ if __name__ == "__main__":
     common_idx_list = list(set(data_df.columns) & set(metadata_df.index))  # copy here
     drop_samples_data_lst = list(set(data_df.columns) - set(metadata_df.index))
     drop_samples_meta_lst = list(set(metadata_df.index) - set(data_df.columns))
-
+    
+    n_samples_data_int = len(data_df.columns)
+    n_samples_meta_int = metadata_df.shape[0]
     data_df = data_df.loc[:, common_idx_list]
     metadata_df = metadata_df.loc[common_idx_list]
-    n_samples_data_int = len(data_df.columns)
-    n_samples_meta_int = metadata_df.shape[0] # copy end
-    
+    # copy end
+         
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
     if n_samples_data_int != data_df.shape[1]:
@@ -819,7 +820,6 @@ if __name__ == "__main__":
     # Perform Batch Correction                                                 #
     # -------------------------------------------------------------------------#
     data_df = data_df.T
-
 
     if parameters_dict["correct_method"] == "harmony":
 
@@ -1054,7 +1054,7 @@ if __name__ == "__main__":
     helper.close_module(data_processed_df=data_processed_df, 
                         masked_df=masked_df, 
                         mask_description_df=mask_description_df, 
-                        log_file=log_file, module_output=module_output,
+                        log_file=log_file, module_output=log_string,
                         out_dir_fp=out_dir_fp, outname=outname, mask=True)
 
 # %%
