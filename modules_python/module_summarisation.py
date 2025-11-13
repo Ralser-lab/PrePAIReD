@@ -285,7 +285,7 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
     lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
     #lib=lib.replace("/","/")
-    if os.path.exists(lib_trim):
+    if os.path.exists(lib_trim) and platform.system() == "Linux":
         cpp_library = cdll.LoadLibrary(lib_trim)
         #libname = "maxlfq.dylib"
         #script_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda: 0)))
@@ -808,18 +808,15 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
 
+    data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
+                                                                                                                                                                           get_metadata=False, 
+                                                                                                                                                                           get_id_mapping=True, 
+                                                                                                                                                                           get_mask=False, 
+                                                                                                                                                                           return_data_fp_only=False)
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                               get_metadata=False, 
-                                                                                                                                                                               get_id_mapping=True, 
-                                                                                                                                                                               get_mask=True, 
-                                                                                                                                                                               return_data_fp_only=False)
-    else:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
-                                                                                                                                                                               get_metadata=False, 
-                                                                                                                                                                               get_id_mapping=True, 
-                                                                                                                                                                               get_mask=False, 
-                                                                                                                                                                               return_data_fp_only=False)
+        masked_df = helper.load_mask(data_df_fp)
+        mask_description_df = helper.load_mask_description(data_df_fp)
+    
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
     #if metadata_df is None:
