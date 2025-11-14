@@ -28,12 +28,12 @@ import numpy as np
 import time
 
 #statistics and modelling
-#import pycombat #CoAxLab
-#from harmony import harmonize
+import pycombat #CoAxLab
+from harmony import harmonize
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
 from sklearn import linear_model
-#from skmisc import loess
+from skmisc import loess
 from sklearn import metrics
 
 import module_helper as helper
@@ -739,10 +739,6 @@ if __name__ == "__main__":
                 log_string += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
                 helper.logger(log_file, log_string)
                 sys.exit(1)
-
-    if "Sample.Name" in metadata_df.columns:
-        metadata_df = metadata_df.set_index("Sample.Name")
-
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
