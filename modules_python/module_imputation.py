@@ -846,7 +846,7 @@ if __name__ == "__main__":
     '''
     
     # Define filepath of imputation procedures table #May be passed from wrapper? #TODO
-    imputation_table_fp = out_dir_fp + "imputation_procedures.tsv"
+    imputation_table_fp = os.path.join(out_dir_fp, "imputation_procedures.tsv")
     
     # Log parameters
     log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Imputation\n"
@@ -954,7 +954,7 @@ if __name__ == "__main__":
                     log = "\t\t\t\t" + decision_boundary_df.to_string(index=False).replace("\n","\n\t\t\t\t")+"\n"
                     helper.logger(log_file, log)
                     if parameters_dict["save_intermediate_output_for_QA"]:
-                        decision_boundary_df.to_csv(out_dir_fp + "intensity_dependent_missingness_estimation_decision_boundaries.tsv",sep="\t")
+                        decision_boundary_df.to_csv(os.path.join(out_dir_fp, "intensity_dependent_missingness_estimation_decision_boundaries.tsv"),sep="\t")
                 else:
                     # Logging
                     log =  time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tIntensity dependent missingness estimated over the entire dataset.\n"
@@ -969,7 +969,7 @@ if __name__ == "__main__":
                     log =  time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tDecision boundary for intensity dependent missingness estimation: " + str(np.round(decision_boundary,2)) + "\n"
                     helper.logger(log_file, module_output=log)
                 if parameters_dict["save_intermediate_output_for_QA"]:
-                    regression_df.to_csv(out_dir_fp + "intensity_dependent_missingness_estimation_plot_data.tsv",sep="\t")
+                    regression_df.to_csv(os.path.join(out_dir_fp, "intensity_dependent_missingness_estimation_plot_data.tsv"),sep="\t")
             else:
                 mar_mnar_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
             # combine masks if any distinguishment of missingness
@@ -980,7 +980,7 @@ if __name__ == "__main__":
                 #reset index to precursor id
                 imputation_mask_df.index = imputation_mask_df.index.get_level_values(parameters_dict["precursor_col"])
                 if parameters_dict["save_intermediate_output_for_QA"]:
-                    imputation_mask_df.to_csv(out_dir_fp + "imputation_mask.tsv",sep="\t")
+                    imputation_mask_df.to_csv(os.path.join(out_dir_fp, "imputation_mask.tsv"),sep="\t")
                     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created and saved.\n"
                 else:
                     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputation mask storing missingness types created.\n"
