@@ -716,7 +716,7 @@ if __name__ == "__main__":
     
     (
         data_df, parameters_dict, id_mapping_df, 
-        seed, module_output, metadata_df, masked_df, 
+        seed, log_string, metadata_df, masked_df, 
         mask_description_df, out_dir_fp, outname, log_file, counter
         ) = helper.init_module(
             module = "Correction", 
@@ -728,6 +728,17 @@ if __name__ == "__main__":
     log_string = time.strftime(
         "%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
 
+    # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_file,log_string)
+    if metadata_df is None:
+        sys.exit("###ERROR###: Metadata loading failed.")
+    if "###WARNING###" in log_string:
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+
+    log_string = ""
+    metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
+   
     # -------------------------------------------------------------------------#
     # Check Compatibility of feature and meta data                             #
     # -------------------------------------------------------------------------#

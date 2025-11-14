@@ -562,6 +562,8 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     indices=data_df.index
     #filter_mask = pd.DataFrame(columns=["Precursor summarized for Protein"],index=indices, values=0)    
         
+    filter_mask_z = filter_mask.copy().replace(np.nan,0)
+    
     # Check if columns are in id_mapping_df
     if protein_col not in id_mapping_df:
         module_output += "###ERROR### Group column for summariaztion not found"
@@ -592,7 +594,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             sums=temp_df.sum(axis=1)
             corrs=temp_df.T.corr()
             corrs_hmean=[weighted_harmonic_mean(corrs.loc[x]) for x in corrs.index]
-            temp_mask=filter_mask.loc[temp_df.index].map(lambda x: int(str(float(x)).split(".")[-1]))
+            temp_mask=filter_mask_z.loc[temp_df.index].map(lambda x: int(str(float(x)).split(".")[-1]))
             measured_precs=(temp_mask!=0).sum(axis=1)
             
             hmean_df["norm. Abundance"]=sums/sums.max() #division by zero if peptide not abundant over all fractions => should be excluded in remove_peptides_with_excessing_nans
@@ -800,9 +802,6 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     
     return(data_df, module_output)
 
-
-
-
 if __name__ == "__main__":
 
     data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
@@ -819,11 +818,12 @@ if __name__ == "__main__":
     
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
+    module_output = ""
     #if metadata_df is None:
     #    sys.exit("###ERROR###: Metadata loading failed.")
-    if "###WARNING###" in module_output:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+    #if "###WARNING###" in module_output:
+    #    helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+    #    sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     # unlog data
     data_df=helper.unlog_transform(data_df)
@@ -849,11 +849,14 @@ if __name__ == "__main__":
         else:
             data_processed_df = data_df
             module_output += "###WARNING###: Summarization method not found. Skipped module."
-    except Exception as e:
-        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
-        helper.logger(log_file, "###ERROR###: "+str(e))
-        sys.exit(1)
-        
+    #except Exception as e:
+    #    helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
+    #    helper.logger(log_file, "###ERROR###: "+str(e))
+    #    sys.exit(1)
+    except ValueError:
+        raise(ValueError)
+
+    
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
     

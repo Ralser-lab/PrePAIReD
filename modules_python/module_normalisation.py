@@ -591,7 +591,7 @@ if __name__ == "__main__":
     if "###WARNING###" in module_output:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-
+    module_output = ""
     
     try:
         # Process data
@@ -632,7 +632,7 @@ if __name__ == "__main__":
                                                                       on_mad=parameters_dict["on_mad"],
                                                                       min_nf=parameters_dict["min_nf"],
                                                                       max_nf=parameters_dict["max_nf"],
-                                                                      axis=parameters_dict["axis_median_scaling"])
+                                                                      axis=0)
                module_output += log
 
             else:
@@ -645,7 +645,7 @@ if __name__ == "__main__":
                                                                       on_mad=parameters_dict["on_mad"],
                                                                       min_nf=parameters_dict["min_nf"],
                                                                       max_nf=parameters_dict["max_nf"],
-                                                                      axis=parameters_dict["axis_median_scaling"])
+                                                                      axis=0)
     
         elif parameters_dict["normalization_method"] == "median":
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
