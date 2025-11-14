@@ -860,7 +860,8 @@ if __name__ == "__main__":
                 
                 #log filtering progress
                 num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
-                log += f"{timestamp()}\t{num_excluded_samples} samples filtered due to too many missing values.\n"
+                percent_excluded_samples = np.round(num_excluded_samples/len(data_processed_df.columns)*100,2)
+                log += f"{timestamp()}\t{num_excluded_samples} ({percent_excluded_samples}%) samples filtered due to too many missing values.\n"
                 helper.logger(log_file,log)
             
             elif method == "filter_by_normalization_factors":
@@ -901,7 +902,8 @@ if __name__ == "__main__":
 
                 #log filtering progress
                 num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
-                log += f"{timestamp()}\t{num_excluded_precursors} precursors excluded by exceeding missingness threshold.\n"
+                percent_excluded_precursors = np.round(num_excluded_precursors/len(data_processed_df.index)*100,2)
+                log += f"{timestamp()}\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
                 helper.logger(log_file,log)
 
             elif method == "filter_proteins_by_peptide_count":
