@@ -1085,7 +1085,7 @@ if __name__ == "__main__":
                                 if parameters_dict["remember_missingness_type_in_mask"]:
                                     mask_value = mask_description_df.loc[missingness_type,"value"]
                                 else:
-                                    mask_value = eval("0."+str(int(mask_description_df.loc["Imputed","value"]))) #adjust here if changed Imputed changed in mask_description_df to 0.99 #TODO
+                                    mask_value = mask_description_df.loc["Imputed","value"]
                                 impu_val_locs = list(set(missing_val_locs_m) - set(still_missing_val_locs))
                                 mask_df = update_mask(mask_df=mask_df, locs=impu_val_locs, mask_value=mask_value)
                                 #Logging number of imputed values
@@ -1170,7 +1170,7 @@ if __name__ == "__main__":
                     if parameters_dict["remember_missingness_type_in_mask"]:
                         mask_value = mask_description_df.loc[missingness_type,"value"]
                     else:
-                        mask_value = eval("0."+str(mask_description_df.loc["Imputed","value"])) #adjust here if changed Imputed changed in mask_description_df to 0.99 #TODO
+                        mask_value = mask_description_df.loc["Imputed","value"]
                     impu_val_locs = list(set(missing_val_locs_m) - set(still_missing_val_locs))
                     mask_df = update_mask(mask_df=mask_df, locs=impu_val_locs, mask_value=mask_value)
                     #Logging number of imputed values
