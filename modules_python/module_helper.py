@@ -504,7 +504,7 @@ def create_filtering_matrix(file,metadata_df,min_peptides,min_precursors,values,
     #write mask description into logfile
     log += "\nFiltering matrix to keep track over excluded precursors and proteins created.\nReasons for exclusion of precursors as specified in filter mask\n" + mask_description_df.to_string(index=False) +"\n-----------------------------------------------\n\n"
     mask_description_df.set_index("filter",inplace=True)
-    mask_description_df.loc["Imputed","value"]=99
+    mask_description_df.loc["Imputed","value"] = 0.99
     return([mask_df,mask_description_df,log])
 
 
