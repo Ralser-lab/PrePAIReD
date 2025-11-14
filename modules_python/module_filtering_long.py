@@ -798,7 +798,7 @@ if __name__ == "__main__":
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
-    metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
+    #metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
 
     # Log parameters
     log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
