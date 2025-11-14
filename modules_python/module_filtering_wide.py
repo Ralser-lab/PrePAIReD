@@ -13,7 +13,7 @@ functions:
     - replace_labelled_precursors: Finds and replaces specific labeling substrings (e.g., "(SILAC-K-L)") in precursor IDs with another label (e.g., "K"). 
     - condition_on_detection_proportion: Calculates % missing proportion by conditioning on missingness on either sample or precursor dimension.
     - calculate_optimum_threshold: Automatically determines the most appropriate detection threshold value (for precursor or sample by % missing proportion) based on sampling statistics.
-    - update_mask_df: Updates mask_df with a unique identifier after a specific wide filtering step.
+    - update_mask: Updates mask_df with a unique identifier after a specific wide filtering step.
 
 #???
 exclusion of samples by outlier normalisation factors currently included in module_normalisation, but without tracking in sample_filters_df
