@@ -1091,10 +1091,10 @@ if __name__ == "__main__":
     #save sample_filters_df and fillna with False
     if not sample_filters_df.empty:
         sample_filters_df.fillna(False,inplace=True)
-        sample_filters_df.to_csv(out_dir_fp + "filtered_samples.tsv", sep="\t")
+        sample_filters_df.to_csv(os.path.join(out_dir_fp, "filtered_samples.tsv"), sep="\t")
         module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {out_dir_fp}filtered_samples.tsv\n"
     #save id_mapping_df
-    id_mapping_df.to_csv(out_dir_fp + "id_mapping.tsv", sep="\t") # is this the correct location #???
+    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t") # is this the correct location #???
     module_output += f"{timestamp()}\tInformation about filtered precursors saved to {out_dir_fp}filtered_samples.tsv\n"
     
     #close module
