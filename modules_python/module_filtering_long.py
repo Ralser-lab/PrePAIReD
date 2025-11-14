@@ -798,6 +798,8 @@ if __name__ == "__main__":
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
+    metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
+
     # Log parameters
     log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
     log += "\nParameters\n------------\n"
@@ -808,8 +810,6 @@ if __name__ == "__main__":
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
     input_id_col = ids_list[0]
-    
-   
     
     #DIA-NN
     if parameters_dict["input_origin"]=="diann":

@@ -484,7 +484,8 @@ def create_filtering_matrix(file,metadata_df,min_peptides,min_precursors,values,
     """
     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tCreating filtering matrix\n"
     #get sorted File.Names
-    samples=[x.replace("\\","/").split("/")[-1] for x in file[diann_sample_column].unique()]
+    #samples=[x.replace("\\","/").split("/")[-1] for x in file[diann_sample_column].unique()]
+    samples=[x for x in file[diann_sample_column].unique()]
     if len(set(samples)) > len(set(metadata_df.index)):
         log += "\t\t\t###WARNING###: Not all samples in DIA-NN output annotated in metadata\n"
     elif len(set(samples)) < len(set(metadata_df.index)):
