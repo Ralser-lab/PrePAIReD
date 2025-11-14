@@ -785,10 +785,10 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
         metadata_df=metadata_df.dropna(subset=[filename_col])
     else:
         log += "\t\t\t###WARNING### Column " + filename_col +" not found in metadata columns."
-    if "FileName_trimmed" not in metadata_df.columns and filename_col in metadata_df.columns:
-        metadata_df["FileName_trimmed"] = list(map(lambda x: x.replace("/", "\\").split("\\")[-1], metadata_df[filename_col].tolist()))
-    if "FileName_trimmed" in metadata_df.columns:
-        metadata_df.set_index("FileName_trimmed", inplace=True)
+    #if "FileName_trimmed" not in metadata_df.columns and filename_col in metadata_df.columns:
+    #    metadata_df["FileName_trimmed"] = list(map(lambda x: x.replace("/", "\\").split("\\")[-1], metadata_df[filename_col].tolist()))
+    #if "FileName_trimmed" in metadata_df.columns:
+    #    metadata_df.set_index("FileName_trimmed", inplace=True)
     # drop duplicated indices
     if sum(metadata_df.index.duplicated())>0:
         log += "\t\t\t###WARNING### " + str(sum(metadata_df.index.duplicated()))+" indices duplicated in metadata. Duplicated indices are being dropped.\n"
