@@ -10,14 +10,14 @@ source("~/Documents/Science/Projects/RalserLabPreprocessing/Preprocessing/module
 #' data with precursor/peptide values that should be summarized to protein 
 #' abundances. Columns correspond to variables and rows to observations.
 #' @param parampath Path to a JSON parameter file. Has to complete a element 
-#' /code{method_summarize} indicating the imputation method to use. Supported values:
+#' /code{summarization_method} indicating the imputation method to use. Supported values:
 #' `"medianpolish"`, `"plm"`.
 #' @param idmappath Path to mapping dataframe
 #' @param outpath Directory where "data_{counter}.tsv" will be written.
 #' @param log_file File path where logs will be written.
 #' @param counter Step of the preprocessing pipeline currently run.source("~/Documents/Science/Projects/RalserLabPreprocessing/Preprocessing/modules_R/helper_functions_R.R") ## To-Do: needs to be altered later
 
-summarize <- function(datapath, parampath, outpath, idmappath, og_file, counter){
+summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter){
     
     ## read in data
     quant_df <- as.data.frame(
@@ -55,10 +55,10 @@ summarize <- function(datapath, parampath, outpath, idmappath, og_file, counter)
     
     ## call summarization function
     main_summarize <- switch(
-        tolower(parameter_list[["method_summarize"]]),
-        "summarize_median_polish" = function() summarize_medianPolish(quant_df, parameter_list,
+        tolower(parameter_list[["summarization_method"]]),
+        "medianpolish" = function() summarize_medianPolish(quant_df, parameter_list,
                                                            mapping_df),
-        "summarize_plm"          = function() summarize_PLM(quant_df, parameter_list,
+        "plm"          = function() summarize_PLM(quant_df, parameter_list,
                                                   mapping_df)
     )
     protein_df <- run_with_logging(main_summarize, log_file)

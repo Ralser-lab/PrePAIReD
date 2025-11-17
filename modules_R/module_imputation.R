@@ -12,7 +12,7 @@ source("~/Documents/Science/Projects/RalserLabPreprocessing/Preprocessing/module
 #' data with missing values. Columns correspond to variables and rows to
 #' observations.
 #' @param parampath Path to a JSON parameter file. Has to complete a element 
-#' /code{method_impute} indicating the imputation method to use. Supported values:
+#' /code{imputation_method} indicating the imputation method to use. Supported values:
 #' `"missforest"`, `"bpca"`, `"ppca"`, `"ppm"`, `"mnar"`.
 #' @param log_file Path to a file where logs  will be written.
 #' @param counter Step of the preprocessing pupeline currently run
@@ -32,7 +32,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
 
     ## call imputation function
     main_impute <- switch(
-        tolower(parameter_list[["method_impute"]]),
+        tolower(parameter_list[["imputation_method"]]),
         "missforest" = function() impute_missForest(quant_df, parameter_list),
         "bpca" = function() impute_pca(quant_df, parameter_list),
         "ppca" = function() impute_pca(quant_df, parameter_list),
@@ -59,6 +59,8 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
 #' \itemize{
 #'   \item \code{maxiter}: Maximum number of iterations before stopping.
 #'   \item \code{ntree}: Number of trees to grow in each forest.
+#'   \item \code{export_output_missForest}: Logical, whether to save the full output object.
+#'   \item \code{outpath}: Output directory for saving results.
 #' }
 #'
 #' @return A data frame with imputed values.
@@ -112,8 +114,12 @@ impute_missForest <- function(quant_df, parameter_list){
 #' Columns correspond to variables and rows to observations.
 #' @param parameter_list A list of arguments to pass to \code{pcaMethods::pca}
 #' including:
+#' @param parameter_list A list of arguments to pass to \code{pcaMethods::pca}, such as:
 #' \itemize{
-#'   \item \code{}:
+#'   \item \code{imputation_method}: PCA method to use (e.g. \code{"bpca"}, \code{"ppca"}).
+#'   \item \code{nPCs_imputeR}: Number of principal components for imputation.
+#'   \item \code{export_output_pca}: Logical indicating whether to save the PCA model object.
+#'   \item \code{outpath}: Output directory for saving results.
 #' }
 #'
 #' @return A data frame with imputed values.
@@ -136,23 +142,23 @@ impute_pca <- function(quant_df, parameter_list){
     }
     
     ## perform Bayesian PCA
-    cat("\n\nStarting ", parameter_list[["method_impute"]], " imputation. ",
+    cat("\n\nStarting ", parameter_list[["imputation_method"]], " imputation. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
     imputed_list <- pcaMethods::pca(
         object = t(quant_df),
-        method = parameter_list[["method_impute"]],
+        method = parameter_list[["imputation_method"]],
         nPcs = nPCs
         )
     
-    cat("\nFinished ", parameter_list[["method_impute"]], " imputation. ",
+    cat("\nFinished ", parameter_list[["imputation_method"]], " imputation. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
     
     
     if(parameter_list[["export_output_pca"]]){
         saveRDS(imputed_list,
                 paste0(parameter_list[["outpath"]], "output_",
-                       parameter_list[["method_impute"]],"_list.RData"))
+                       parameter_list[["imputation_method"]],"_list.RData"))
     }
     
     ## get the estimated complete observations
@@ -305,4 +311,4 @@ impute_MNAR <- function(quant_df, parameter_list){
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
     
     return(imputed_df)
-}#!/usr/bin/env Rscript
+}
