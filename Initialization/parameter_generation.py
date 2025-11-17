@@ -11,6 +11,7 @@ import argparse
 import os
 import re
 import sys
+import numpy as np
 
 #%%
 ###### TODO ######
@@ -20,6 +21,10 @@ import sys
 ### Add parser -> DONE
 
 ### Add value if no imputation should be done like "no_imputation" -> Add to table
+
+
+### Add parser input for parameter table
+
 #%%
 
 # Parser to access from terminal
@@ -27,6 +32,7 @@ import sys
 parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
 parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
 parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
+parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
 args = parser.parse_args()
 
 # Get input
@@ -45,11 +51,18 @@ if not os.path.isdir(outpath):
 
 outfile = os.path.join(outpath,"Parameters_test.txt")
 config_file_path = os.path.join(outpath,"Config.txt")
+
+try:
+    counter = int(args.counter)
+except:
+    raise TypeError("###ERROR###: Counter need to be an integer")
+
 #"""
 """
 setup_str = "FILTERING_LONG,FILTERING_WIDE,NORMALIZATION,IMPUTATION,CORRECTION,NORMALIZATION,SUMMARIZATION"
 outfile = "Parameters_test.txt"
 config_file_path = "Config.txt"
+counter = 1
 """
 # Account for different seperators
 setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace("/",",").replace("\\",",")
@@ -59,11 +72,11 @@ setup_str = setup_str.replace("NORMALIZATION","NORMALISATION").replace("SUMMARIZ
 # Get step order
 setup_order = setup_str.split(",")
 # Remove empty lines
-setup_order = [item for item in setup_order if item]
+setup_order = ["{:02.0f}_".format(int(counter)+ind)+item for ind,item in enumerate(setup_order) if item]
 
 #%%
 # Add general parameters -> Will be added to .json directly later
-setup_order.insert(0,"GENERAL")
+setup_order.insert(0,"00_GENERAL")
 
 # Read in parameter overview
 data = pd.read_csv("Preprocessing Working Tasks - Parameter Overview.tsv",sep="\t")
@@ -73,9 +86,9 @@ data_flag = data[data["IsFlag"]==1]
 data_parameters = data[data["IsFlag"]==0]
 
 # Check if all setup steps are known
-check = [el for el in setup_order if el not in data_flag["Step"].values]
+check = [el[3:] for el in setup_order if el[3:] not in set(data_flag["Step"].values)]
 if check:
-    raise ValueError("###ERROR###: Preprocessing step not found.")
+    raise ValueError("###ERROR###: Preprocessing step "+str(check)+" not found.")
     sys.exit(1)
 
 #%%
@@ -91,13 +104,13 @@ dict_flags = {step:{
     for step in data_flag["Step"]}
 
 # Setup imputation setup to separate one vs. type-specific method
-dict_flags["IMPUTATION_setup"] = {"simple_imputation":{"Options":[1,0],
-                                                            "Default":1,
-                                                            "Comment":"use one (1) or missingness type specific method (0)"},
-                                        "imputation_method":{"Options":dict_flags["IMPUTATION"]["imputation_method"]["Options"],
-                                                             "Default":dict_flags["IMPUTATION"]["imputation_method"]["Default"],
-                                                             "Comment": "imputation_setup == 0 only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"])}
-                                        }
+dict_flags["IMPUTATION_setup"] = {"simple_imputation":{"Options":["1","0"],
+                                                       "Default":"1",
+                                                       "Comment":"use one (1) or missingness type specific method (0)"},
+                                  "imputation_method":{"Options":dict_flags["IMPUTATION"]["imputation_method"]["Options"],
+                                                       "Default":dict_flags["IMPUTATION"]["imputation_method"]["Default"],
+                                                       "Comment": "imputation_setup == 0 only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"])}
+                                  }
 
 #%%
 
@@ -123,6 +136,7 @@ for index in indices:
             new_line["Flag_variable"] = value
             data_parameters = pd.concat([data_parameters,new_line],axis=0)
 data_parameters.reset_index(drop=True,inplace=True)
+
 #%%
 # Drop expanded rows
 data_parameters.drop(index=[index for index in data_parameters.index 
@@ -166,15 +180,26 @@ for flag in dict_parameters:
 #%%
 # Save to file with Imputation replaced by Imputation_setup
 with open(outfile,"w") as file:
-    for setup in setup_order:
+    for setup_c in setup_order:
+        setup = setup_c[3:]
         if setup == "IMPUTATION":
             setup = "IMPUTATION_setup"
-        file.write("%%%%%%%%%%"+setup+"%%%%%%%%%%\n\n")
+            file.write("%%%%%%%%%%"+re.search("[0-9]+",setup_c).group(0)+"_"+setup+"%%%%%%%%%%\n\n")
+        else:
+            file.write("%%%%%%%%%%"+setup_c+"%%%%%%%%%%\n\n")
         for flag in dict_flags[setup]:
             if type(dict_flags[setup][flag]["Comment"]) is str:
                 file.write("# "+dict_flags[setup][flag]["Comment"]+"\n")
-            file.write("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")+"\n")
-            file.write(flag+" = "+str(dict_flags[setup][flag]["Default"])+"\n")
+            #file.write("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")+"\n")          
+            if dict_flags[setup][flag]["Options"] == [np.nan]:
+                pass
+            elif dict_flags[setup][flag]["Options"][0].startswith("(") or dict_flags[setup][flag]["Options"][0].startswith("["):
+                file.write("## Options: range"+str(dict_flags[setup][flag]["Options"][0]).replace("\'","")+"\n") 
+            elif len(dict_flags[setup][flag]["Options"]) == 1:
+                file.write("## Options: "+str(dict_flags[setup][flag]["Options"][0]).replace("\'","")+"\n") 
+            else:
+                file.write("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")+"\n") 
+            file.write(flag+" = "+str(dict_flags[setup][flag]["Default"])+"\n\n")
         file.write("\n")
 
 #%%
@@ -200,8 +225,8 @@ with open(outfile,"r") as file:
 
 # Replace the IMPUTATION_setup block with IMPUTATION Block and flags (one vs. type-specific method)
 for ind,block in enumerate(blocks):
-    if block[0]=="%%%%%%%%%%IMPUTATION_setup%%%%%%%%%%":
-        block_new = ["%%%%%%%%%%IMPUTATION%%%%%%%%%%"]
+    if "IMPUTATION_setup%%%%%%%%%%" in block[0]:
+        block_new = ["%%%%%%%%%%"+re.search("[0-9]+",block[0]).group(0)+"_IMPUTATION%%%%%%%%%%"]
         block_new.append("")
         for line in block:
             # check imputation type
@@ -241,11 +266,11 @@ for ind,block in enumerate(blocks):
                             if type(dict_flags[setup][flag]["Comment"]) is str: 
                                 block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))
                             block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
-                            block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"]))
+                            block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])+"\n")
                     # R
                     elif flag in ["imputation_method"]:
                         block_new.append("## Options: "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]).replace("\'",""))
-                        block_new.append("imputation_method = "+imputation_method)
+                        block_new.append("imputation_method = "+imputation_method+"\n")
                 else:
                     raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]+dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]).replace("\'",""))
                     sys.exit(1)             
@@ -258,8 +283,15 @@ for ind,block in enumerate(blocks):
                     #else:
                     if type(dict_flags[setup][flag]["Comment"]) is str: 
                         block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))    
-                    block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")) 
-                    block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])) 
+                    if dict_flags[setup][flag]["Options"] == [np.nan]:
+                        pass
+                    elif dict_flags[setup][flag]["Options"][0].startswith("(") or dict_flags[setup][flag]["Options"][0].startswith("["):
+                        block_new.append("## Options: range"+str(dict_flags[setup][flag]["Options"][0]).replace("\'","")) 
+                    elif len(dict_flags[setup][flag]["Options"]) == 1:
+                        block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"][0]).replace("\'","")) 
+                    else:
+                        block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'","")) 
+                    block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])+"\n") 
         block_new.append("")
         blocks[ind] = block_new
       
@@ -308,7 +340,7 @@ for ind,block in enumerate(blocks):
     for ind_line,line in enumerate(block):
         # Extract step
         if ind_line == 0:
-            setup = re.match("%%%%%%%%%%(.+?)%%%%%%%%%%",block[0]).group(1)   
+            setup = re.match("%%%%%%%%%%(.+?)%%%%%%%%%%",block[0]).group(1)[3:]   
             steps.append(setup)
         # Add comment so that flags are not touched anymore
         if line.startswith("## Options"):
@@ -341,7 +373,14 @@ for ind,block in enumerate(blocks):
                                 if parameter not in parameters_included:
                                     if type(param_item["Comment"]) is str: 
                                         block_new.append("# "+str(param_item["Comment"]))
-                                    block_new.append("## Options: "+str(param_item["Options"]).replace("\'","")) 
+                                    if param_item["Options"] == [np.nan]:
+                                        pass
+                                    elif param_item["Options"][0].startswith("(") or param_item["Options"][0].startswith("["):
+                                        block_new.append("## Options: range"+str(param_item["Options"][0]).replace("\'","")) 
+                                    elif len(param_item["Options"]) == 1:
+                                        block_new.append("## Options: "+str(param_item["Options"][0]).replace("\'","")) 
+                                    else:
+                                        block_new.append("## Options: "+str(param_item["Options"]).replace("\'","")) 
                                     block_new.append(str(parameter)+" = "+str(param_item["Default"]))
                                     parameters_included.append(parameter)
                             else:
