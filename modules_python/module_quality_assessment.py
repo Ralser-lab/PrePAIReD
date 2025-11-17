@@ -78,7 +78,8 @@ def get_colors_selection(column_values_origin, column_values_processed=None, cma
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         values_dict = {}
     else:
-        values = set(column_values_origin)
+        indexes = np.unique(column_values_origin, return_index=True)[1]
+        values = [column_values_origin[index] for index in sorted(indexes)]
         values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
         column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
         bounds = np.linspace(0,1,len(values)+1)
@@ -441,6 +442,8 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     #column_color = "MS.Batch"
     #column_color = "Sample.Type"
     
+    ### Error handling needed if metadata column is not float!!!
+    
     if not use_metadata_coloring:
         if not continuous:
             continuous = True
@@ -458,6 +461,11 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         data_processed[data_processed==0] = np.nan
         if not use_metadata_coloring:
             column_values_origin, column_values_processed = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
+            
+            
+    ### Check for meta data coloring!!!
+    
+    
     else:
         column_values_origin = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
 
