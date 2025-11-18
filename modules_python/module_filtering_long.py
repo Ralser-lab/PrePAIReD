@@ -835,7 +835,8 @@ if __name__ == "__main__":
                                                      values_col=parameters_dict["input_values_column"],
                                                      input_filename_col=parameters_dict["input_filename_column"])
     
-        
+        if "Proteotypic" not in file_columns_list:
+            file_columns_list = list(set(file_columns_list) | {"Proteotypic"})
         
         try:
             #Loading input file
