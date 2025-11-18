@@ -804,8 +804,8 @@ if __name__ == "__main__":
         workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
         data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
         meta_df_fp = askopenfilename(title="Please select your metadata file")
-        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_FILTERING_LONG_parameters.json")
-        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_FILTERING_LONG")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_IMPUTATION_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_IMPUTATION")
         log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
         idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
         outname = "data_"+"{:02d}".format(int(counter))+".tsv"
