@@ -10,6 +10,8 @@ import os
 import pandas as pd
 import re
 import time
+import sys
+from tkinter.filedialog import askopenfilename, askdirectory
 
 def read_parameters_file(txt_file, path_to_project_directory, module_order):
     """Read parameter file, extract the modules and create a sub folder for every module. Extract parameters per module in a file and convert each parameter in a json file. Then, single folders for every parameter are generated to store json files individually and one summary folder with all json files
@@ -307,3 +309,33 @@ def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str,
                   "INDIVIDUAL MODULE INFORMATION"
                   "\n-----------------------------------------------\n")
     logfile.close()
+
+
+#%%
+if __name__ == "__main__":
+   
+    
+   #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)")
+        mass_spec_data_filename = askopenfilename(title="Please select your DIA-NN output report")
+        module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
+        parameters_txt_file = os.path.join(path_to_project_directory, "Parameters_test.txt")
+    else:
+        #if script called from terminal
+        path_to_project_directory = sys.argv[1]
+        parameters_txt_file = sys.argv[0]
+        module_order_filename = sys.argv[2]
+        mass_spec_data_filename = sys.argv[3]
+    username = os.getlogin()
+    preprocessed_filename = "data"
+    
+    
+    #create subdirectories, read parameters and split parameters by module
+    read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, module_order=module_order_filename)
+    #error check #TODO
+    #create logfile
+    create_logfile(project_folder=path_to_project_directory, run_id=0, mass_spec_data_filename=mass_spec_data_filename, preprocessed_filename=preprocessed_filename, username=username)
+    
+    
