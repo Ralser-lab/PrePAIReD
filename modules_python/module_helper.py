@@ -1063,8 +1063,8 @@ def get_parser():
         "-i", "--idmapping_file", required=False, 
         help="Filepath to ID mapping file") 
     parser.add_argument(
-        "-c", "--counter", required=True, 
-        help="Module counter")
+        "-c", "--counter", required=False, 
+        help="Module counter", default=0)
     return parser
 
 def get_parser_arguments(parser):
