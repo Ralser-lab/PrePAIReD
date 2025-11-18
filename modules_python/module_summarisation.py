@@ -36,10 +36,9 @@ import os
 import platform
 from numpy.ctypeslib import ndpointer
 from tqdm import tqdm
-
+from tkinter.filedialog import askopenfilename, askdirectory
 
 #own scripts
-#from Python.Snippets import global_variables as global_variables #kept as placeholder for logging until main is being constructed
 import module_helper as helper 
 
 
@@ -804,11 +803,46 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 
 if __name__ == "__main__":
 
+     #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        skip_parser = True
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_SUMMARISATION_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_SUMMARISATION")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    else:
+        #if script called from terminal
+        skip_parser = False
+        data_df_fp = None
+        param_fp = None
+        out_dir_fp = None
+        meta_df_fp = None
+        log_file = None
+        idmap_fp = None
+        counter = None
+        outname = None
+    
     data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Summarisation", 
                                                                                                                                                                            get_metadata=False, 
                                                                                                                                                                            get_id_mapping=True, 
                                                                                                                                                                            get_mask=False, 
-                                                                                                                                                                           return_data_fp_only=True)
+                                                                                                                                                                           return_data_fp_only=True,
+                                                                                                                                                                           skip_parser=skip_parser,
+                                                                                                                                                                           data_df_fp=data_df_fp,
+                                                                                                                                                                           param_fp=param_fp,
+                                                                                                                                                                           out_dir_fp=out_dir_fp,
+                                                                                                                                                                           meta_df_fp=meta_df_fp,
+                                                                                                                                                                           log_file=log_file,
+                                                                                                                                                                           idmap_fp=idmap_fp,
+                                                                                                                                                                           counter=counter,
+                                                                                                                                                                           outname=outname)
     
     data_df = helper.load_data(data_df_fp)
     
