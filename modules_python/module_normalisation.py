@@ -11,7 +11,7 @@ import os
 from scipy.optimize import least_squares, minimize
 import time
 import sys
-
+from tkinter.filedialog import askopenfilename, askdirectory
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
 
@@ -574,11 +574,63 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 
 
 if __name__ == "__main__":
- 
+
+     #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        skip_parser = True
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_NORMALISATION_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_NORMALISATION")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    else:
+        #if script called from terminal
+        skip_parser = False
+        data_df_fp = None
+        param_fp = None
+        out_dir_fp = None
+        meta_df_fp = None
+        log_file = None
+        idmap_fp = None
+        counter = None
+        outname = None
+    
     try:
-        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", get_metadata=True, get_id_mapping=True, get_mask=True, return_data_fp_only=False)
+        data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", 
+                                                                                                                                                                               get_metadata=True, 
+                                                                                                                                                                               get_id_mapping=True, 
+                                                                                                                                                                               get_mask=True, 
+                                                                                                                                                                               return_data_fp_only=False,
+                                                                                                                                                                               skip_parser=skip_parser,
+                                                                                                                                                                               data_df_fp=data_df_fp,
+                                                                                                                                                                               param_fp=param_fp,
+                                                                                                                                                                               out_dir_fp=out_dir_fp,
+                                                                                                                                                                               meta_df_fp=meta_df_fp,
+                                                                                                                                                                               log_file=log_file,
+                                                                                                                                                                               idmap_fp=idmap_fp,
+                                                                                                                                                                               counter=counter,
+                                                                                                                                                                               outname=outname)
     except:
-        data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", get_metadata=True, get_id_mapping=True, get_mask=True, return_data_fp_only=True)
+        data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", 
+                                                                                                                                                                                  get_metadata=True, 
+                                                                                                                                                                                  get_id_mapping=True, 
+                                                                                                                                                                                  get_mask=True, 
+                                                                                                                                                                                  return_data_fp_only=True,
+                                                                                                                                                                                  skip_parser=skip_parser,
+                                                                                                                                                                                  data_df_fp=data_df_fp,
+                                                                                                                                                                                  param_fp=param_fp,
+                                                                                                                                                                                  out_dir_fp=out_dir_fp,
+                                                                                                                                                                                  meta_df_fp=meta_df_fp,
+                                                                                                                                                                                  log_file=log_file,
+                                                                                                                                                                                  idmap_fp=idmap_fp,
+                                                                                                                                                                                  counter=counter,
+                                                                                                                                                                                  outname=outname)
     
     # Load data
     if parameters_dict["normalization_method"] in ["delayed"]:
