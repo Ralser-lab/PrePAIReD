@@ -27,7 +27,7 @@ import sys
 import os
 import scipy.stats as stats
 import module_helper as helper
-#from modules_python import module_helper as helper
+from tkinter.filedialog import askopenfilename, askdirectory
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -721,38 +721,47 @@ def update_mask(data_df, axis, method, mask_df, mask_description_df, pre_method_
 ##############################################################################
 
 if __name__ == "__main__":
-    
-    #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
-    '''
-    out_dir_fp = "../05_Filtering_Wide/"
-    parameters_dict_raw = pd.read_csv(out_dir_fp + "parameters.txt",sep="\t",index_col=0,header=None)[1].to_dict()
-    parameters_dict = dict()
-    for x in parameters_dict_raw.items():
-        try: #if type != str
-            parameters_dict[x[0]] = eval(x[1])
-        except (SyntaxError, NameError): #if type==str
-            parameters_dict[x[0]] = x[1]
-        except TypeError:
-            parameters_dict[x[0]] = None
-            
-    data_df_fp = parameters_dict["input_fp"]
-    metadata_df,log = helper.load_metadata(metadata_fp=parameters_dict["metadata_fp"],
-                                              metadata_sheet=parameters_dict["metadata_sheet"], 
-                                              filename_col=parameters_dict["metadata_filename_column"], 
-                                              encoding=parameters_dict["metadata_encoding"])
-    data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
-    mask_df = pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
-    mask_description_df = pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
-    id_mapping_df = pd.read_csv("/".join(data_df_fp.split("/")[:-1]) + "/id_mapping.tsv",sep="\t")
-    log_file = "../log.txt"
-    '''
-    
+
+    #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        skip_parser = True
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_FILTERING_WIDE_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_FILTERING_WIDE")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    else:
+        #if script called from terminal
+        skip_parser = False
+        data_df_fp = None
+        param_fp = None
+        out_dir_fp = None
+        meta_df_fp = None
+        log_file = None
+        idmap_fp = None
+        counter = None
+        outname = None
     #load 
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
                                                                                                                                                                get_metadata=True, 
                                                                                                                                                                get_id_mapping=True, 
                                                                                                                                                                get_mask=True, 
-                                                                                                                                                               return_data_fp_only=False)
+                                                                                                                                                               return_data_fp_only=False,
+                                                                                                                                                               skip_parser=skip_parser,
+                                                                                                                                                               data_df_fp=data_df_fp,
+                                                                                                                                                               param_fp=param_fp,
+                                                                                                                                                               out_dir_fp=out_dir_fp,
+                                                                                                                                                               meta_df_fp=meta_df_fp,
+                                                                                                                                                               log_file=log_file,
+                                                                                                                                                               idmap_fp=idmap_fp,
+                                                                                                                                                               counter=counter,
+                                                                                                                                                               outname=outname))
  
 
     # Check if loading was successful, else pass error to log and exit   
