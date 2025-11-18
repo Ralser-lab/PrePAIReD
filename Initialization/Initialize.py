@@ -56,7 +56,8 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
         pf.close()
 
         # start json conversion and specific folder creation here
-        module_folders = os.listdir(path_to_project_directory)  # list of module names
+        module_folders = [folder for folder in os.listdir(path_to_project_directory) 
+                          if os.path.isdir(os.path.join(path_to_project_directory, folder))]  # list of module names
         module_folders = [folder for folder in module_folders if
                           not folder.startswith(".") and re.match(r"^[0-9]", folder[0])]
         os.makedirs(f"{path_to_project_directory}/Parameter_Files", exist_ok=True)  # create parameters folder
