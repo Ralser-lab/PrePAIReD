@@ -95,6 +95,7 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                     json.dump(dict1, params_folder_file, indent=4, sort_keys=False)  # write to parameters folder
                     txt_to_json.close()
                     out_file.close()
+                    params_folder_file.close()
                 else:  # run the same code for other modules, but read the general module as dict to append it
                     general_file = open(f"{path_to_project_directory}/{module_folders[0]}/Module_Parameters.json", "r")
                     dict1 = json.load(general_file)
@@ -123,6 +124,8 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                     json.dump(dict1, params_folder_file, indent=4, sort_keys=False)  # write to parameters folder
                     txt_to_json.close()
                     out_file.close()
+                    general_file.close()
+                    params_folder_file.close()
 
 # Check parameters
 # read DIANN file header, metadata, parameter overview, parameter user file
