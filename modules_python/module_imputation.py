@@ -33,6 +33,7 @@ import argparse
 import os
 import itertools
 from collections import Counter
+from tkinter.filedialog import askopenfilename, askdirectory
 
 #statistics and modelling
 import igraph
@@ -42,7 +43,6 @@ from scipy.optimize import curve_fit
 from sklearn.preprocessing import SplineTransformer
 
 #own scripts
-#from modules_python import module_helper as helper
 import module_helper as helper
 
 
@@ -794,12 +794,47 @@ def update_mask(mask_df, locs, mask_value):
     
 
 if __name__ == "__main__":
-    
+
+    #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        skip_parser = True
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_FILTERING_LONG_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_FILTERING_LONG")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    else:
+        #if script called from terminal
+        skip_parser = False
+        data_df_fp = None
+        param_fp = None
+        out_dir_fp = None
+        meta_df_fp = None
+        log_file = None
+        idmap_fp = None
+        counter = None
+        outname = None
+        
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Imputation", 
                                                                                                                                                                get_metadata=True, 
                                                                                                                                                                get_id_mapping=True, 
                                                                                                                                                                get_mask=True, 
-                                                                                                                                                               return_data_fp_only=False)
+                                                                                                                                                               return_data_fp_only=False,
+                                                                                                                                                               skip_parser=skip_parser,
+                                                                                                                                                               data_df_fp=data_df_fp,
+                                                                                                                                                               param_fp=param_fp,
+                                                                                                                                                               out_dir_fp=out_dir_fp,
+                                                                                                                                                               meta_df_fp=meta_df_fp,
+                                                                                                                                                               log_file=log_file,
+                                                                                                                                                               idmap_fp=idmap_fp,
+                                                                                                                                                               counter=counter,
+                                                                                                                                                               outname=outname)
 
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
@@ -810,40 +845,6 @@ if __name__ == "__main__":
         sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     mask_df = mask_df.astype(float)
-        
-    #temporary for debugging while load_parameters is not ready, careful with eval if variables are already defined, quick and dirty
-    '''
-    meta_df_fp = "../Metadata.tsv"
-    data_df_fp = "../01_Filtering/data_1.tsv"
-    out_dir_fp = "../03_Imputation/"
-    log_file = "../log.txt"
-    parameters_dict_raw = pd.read_csv("../03_Imputation/parameters.txt",sep="\t",index_col=0,header=None)[1].to_dict()
-    parameters_dict = dict()
-    for x in parameters_dict_raw.items():
-        try: #if type != str
-            parameters_dict[x[0]] = eval(x[1])
-        except (SyntaxError, NameError): #if type==str
-            parameters_dict[x[0]] = x[1].split(" #")[0]
-    
-    # Load data
-    data_df = pd.read_csv(data_df_fp,sep="\t",index_col=0)
-    
-    # Load ID mapping from Precursors to Proteins
-    id_mapping_df = pd.read_csv(out_dir_fp + "../01_Filtering/id_mapping.tsv", sep="\t")
-    
-    # Load mask file
-    mask_df = pd.read_csv(data_df_fp[:-4] + "_mask.tsv",sep="\t",index_col=0)
-    mask_df = mask_df.astype(float)
-    mask_description_df = pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
-    
-    # Load metadata_df
-    metadata_df = pd.read_csv(meta_df_fp,sep="\t")
-    
-    #metadata adaption to fit hierarchical imputation
-    metadata_df["Batch"]=metadata_df["MS.Batch"]
-    metadata_df["Batch_Plate"]=metadata_df["MS.Batch"].astype(str) + "_" + metadata_df["Plate"].astype(str)
-    metadata_df["Batch_Plate_Row"] = metadata_df["MS.Batch"].astype(str) + "_" + metadata_df["Plate"].astype(str) + "_" + metadata_df["Plate.Row"].astype(str)
-    '''
     
     # Define filepath of imputation procedures table #May be passed from wrapper? #TODO
     imputation_table_fp = os.path.join(out_dir_fp, "imputation_procedures.tsv")
