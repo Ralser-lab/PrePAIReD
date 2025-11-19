@@ -572,7 +572,7 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
     norm_arr = arr*normalization_factors.T
     return norm_arr, module_output
 
-
+#%%
 if __name__ == "__main__":
 
      #set parameters
@@ -582,7 +582,7 @@ if __name__ == "__main__":
         run_id = 0
         counter = int(input("Please define the counter value (int): "))
         workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
-        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        data_df_fp = askopenfilename(title="Please select your input data matrix")
         meta_df_fp = askopenfilename(title="Please select your metadata file")
         param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_NORMALISATION_parameters.json")
         out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_NORMALISATION")
@@ -600,6 +600,7 @@ if __name__ == "__main__":
         idmap_fp = None
         counter = None
         outname = None
+    exit_module = not skip_parser
     
     try:
         data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Normalisation", 
@@ -639,10 +640,12 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
     if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in module_output:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        if exit_module:
+            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
     module_output = ""
     
     try:
@@ -660,7 +663,8 @@ if __name__ == "__main__":
                if not os.path.exists(parameters_dict["peptide_list_fp"]):
                    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File path to file containing peptides for normalisation is not existent.\n"
                    helper.logger(log_file, module_output)
-                   sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
+                   if exit_module:
+                       sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
                # read file containing peptide list
                ### ID Mapping ###
                peptide_df = pd.read_csv(parameters_dict["peptide_list_fp"],sep="\t")
@@ -668,7 +672,8 @@ if __name__ == "__main__":
                if parameters_dict["peptide_list_file_peptide_column"] not in peptide_df.columns or parameters_dict["peptide_list_file_precursor_column"] not in peptide_df.columns:
                    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File containing peptides for normalisation ("+ parameters_dict["peptide_list_fp"] +") does not contain column specified by peptide_list_file_peptide_column or peptide_list_file_precursor_column.\n"
                    helper.logger(log_file, module_output)
-                   sys.exit("Error: File with peptides for normalization does not contain the given column(s).")
+                   if exit_module:
+                       sys.exit("Error: File with peptides for normalization does not contain the given column(s).")
                # extract peptide list
                peptide_list = peptide_df[parameters_dict["peptide_list_file_peptide_column"]].tolist()
                module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization from peptides specified in " + parameters_dict["peptide_list_fp"] + ".\n"
@@ -719,7 +724,8 @@ if __name__ == "__main__":
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.")
         helper.logger(log_file, "###ERROR###: "+str(e))
-        sys.exit(1)
+        if exit_module:
+            sys.exit(1)
 
     # Comparison for mask and logger what changed between both files
     """
@@ -731,7 +737,7 @@ if __name__ == "__main__":
     
     # Save data
     if parameters_dict["normalization_method"] not in ["delayed"]:
-        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
+        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True, exit_module=exit_module)
     else:
         np.save(os.path.join(out_dir_fp,out_dir_fp.split("/")[-1]+".npy"),data_processed_arr)
         helper.logger(log_file, module_output=module_output)
@@ -739,7 +745,8 @@ if __name__ == "__main__":
         helper.save_mask(masked_df, out_dir_fp, outname)
         helper.save_mask_description(mask_description_df, out_dir_fp, outname)
         helper.logger(log_file, "Module finished as expected.")
-        sys.exit(0)
+        if module_exit:
+             sys.exit(0)
     
     
     
