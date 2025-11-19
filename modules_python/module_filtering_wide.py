@@ -769,10 +769,12 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        if exit_module:
+            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
     
     #helper functions
     timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
@@ -825,7 +827,8 @@ if __name__ == "__main__":
                     #catch errors
                     if "###ERROR###" in log:
                         helper.logger(log_file,log)
-                        sys.exit(log)
+                        if exit_module:
+                            sys.exit(log)
                     if not "###WARNING###" in log:
                         # update mask_df
                         mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -855,7 +858,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                     
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -896,7 +900,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                 
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -932,7 +937,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                     
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -965,7 +971,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -997,7 +1004,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                     
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
@@ -1027,7 +1035,8 @@ if __name__ == "__main__":
                 #catch errors
                 if "###ERROR###" in log:
                     helper.logger(log_file,log)
-                    sys.exit(log)
+                    if exit_module:
+                        sys.exit(log)
                 
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
