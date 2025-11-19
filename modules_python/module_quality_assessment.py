@@ -79,7 +79,7 @@ def get_colors_selection(column_values_origin, column_values_processed=None, cma
         values_dict = {}
     else:
         indexes = np.unique(column_values_origin, return_index=True)[1]
-        values = [column_values_origin[index] for index in sorted(indexes)]
+        values = [column_values_origin.values[index] for index in sorted(indexes)]
         values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
         column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
         bounds = np.linspace(0,1,len(values)+1)
