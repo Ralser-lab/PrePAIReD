@@ -747,6 +747,8 @@ if __name__ == "__main__":
         idmap_fp = None
         counter = None
         outname = None
+    exit_module = not skip_parser
+    
     #load 
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering wide", 
                                                                                                                                                                get_metadata=True, 
@@ -1107,4 +1109,4 @@ if __name__ == "__main__":
     module_output += f"{timestamp()}\tInformation about filtered precursors saved to {out_dir_fp}filtered_samples.tsv\n"
     
     #close module
-    helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True)
+    helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
