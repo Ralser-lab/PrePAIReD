@@ -27,7 +27,22 @@ variable names + types
 
 #TODO
 include new possible filters by DIA-NN >= 2.
-
+- Decoy == 0
+- Peptidoform.Q.Value
+- Lib.Peptidoform.Q.Value
+- Global.Peptidoform.Q.Value
+- Channel.Q.Value 0.01 - 0.5
+- Quantity.Quality >= 0.5
+- Empirical.Quality
+- PG.MaxLFQ.Quality >) 0.7
+- Normalisation.Factor
+- Normalisation.Noise
+- Genes.MaxLFQ.Quality
+- Gene.MaxLFQ.Unique.Quality
+- PTM.Site.Confidence
+- Lib.PTM.Site.Confidence
+- Translated.Q.Value
+- PG.PEP
 """
 # %%
 
@@ -137,6 +152,48 @@ def select_filtering_columns(filters_dict,ids_list=["Precursor.Id", "Stripped.Se
 # FILTERING
 ##############################################################################
 
+def exclude_runs_not_in_metadata(input_df, metadata_df=None, input_filename_column="File.Name", metadata_filename_col="filename"):
+    """
+    Trims input_df (input_df[diann_sample_column]) to same samples present in metadata_df[filename_col].
+    
+    author: BZ
+    
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        E.g. DIA-NN output report.tsv, long format.
+    metadata_df : pd.DataFrame
+        Metadata mapping File.Name to shorter run names. The default is None. 
+    input_filename_column : str, optional
+        name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
+    metadata_filename_col : str
+        name of the column in metadata_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
+    
+    Returns
+    -------
+    input_df : pd.DataFrame
+        filtered DIA-NN output report.tsv.
+    log : str
+        string containing messages for report log.
+        
+    """
+    log = ""
+    len_input_df_before = len(input_df)
+    #Exclude runs from input_df not present in metadata
+    if metadata_df is not None:
+        intersect_files = input_df[input_filename_column].isin(metadata_df[metadata_filename_col])
+        if intersect_files.sum() == 0:
+            intersect_files = input_df[input_filename_column].isin(metadata_df.index)
+        if intersect_files.sum() == 0:
+            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. Please check whether filename_col is defined correctly.\n\t\t\t\t\t\tReturning not filtered input.\n"
+            #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
+            return([input_df,log])
+        input_df = input_df[intersect_files]
+        if len_input_df_before > len(input_df):
+            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(len(intersect_files)) + " files present in metadata.\n"
+    return([input_df, log])
+
+
 # filter DIA-NN output (except on number of peptides), by default all filters set to False (no filtering)
 def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=None, mask_df=None, mask_description_df=None, keep_track=True, values_col="Precursor.Quantity", filename_col="filename", diann_sample_column="File.Name"):
     """
@@ -179,24 +236,12 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
         string containing messages for report log.
 
     """
+    #CREATE FILTERING MATRIX
     log = ""
-    len_input_df_before = len(input_df)
-    #Exclude runs from input_df not present in metadata
-    if metadata_df is not None:
-        intersect_files = input_df[diann_sample_column].isin(metadata_df[filename_col])
-        if intersect_files.sum() == 0:
-            intersect_files = input_df[diann_sample_column].isin(metadata_df.index)
-        if intersect_files.sum() == 0:
-            log += "\t\t\t\t###WARNING###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly."
-            #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
-            return([None,None,None,log])
-        input_df = input_df[intersect_files]
-        if len_input_df_before > len(input_df):
-            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on files present in metadata.\n"
-        if keep_track:
-            if mask_df is None or mask_description_df is None:
-                mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],min_precursors=filters_dict["min_precursors"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
-                log += log_create
+    if keep_track:
+        if mask_df is None or mask_description_df is None:
+            mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,min_peptides=filters_dict["min_peptides"],min_precursors=filters_dict["min_precursors"],values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
+            log += log_create
     # FILTERING
     filtering_tracker_df = pd.DataFrame(index={key:value for key,value in filters_dict.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
     len_input_df_before = len(input_df)
@@ -789,6 +834,7 @@ if __name__ == "__main__":
         idmap_fp = None
         counter = None
         outname = None
+    exit_module = not skip_parser
     
     #initialize module
     data_df_fp, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering long", 
@@ -886,10 +932,18 @@ if __name__ == "__main__":
                                                   ids_list=ids_list, 
                                                   protein_col=parameters_dict["protein_col"], 
                                                   replace_id_col=parameters_dict["alternative_protein_col"])
+        
         # Create a column "Peptide.Id" with peptide ids in id_mapping_df, which contains precursor ids without charge state
         if parameters_dict["peptide_col"] not in id_mapping_df.columns:
             id_mapping_df[parameters_dict["peptide_col"]] = create_peptide_ids(id_mapping_df[parameters_dict["precursor_col"]])
-                 
+
+        # Sample filtering (trimming to samples specified by metadata_df)
+        input_df, log = exclude_runs_not_in_metadata(input_df=input_df, 
+                                                     metadata_df=metadata_df, 
+                                                     input_filename_column=parameters_dict["input_filename_column"], 
+                                                     metadata_filename_col=parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,log)
+        
         # Precursor filtering (DIA-NN specific)
         input_df, mask_df, mask_description_df, log = filtering(input_df=input_df, 
                                                                   input_id_col=input_id_col, 
@@ -909,7 +963,8 @@ if __name__ == "__main__":
     else:
         helper.logger(log_file,log)
         sys.exit("###ERROR###: Long format Filtering failed.")
-        
+    helper.logger(log_file,log)
+    
     # filter mask_description for applied filters only
     mask_description_df = clean_mask_description_df(mask_description_df,filters_dict=parameters_dict)
 
@@ -932,7 +987,7 @@ if __name__ == "__main__":
 
     # Log Transformation (Base 2)
     wide_df = helper.log_transform(wide_df.replace(0,np.nan), base=2)
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
     helper.logger(log_file,log)
     
     # Save data
@@ -942,7 +997,7 @@ if __name__ == "__main__":
     #mask_description_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask_description.tsv", sep="\t")
     
     module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n\t\t\tmask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n\t\t\tand table for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
-    helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True)
+    helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
   
 
 
