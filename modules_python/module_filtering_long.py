@@ -855,10 +855,12 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        if exit_module:
+            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     #metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
 
@@ -917,7 +919,8 @@ if __name__ == "__main__":
                 log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###ERROR###"+", ".join(list(missing_cols_set)) + " not in the selected input file.\n"
                 helper.logger(log_file,log)
                 #raise KeyError(", ".join(missing_cols_set) + " not in the selected input file.")
-                sys.exit("###ERROR### " + ", ".join(list(missing_cols_set)) + " not in the selected input file.")
+                if exit_module:
+                    sys.exit("###ERROR### " + ", ".join(list(missing_cols_set)) + " not in the selected input file.")
         log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
         helper.logger(log_file,log)
         
@@ -962,7 +965,8 @@ if __name__ == "__main__":
             helper.logger(log_file,log)
     else:
         helper.logger(log_file,log)
-        sys.exit("###ERROR###: Long format Filtering failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Long format Filtering failed.")
     helper.logger(log_file,log)
     
     # filter mask_description for applied filters only
