@@ -729,7 +729,7 @@ if __name__ == "__main__":
         run_id = 0
         counter = int(input("Please define the counter value (int): "))
         workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
-        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        data_df_fp = askopenfilename(title="Please select your (wide format) data matrix")
         meta_df_fp = askopenfilename(title="Please select your metadata file")
         param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_FILTERING_WIDE_parameters.json")
         out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_FILTERING_WIDE")
