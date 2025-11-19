@@ -761,7 +761,7 @@ if __name__ == "__main__":
                                                                                                                                                                log_file=log_file,
                                                                                                                                                                idmap_fp=idmap_fp,
                                                                                                                                                                counter=counter,
-                                                                                                                                                               outname=outname))
+                                                                                                                                                               outname=outname)
  
 
     # Check if loading was successful, else pass error to log and exit   
