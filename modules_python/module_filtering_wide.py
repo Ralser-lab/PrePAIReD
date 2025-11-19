@@ -461,8 +461,8 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
         return data_df, log
     
     #apply filtering
-    filtered_df = data_df.loc[id_mapping_df[id_mapping_df[filter_col]==filter_value][precursor_col]]
-    return([filtered_df, log])
+    keep_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[filter_col]==filter_value][precursor_col]))
+    return([data_df.loc[keep_precursors], log])
 
 
 ##############################################################################
