@@ -1443,7 +1443,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
 	    
 	    
-def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False):
+def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp, outname, mask=False, exit_module=True):
     """
     Saves data to disk and exits the module.
 
@@ -1465,6 +1465,8 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         Name of the output file: data_${counter}.tsv using a two digit counter.
     mask : bool, optional
         Save the mask to disk. The default is False.
+	exit_module : bool
+		call sys.exit, switch to False if run within Python. The default is True.
 
     Returns
     -------
@@ -1480,4 +1482,5 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         save_mask_description(mask_description_df, out_dir_fp, outname)
     # Close function
     logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
-    sys.exit(0)
+	if exit_module:
+    	sys.exit(0)
