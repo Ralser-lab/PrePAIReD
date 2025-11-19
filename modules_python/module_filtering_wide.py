@@ -918,7 +918,7 @@ if __name__ == "__main__":
 
                 #log filtering progress
                 num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
-                percent_excluded_precursors = np.round(num_excluded_precursors/len(data_processed_df.index)*100,2)
+                percent_excluded_precursors = np.round(num_excluded_precursors/len(pre_method_rows)*100,2)
                 log += f"{timestamp()}\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
                 helper.logger(log_file,log)
 
@@ -992,7 +992,7 @@ if __name__ == "__main__":
 
             elif method == "filter_nonproteotypic_precursors":
                 #log filtering method
-                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['proteotypicity_col']} not in {parameters_dict['proteotypicity_value']}.\n"
+                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['proteotypicity_col']} not {parameters_dict['proteotypicity_value']}.\n"
                 helper.logger(log_file,log)
                 #apply exclusion of nonproteotypic precursors
                 data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
@@ -1112,10 +1112,10 @@ if __name__ == "__main__":
     if not sample_filters_df.empty:
         sample_filters_df.fillna(False,inplace=True)
         sample_filters_df.to_csv(os.path.join(out_dir_fp, "filtered_samples.tsv"), sep="\t")
-        module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {out_dir_fp}filtered_samples.tsv\n"
+        module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {os.path.join(out_dir_fp, 'filtered_samples.tsv')}\n"
     #save id_mapping_df
     id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t") # is this the correct location #???
-    module_output += f"{timestamp()}\tInformation about filtered precursors saved to {out_dir_fp}filtered_samples.tsv\n"
+    module_output += f"{timestamp()}\tInformation about filtered precursors saved to {os.path.join(out_dir_fp, 'id_mapping.tsv')}\n"
     
     #close module
     helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
