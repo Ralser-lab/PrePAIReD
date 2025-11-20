@@ -269,7 +269,7 @@ def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, de
     
     #initialize mask distinguishing MAR from MNAR, preserving measured values as zeros
     missingness_mask_df = data_df.isnull()
-    missingness_mask_df.replace({False: 0, True: 1},inplace=True)
+    missingness_mask_df = missingness_mask_df.replace({False: 0, True: 1})
     #classify missingness type for every precursor as MAR if below decision_boundary and MNAR if above decision_boundary
     mars = (data_df.mean(axis=axis) < decision_boundary)
     mars = mars[mars].index
