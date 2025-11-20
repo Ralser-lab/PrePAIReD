@@ -745,7 +745,7 @@ if __name__ == "__main__":
         helper.save_mask(masked_df, out_dir_fp, outname)
         helper.save_mask_description(mask_description_df, out_dir_fp, outname)
         helper.logger(log_file, "Module finished as expected.")
-        if module_exit:
+        if exit_module:
              sys.exit(0)
     
     
