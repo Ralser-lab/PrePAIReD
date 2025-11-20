@@ -210,7 +210,7 @@ def exclude_outlier_normalization_factors(profiles_group,normalization_factors,m
     if on_mad:
         max_nf=normalization_factors_df["NormalizationFactor"].median() + rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
         min_nf=normalization_factors_df["NormalizationFactor"].median() - rel_threshold * helper.mad(normalization_factors_df["NormalizationFactor"])
-    normalization_factors_df["keep"]=normalization_factors_df.applymap(lambda x: min_nf < x < max_nf)
+    normalization_factors_df["keep"]=normalization_factors_df.map(lambda x: min_nf < x < max_nf)
     #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
     module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
