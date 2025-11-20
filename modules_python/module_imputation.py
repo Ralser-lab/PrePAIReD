@@ -792,7 +792,7 @@ def update_mask(mask_df, locs, mask_value):
     return mask_df
 
     
-
+#%%
 if __name__ == "__main__":
 
     #set parameters
@@ -802,7 +802,7 @@ if __name__ == "__main__":
         run_id = 0
         counter = int(input("Please define the counter value (int): "))
         workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
-        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        data_df_fp = askopenfilename(title="Please select your input data matrix")
         meta_df_fp = askopenfilename(title="Please select your metadata file")
         param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_IMPUTATION_parameters.json")
         out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_IMPUTATION")
@@ -820,7 +820,8 @@ if __name__ == "__main__":
         idmap_fp = None
         counter = None
         outname = None
-        
+    exit_module = not skip_parser
+    
     data_df, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Imputation", 
                                                                                                                                                                get_metadata=True, 
                                                                                                                                                                get_id_mapping=True, 
@@ -839,10 +840,12 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        if exit_module:
+            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     mask_df = mask_df.astype(float)
     
@@ -1200,12 +1203,13 @@ if __name__ == "__main__":
 
         except Exception as e:
             helper.logger(log_file, "###ERROR### Module ran into an error: " + str(e))
-            sys.exit("Imputation exited with an error.")
+            if exit_module:
+                sys.exit("Imputation exited with an error.")
     else:
         log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped.\n"
         helper.logger(log_file,log)
     
     module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"  
-    helper.close_module(data_processed_df=data_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True)
+    helper.close_module(data_processed_df=data_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
        
     
