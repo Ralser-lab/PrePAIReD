@@ -176,7 +176,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         
     return df_norm, module_output
 
-def exclude_outlier_normalization_factors(profiles_group,normalization_factors,module_output,group,rel_threshold=1,on_mad=True,min_nf=-1,max_nf=1):
+def exclude_outlier_normalization_factors(profiles_group,normalization_factors,module_output,rel_threshold=1,on_mad=True,min_nf=-1,max_nf=1):
     """
     determine samples with outlier normalization factors by median +- rel_threshold * MAD or by specified normalization factors.    
     Parameters
@@ -215,7 +215,7 @@ def exclude_outlier_normalization_factors(profiles_group,normalization_factors,m
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
     module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
     module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n\n"
-    return [profiles_group.loc[normalization_factors_df.index[normalization_factors_df["keep"]]], module_output]
+    return [profiles_group[normalization_factors_df.index[normalization_factors_df["keep"]]], module_output]
 
 def get_normalization_factors(df, axis:int=0):
     """
