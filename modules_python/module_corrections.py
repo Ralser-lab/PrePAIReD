@@ -713,6 +713,33 @@ def adjust_confounders_batchwise(
 
 
 if __name__ == "__main__":
+
+    #set parameters
+    if sys.argv == [""]:
+        #if script called within python
+        skip_parser = True
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your input data matrix")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_CORRECTION_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_CORRECTION")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    else:
+        #if script called from terminal
+        skip_parser = False
+        data_df_fp = None
+        param_fp = None
+        out_dir_fp = None
+        meta_df_fp = None
+        log_file = None
+        idmap_fp = None
+        counter = None
+        outname = None
+    exit_module = not skip_parser
     
     (
         data_df, parameters_dict, id_mapping_df, 
@@ -723,7 +750,16 @@ if __name__ == "__main__":
             get_metadata=True, 
             get_id_mapping=True, 
             get_mask=True, 
-            return_data_fp_only=False)
+            return_data_fp_only=False,
+            skip_parser=skip_parser,
+            data_df_fp=data_df_fp,
+            param_fp=param_fp,
+            out_dir_fp=out_dir_fp,
+            meta_df_fp=meta_df_fp,
+            log_file=log_file,
+            idmap_fp=idmap_fp,
+            counter=counter,
+            outname=outname)
 
     log_string = time.strftime(
         "%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
@@ -731,10 +767,12 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log_string)
     if metadata_df is None:
-        sys.exit("###ERROR###: Metadata loading failed.")
+        if exit_module:
+            sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log_string:
         helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-        sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        if exit_module:
+            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     log_string = ""
     metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
@@ -749,7 +787,8 @@ if __name__ == "__main__":
             if batch_col not in metadata_df.columns:
                 log_string += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
                 helper.logger(log_file, log_string)
-                sys.exit(1)
+                if exit_module:
+                    sys.exit(1)
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
@@ -820,7 +859,8 @@ if __name__ == "__main__":
                     + "\t\tMultiple levels are required to perform batch correction"  + "\n"
                 log_string += warning_batch_level_str
                 helper.logger(log_file, log_string)
-                sys.exit(1)
+                if exit_module:
+                    sys.exit(1)
     
     
     # -------------------------------------------------------------------------#
@@ -853,7 +893,8 @@ if __name__ == "__main__":
                     +f"{len(parameters_dict['batch_cols_meta'])} levels are provided: {parameters_dict['batch_cols_meta']}"  + "\n"
             log_string += info_batch_str
             helper.logger(log_file,log_string)
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
         # translate combat parameter from dict 
         combat_kwargs_dict = {
@@ -901,7 +942,8 @@ if __name__ == "__main__":
         if isinstance(out, str) and "ERROR" in out:
             log_string_combat = out 
             log_string += log_string_combat
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
         else:
             (data_processed_df, log_string_combat) = out
             log_string += log_string_combat
@@ -913,7 +955,8 @@ if __name__ == "__main__":
             log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"###ERROR###: Number of columns for adjustment and number of datatypes are different.\n"
             helper.logger(log_file, log_string)
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
         
         valid_dtypes_list = ["continuous", "nominal", "ordinal"]
@@ -926,7 +969,8 @@ if __name__ == "__main__":
             log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"###ERROR###: The following datatypes are not valid: {invalid_dtypes_list}.\n"
             helper.logger(log_file, log_string)
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
 
         # Check for missing values in columns for adjustment
@@ -936,7 +980,8 @@ if __name__ == "__main__":
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
             helper.logger(log_file, log_string)
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
 
 
@@ -1008,7 +1053,8 @@ if __name__ == "__main__":
         if "ERROR" in log_string:
             # Exit modul because of error
             helper.logger(log_file,log_string)
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
         
         else:
                 
@@ -1031,7 +1077,8 @@ if __name__ == "__main__":
                 time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                 +f"###ERROR###: No correction vriable defined \n"
             log_string += warning_batch_level_str
-            sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
         fitsamples_idx_list = None
         if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
@@ -1062,6 +1109,6 @@ if __name__ == "__main__":
                         masked_df=masked_df, 
                         mask_description_df=mask_description_df, 
                         log_file=log_file, module_output=log_string,
-                        out_dir_fp=out_dir_fp, outname=outname, mask=True)
+                        out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
 
 # %%
