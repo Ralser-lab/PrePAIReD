@@ -1482,5 +1482,5 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         save_mask_description(mask_description_df, out_dir_fp, outname)
     # Close function
     logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
-	if exit_module:
-    	sys.exit(0)
+    if exit_module:
+        sys.exit(0)
