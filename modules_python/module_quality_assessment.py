@@ -79,7 +79,10 @@ def get_colors_selection(column_values_origin, column_values_processed=None, cma
         values_dict = {}
     else:
         indexes = np.unique(column_values_origin, return_index=True)[1]
-        values = [column_values_origin.values[index] for index in sorted(indexes)]
+        if isinstance(column_values_origin, pd.Series):
+            values = [column_values_origin.values[index] for index in sorted(indexes)]
+        else:
+            values = [column_values_origin[index] for index in sorted(indexes)]
         values_dict = {value:(1+2*ind)/(2*len(values)) for ind,value in enumerate(values)}
         column_values_origin = np.vectorize(values_dict.get)(column_values_origin)
         bounds = np.linspace(0,1,len(values)+1)
@@ -456,33 +459,34 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             cmap = "Spectral"
             
     # Coloring property
-    data_origin[data_origin==0] = np.nan
+    data_origin_pca = data_origin.copy()
     if data_processed is not None:
-        data_processed[data_processed==0] = np.nan
+        data_processed_pca = data_processed.copy()
+    
+    ### Implement check for metadata coloring
+    
+    data_origin_pca[data_origin_pca==0] = np.nan
+    if data_processed is not None:
+        data_processed_pca[data_processed_pca==0] = np.nan
         if not use_metadata_coloring:
-            column_values_origin, column_values_processed = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
-            
-            
-    ### Check for meta data coloring!!!
-    
-    
+            column_values_origin, column_values_processed = get_color_values_by_property(data_origin_pca, coloring_property, data_processed_pca, base)
     else:
-        column_values_origin = get_color_values_by_property(data_origin, coloring_property, data_processed, base)
-
-    data_origin = data_origin.copy().dropna()
-    data_origin_scaled = StandardScaler().fit_transform(data_origin.T)
-    if use_metadata_coloring:
-        column_values_origin = metadata.loc[data_origin.columns,column_color].values
+        column_values_origin = get_color_values_by_property(data_origin, coloring_property, base=base)
     
+    data_origin_pca.dropna(inplace=True)
+    data_origin_scaled = StandardScaler().fit_transform(data_origin_pca.T)
+    if use_metadata_coloring:
+        column_values_origin = metadata.loc[data_origin_pca.columns,column_color].values
+        
     pca_origin = PCA()
     data_origin_transformed = pca_origin.fit_transform(data_origin_scaled)[:,:n_components]
     var_origin = pca_origin.explained_variance_ratio_[:n_components]
     
     if data_processed is not None:
-        data_processed = data_processed.copy().dropna()
-        data_processed_scaled = StandardScaler().fit_transform(data_processed.T)
+        data_processed_pca.dropna(inplace=True)
+        data_processed_scaled = StandardScaler().fit_transform(data_processed_pca.T)
         if use_metadata_coloring:
-            column_values_processed = metadata.loc[data_processed.columns,column_color].values
+            column_values_processed = metadata.loc[data_processed_pca.columns,column_color].values
         
         pca_processed = PCA()
         data_processed_transformed = pca_processed.fit_transform(data_processed_scaled)[:,:n_components]
