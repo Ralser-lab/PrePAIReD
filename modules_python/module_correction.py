@@ -180,8 +180,8 @@ def batchcorrect_combat(
         log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"Transform data.\n")
 
-        samples_all = data_df.columns
-        Y_all = data_df.T.to_numpy()
+        samples_all = data_df.index
+        Y_all = data_df.to_numpy()
         b_all = metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
         X_all = x_df.loc[samples_all]
         C_all = c_df.loc[samples_all]
