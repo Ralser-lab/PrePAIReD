@@ -764,6 +764,7 @@ if __name__ == "__main__":
 
 
     # Check if loading was successful, else pass error to log and exit   
+    helper.logger(log_file,log_string)
     if metadata_df is None:
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
@@ -772,8 +773,9 @@ if __name__ == "__main__":
         if exit_module:
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
+    # reset log string
     log_string = ""
-    #set index in metadata
+    # set index in metadata
     metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
    
     # -------------------------------------------------------------------------#
@@ -1090,7 +1092,7 @@ if __name__ == "__main__":
             info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"Correction model will be fitted on {len(fitsamples_idx_list)} samples.\n"\
-                    +f"Level {fit_level} in meta column {fit_col} will be used to fit COMBAT Model."  + "\n"
+                    +f"Level {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
             log_string += info_fitsamples_str
 
         data_processed_df, log_string, corr_dfs = adjust_confounders_batchwise(
