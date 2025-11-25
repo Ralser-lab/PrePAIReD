@@ -762,11 +762,8 @@ if __name__ == "__main__":
             counter=counter,
             outname=outname)
 
-    log_string = time.strftime(
-        "%Y-%m-%d%t%H:%M:%S: "+ f"Start batch correction {counter}!\n")
 
     # Check if loading was successful, else pass error to log and exit   
-    helper.logger(log_file,log_string)
     if metadata_df is None:
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
@@ -776,6 +773,7 @@ if __name__ == "__main__":
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     log_string = ""
+    #set index in metadata
     metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
    
     # -------------------------------------------------------------------------#
@@ -802,7 +800,8 @@ if __name__ == "__main__":
     data_df = data_df.loc[:, common_idx_list]
     metadata_df = metadata_df.loc[common_idx_list]
     # copy end
-         
+
+    # if discrepancy between data and metadata samples, log them
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
     if n_samples_data_int != data_df.shape[1]:
@@ -867,6 +866,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------#
     # Perform Batch Correction                                                 #
     # -------------------------------------------------------------------------#
+    #transpose data
     data_df = data_df.T
 
     if parameters_dict["correct_method"] == "harmony":
@@ -943,6 +943,7 @@ if __name__ == "__main__":
         if isinstance(out, str) and "ERROR" in out:
             log_string_combat = out 
             log_string += log_string_combat
+            helper.logger(log_file, log_string)
             if exit_module:
                 sys.exit(1)
         else:
@@ -1052,7 +1053,7 @@ if __name__ == "__main__":
             data_df = data_df.loc[metadata_df.index]
         
         if "ERROR" in log_string:
-            # Exit modul because of error
+            # Exit module because of error
             helper.logger(log_file,log_string)
             if exit_module:
                 sys.exit(1)
@@ -1076,8 +1077,9 @@ if __name__ == "__main__":
         if parameters_dict["adjust_cols"] is None:
             warning_batch_level_str = \
                 time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###ERROR###: No correction vriable defined \n"
+                +f"###ERROR###: No correction variable defined \n"
             log_string += warning_batch_level_str
+            helper.logger(log_file, log_string)
             if exit_module:
                 sys.exit(1)
 
