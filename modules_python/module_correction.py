@@ -784,10 +784,13 @@ if __name__ == "__main__":
     
     # check if batchcolumns in metafile
     if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
+        log_string_batchcol = ""
         for batch_col in parameters_dict["batch_cols_meta"]:
             if batch_col not in metadata_df.columns:
-                log_string += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
-                helper.logger(log_file, log_string)
+                log_string_batchcol += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
+        if "###ERROR" in log_string_batchol:
+            log_string += log_string_batchcol
+            helper.logger(log_file, log_string)
                 if exit_module:
                     sys.exit(1)
 
@@ -1088,6 +1091,22 @@ if __name__ == "__main__":
         fitsamples_idx_list = None
         if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
             fit_col, fit_level = parameters_dict["adjust_fitsamples_meta"]
+            #check if fit_col is in metadata_df
+            if fit_col not in metadata_df.columns:
+                log_string += \
+                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                +f"###ERROR###: Column '{fit_col}' as defined by 'adjust_fitsamples_meta' not found in metadata.\n"
+                helper.logger(log_file,log_string)
+                if exit_module:
+                    sys.exit(1)
+            # check if fit_value is in metadata_df[fit_col]
+            if fit_level not in metadata_df[fit_col].tolist():
+                log_string += \
+                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                +f"###ERROR###: Value '{fit_level}' as defined by 'adjust_fitsamples_meta' not found in column '{fit_col}' in metadata.\n"
+                helper.logger(log_file,log_string)
+                if exit_module:
+                    sys.exit(1)
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
