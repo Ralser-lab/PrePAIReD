@@ -43,9 +43,9 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
                 # split = line.split("%%%%%%%%%%") # split module line
                 # first_digit = order.index(split[1]) // 10 # generate a two digits order for the module folders
                 if n_modules < 10:
-                    current_module = f"{path_to_project_directory}/0{n_modules}_{module_name}"  # path for the current module
+                    current_module = f"{path_to_project_directory}/{module_name}"  # path for the current module
                 else:
-                    current_module = f"{path_to_project_directory}/{n_modules}_{module_name}"  # path for the current module
+                    current_module = f"{path_to_project_directory}/{module_name}"  # path for the current module
                 os.makedirs(current_module, exist_ok=True)  # generate module directory
                 current_parameters_file = open(f"{current_module}/Module_Parameters.txt",
                                                "w")  # generate module specific parameter file
