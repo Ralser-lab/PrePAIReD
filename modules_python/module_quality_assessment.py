@@ -17,6 +17,9 @@ from scipy.interpolate import UnivariateSpline
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from scipy.stats import pearsonr, spearmanr, pointbiserialr
 from matplotlib.ticker import FormatStrFormatter
+import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from sklearn.preprocessing import SplineTransformer
 
 ### Generalize colors as an input_variable
 
@@ -149,6 +152,18 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
         else:
             raise ValueError("data_type not defined.")
     return property_peptide
+
+def func1_logitlinear(x,b0,b1):
+        return b0 + b1 * x
+    
+def func2_logitlinear_df(X,b):
+    return np.sum(X*b,axis=1)
+
+def func3_capped_logitlinear(x,b0,b1,detection_proportion_cap=1):
+    return detection_proportion_cap*np.exp(b0+b1*x)/(1+np.exp(b0+b1*x))
+
+def func4_logitlinear_biascorrected(X,b0,b1):
+    return b0 + b1*X['Avg Log2 Abundance'] - (0.5*(b1**2)*X['Var Log2 Abundance'])
 
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
@@ -769,3 +784,112 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     
     plt.savefig(outfile, bbox_inches="tight")
     return
+
+def plot_decision_boundary_estimation_curve(data_origin, metadata, method="response-binned-splines", outfile="Decision_boundary_estimation.png", sample_type_column=None, sample_type=None, size=(5,5), n_knots=3, boundary=0.5, detection_proportion_cap=1, x_lim=None, x_label="Mean(log2(Abundance))", plot_all_fits=True, fs=15):
+    indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column=sample_type_column, sample_type = sample_type)
+        
+    #compute means, variances and missingness
+    means = data_origin[indices_origin].mean(axis=1) 
+    variances = data_origin[indices_origin].var(axis=1,ddof=1) 
+    missingness = data_origin[indices_origin].isnull().mean(axis=1)
+    
+    #dataframe containing results
+    res_df = pd.DataFrame({
+        'Avg Log2 Abundance': means,
+        'Var Log2 Abundance': variances,
+        'Completeness': 1 - missingness,
+        'Logit Completeness': np.log((1 - missingness)/missingness)
+    }).replace([-np.inf,np.inf],np.nan).dropna(subset=["Avg Log2 Abundance","Completeness"])
+    #sort res_df by abundance
+    res_df.sort_values(by="Avg Log2 Abundance",inplace=True)
+    
+    
+    cmap = mpl.colormaps['viridis']
+    
+    N=6
+    
+    fits = {"Completeness pred_logit-linear":cmap(0/(N-1)),
+            "Completeness pred_logit-linear-fit":cmap(1/(N-1)),
+            "Completeness pred_logit-linear-splines":cmap(2/(N-1)),
+            "Completeness pred_logit-linear-capped":cmap(3/(N-1)),
+            "Completeness pred_logit-linear-biascorrected":cmap(4/(N-1)), 
+            "Completeness pred_response-binned-splines":cmap(5/(N-1))}
+    
+    #### Curve fits ####
+    #Linear model with binomial distribution for logit completeness
+    X = sm.add_constant(res_df['Avg Log2 Abundance'])
+    model = sm.GLM(res_df['Completeness'], X, family=sm.families.Binomial())
+    result = model.fit()
+    intercept, coef = result.params
+    res_df["Completeness pred_logit-linear"] = 1/(1+np.exp(-func1_logitlinear(res_df["Avg Log2 Abundance"],intercept,coef)))
+    
+    popt, pcov = curve_fit(func1_logitlinear,res_df.dropna(subset='Logit Completeness')['Avg Log2 Abundance'],res_df.dropna(subset='Logit Completeness')['Logit Completeness'],method="trf",loss="cauchy")
+    res_df["Completeness pred_logit-linear-fit"] = 1/(1+np.exp(-func1_logitlinear(res_df['Avg Log2 Abundance'],*popt)))
+    
+    indices = res_df.dropna(subset=["Avg Log2 Abundance","Completeness","Logit Completeness"]).index
+    X = sm.add_constant(res_df.loc[indices,'Avg Log2 Abundance'])
+    spline = SplineTransformer(n_knots=n_knots, degree=1)
+    splines = spline.fit_transform(res_df.loc[indices,'Avg Log2 Abundance'].to_numpy().reshape(-1,1),res_df.loc[indices,"Logit Completeness"])
+    X = sm.add_constant(splines)
+    model = sm.GLM(res_df.loc[indices,'Completeness'], X, family=sm.families.Binomial())
+    result = model.fit()
+    popt = result.params
+    res_df.loc[indices,"Completeness pred_logit-linear-splines"] = 1/(1+np.exp(-func2_logitlinear_df(X=X,b=popt.to_numpy().reshape(1,-1))))
+    
+    popt, pcov = curve_fit(func3_capped_logitlinear(detection_proportion_cap=detection_proportion_cap),res_df['Avg Log2 Abundance'],res_df['Completeness'],bounds=([-np.inf,0],[np.inf,1]))
+    res_df["Completeness pred_logit-linear-capped"] = func3_capped_logitlinear(res_df['Avg Log2 Abundance'],*popt)
+    
+    indices = res_df.dropna().index
+    popt, pcov = curve_fit(func4_logitlinear_biascorrected,res_df.loc[indices],res_df.loc[indices,'Logit Completeness'])
+    logit_completeness = func4_logitlinear_biascorrected(res_df.dropna(),*popt)
+    popt, pcov = curve_fit(func1_logitlinear,res_df.loc[indices,"Avg Log2 Abundance"],logit_completeness)
+    res_df.loc[indices,"Completeness pred_logit-linear-biascorrected"] = 1/(1+np.exp(-func1_logitlinear(res_df.loc[indices,"Avg Log2 Abundance"],*popt)))
+    
+    # Spline the response variable (Detection Probability) using pd.qcut()
+    res_df['response_bin'] = pd.qcut(res_df['Completeness'], q=100, duplicates='drop')
+    # Compute mean abundance and mean detection probability per bin
+    grouped = res_df.groupby('response_bin',observed=False).agg(abundance_mean=('Avg Log2 Abundance', 'median'),detection_mean=('Completeness', 'median')).dropna()
+    # Prepare data for GLM
+    X = sm.add_constant(grouped['abundance_mean'])
+    y = grouped['detection_mean']
+    # Fit binomial GLM (using proportions directly with freq_weights)
+    model = sm.GLM(y, X, family=sm.families.Binomial())
+    result = model.fit()
+    # Decision boundary calculation
+    intercept, coef = result.params
+    res_df["Completeness pred_response-binned-splines"] = 1/(1+np.exp(-func1_logitlinear(res_df["Avg Log2 Abundance"],intercept,coef)))
+    #### ####
+    
+    decision_boundary = res_df.loc[(res_df["Completeness pred_"+method].dropna()>=boundary).idxmax(),"Avg Log2 Abundance"]
+    
+    fig,ax = plt.subplots()
+    fig.set_size_inches(size)
+    
+    ax.scatter(means,1 - missingness,alpha=1,c="w",zorder=1)
+    ax.scatter(means,1 - missingness,alpha=0.1,zorder=2)
+    
+    if not x_lim:
+        x_lim = (np.min(means)-0.2,np.max(means)+0.2)
+    
+    for fit, color in fits.items():
+        if fit.split("_")[-1] == method:
+            ax.plot(res_df["Avg Log2 Abundance"],res_df[fit],ls="-",alpha=1,lw=2, c=color, label=fit.split("_")[-1],zorder=20)
+        elif plot_all_fits:
+            ax.plot(res_df["Avg Log2 Abundance"],res_df[fit],ls="--",alpha=1,lw=2, c=color, label=fit.split("_")[-1],zorder=3)
+    
+    ax.plot(x_lim,[boundary,boundary],c="k",ls=":",zorder=4)
+    ax.plot([decision_boundary,decision_boundary],[0,1],c="k",ls=":",zorder=5)
+        
+    ax.set_xlim(x_lim)
+    ax.set_ylim(0,1)
+    ax.tick_params(labelsize=fs)
+    
+    ax.set_xlabel(x_label, fontsize=fs)
+    ax.set_ylabel("Completeness", fontsize=fs)
+    ax.set_title("Decision Boundary: {:.2f}".format(decision_boundary), fontsize = fs)
+    
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize = fs)
+    ax.set_axisbelow(True)
+    ax.grid()
+    
+    plt.savefig(outfile,bbox_inches="tight")
