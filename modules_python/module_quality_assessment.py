@@ -153,18 +153,6 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
             raise ValueError("data_type not defined.")
     return property_peptide
 
-def func1_logitlinear(x,b0,b1):
-        return b0 + b1 * x
-    
-def func2_logitlinear_df(X,b):
-    return np.sum(X*b,axis=1)
-
-def func3_capped_logitlinear(x,b0,b1,detection_proportion_cap=1):
-    return detection_proportion_cap*np.exp(b0+b1*x)/(1+np.exp(b0+b1*x))
-
-def func4_logitlinear_biascorrected(X,b0,b1):
-    return b0 + b1*X['Avg Log2 Abundance'] - (0.5*(b1**2)*X['Var Log2 Abundance'])
-
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
     
@@ -786,6 +774,19 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     return
 
 def plot_decision_boundary_estimation_curve(data_origin, metadata, method="response-binned-splines", outfile="Decision_boundary_estimation.png", sample_type_column=None, sample_type=None, size=(5,5), n_knots=3, boundary=0.5, detection_proportion_cap=1, x_lim=None, x_label="Mean(log2(Abundance))", plot_all_fits=True, fs=15):
+    
+    def func1_logitlinear(x,b0,b1):
+            return b0 + b1 * x
+        
+    def func2_logitlinear_df(X,b):
+        return np.sum(X*b,axis=1)
+
+    def func3_capped_logitlinear(x,b0,b1):
+        return detection_proportion_cap*np.exp(b0+b1*x)/(1+np.exp(b0+b1*x))
+
+    def func4_logitlinear_biascorrected(X,b0,b1):
+        return b0 + b1*X['Avg Log2 Abundance'] - (0.5*(b1**2)*X['Var Log2 Abundance'])
+    
     indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column=sample_type_column, sample_type = sample_type)
         
     #compute means, variances and missingness
@@ -802,7 +803,6 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
     }).replace([-np.inf,np.inf],np.nan).dropna(subset=["Avg Log2 Abundance","Completeness"])
     #sort res_df by abundance
     res_df.sort_values(by="Avg Log2 Abundance",inplace=True)
-    
     
     cmap = mpl.colormaps['viridis']
     
@@ -836,7 +836,7 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
     popt = result.params
     res_df.loc[indices,"Completeness pred_logit-linear-splines"] = 1/(1+np.exp(-func2_logitlinear_df(X=X,b=popt.to_numpy().reshape(1,-1))))
     
-    popt, pcov = curve_fit(func3_capped_logitlinear(detection_proportion_cap=detection_proportion_cap),res_df['Avg Log2 Abundance'],res_df['Completeness'],bounds=([-np.inf,0],[np.inf,1]))
+    popt, pcov = curve_fit(func3_capped_logitlinear,res_df['Avg Log2 Abundance'],res_df['Completeness'],bounds=([-np.inf,0],[np.inf,1]))
     res_df["Completeness pred_logit-linear-capped"] = func3_capped_logitlinear(res_df['Avg Log2 Abundance'],*popt)
     
     indices = res_df.dropna().index
