@@ -788,11 +788,11 @@ if __name__ == "__main__":
         for batch_col in parameters_dict["batch_cols_meta"]:
             if batch_col not in metadata_df.columns:
                 log_string_batchcol += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
-        if "###ERROR" in log_string_batchol:
+        if "###ERROR" in log_string_batchcol:
             log_string += log_string_batchcol
             helper.logger(log_file, log_string)
-                if exit_module:
-                    sys.exit(1)
+            if exit_module:
+                sys.exit(1)
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
