@@ -18,14 +18,14 @@
 #(called from                        (run Rscript directly)
 #cross-language pipeline)
 #    │                                   │
-#     ▼                                   ▼
+#    ▼                                   ▼
 #┌─────────────────┐                 ┌─────────────┐
-#│ batchcorrect()  │◄────────────────┤  main()     │
-#│  (Public entry  │   function call │  (CLI)      │
+#│ batch_correct() │◄────────────────┤  main()     │
+#│  (Public entry  │  function call  │  (CLI)      │
 #│   point)        │────────────────►│             │
 #└─────────────────┘   passes args   └─────────────┘
 #     │
-#      ▼
+#     ▼
 #┌───────────────────────────┐
 #│ Core batch correction     │
 #│   logic:                  │
@@ -40,18 +40,9 @@
 suppressPackageStartupMessages({
   library(optparse)
   library(data.table)
-  suppressWarnings({ 
-    # load commonly used methods if present
-    if (requireNamespace("sva", quietly = TRUE)) library(sva)
-    if (requireNamespace("limma", quietly = TRUE)) library(limma)
-  })
-})
-
-suppressPackageStartupMessages({
   library(jsonlite)
-  library(limma)
-  library(optparse)
-  # Optional methods; loaded on demand
+  if (requireNamespace("limma", quietly = TRUE)) library(limma)
+  # keep sva/harmony as optional-only, not attached
   suppressWarnings(suppressMessages(requireNamespace("sva", quietly = TRUE)))
   suppressWarnings(suppressMessages(requireNamespace("harmony", quietly = TRUE)))
 })
@@ -78,6 +69,13 @@ suppressPackageStartupMessages({
     return(log2(pmax(mat, .safe_eps())))
   }
   mat
+}
+
+.read_tsv_with_rownames <- function(path) {
+  df <- data.table::fread(path, sep = "\t", data.table = FALSE, check.names = FALSE)
+  rownames(df) <- df[[1]]
+  df[[1]] <- NULL
+  as.data.frame(df, check.names = FALSE)
 }
 
 .to_linear_if_needed <- function(mat, params, method) {
@@ -304,83 +302,6 @@ batchcorrect_harmony <- function(Data, batchER) {
 }
 
 #===========================================================
-# Public entrypoint (wrapper calls this)
-#===========================================================
-batchcorrect <- function(data_df_fp,
-                         meta_df_fp,
-                         param_fp,
-                         out_dir_fp,
-                         mask_fp,
-                         log_file_fp,
-                         counter) {
-  # ---- Local INIT (no helper_init_module assumed) ----
-  if (!file.exists(data_df_fp) || !file.exists(meta_df_fp)) {
-    stop("Input data or metadata file does not exist.")
-  }
-  data_df <- read.delim(data_df_fp, check.names = FALSE, row.names = 1)
-  meta_df <- read.delim(meta_df_fp, check.names = FALSE, row.names = 1)
-  params  <- read_JSON(param_fp)
-
-  # Sample alignment
-  ali <- .align_by_intersect(data_df, meta_df)
-  data_df <- ali$data_df
-  meta_df <- ali$meta_df
-  log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
-
-  # Params normalization (Python-like keys supported)
-  method     <- toupper(params$correct_method %||% "LIMMA_R")
-  batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
-  if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
-  batch1 <- batch_cols[[1]]
-  batch2 <- if (length(batch_cols) >= 2) batch_cols[[2]] else NULL
-
-  batchER <- list(
-    correct_method = method,
-    batch       = batch1,
-    batch2      = batch2,
-    covariates  = params$covariates %||% params$combat_cols_adjust_meta %||% NULL,
-    Class       = params$Class %||% NULL,
-    par.prior   = params$par.prior %||% TRUE,
-    n_pcs       = params$n_pcs %||% 20,
-    harmony_args = params$harmony_args %||% list(),
-    covariates_preserve = params$combat_cols_preserve_meta %||% NULL,
-    fitsamples  = params$fitsamples_idx_list %||% NULL
-  )
-  # ---- Scale guard: ensure correct space per method ---------------------------
-  method_upper <- toupper(method)
-  # Methods that operate naturally on log-scale
-  requires_log <- method_upper %in% c("LIMMA_R","COMBAT_R","HARMONY_R")
-  if (requires_log) {
-    data_df <- .to_log2_if_needed(as.matrix(data_df), params)
-    data_df <- as.data.frame(data_df, check.names = FALSE)
-  }
-  # ----------------------------------------------------------------------------
-  Data <- list(Matrix = as.matrix(data_df), MetaData = meta_df)
-
-  # ---- RUN ----
-  corrected <- .dispatch_batch(Data, batchER)
-
-  # ---- Local CLOSE (no helper_close_module assumed) ----
-  .ensure_dir(out_dir_fp)
-  suffix  <- sprintf("%s_%02d", format(Sys.time(), "%Y%m%d"), as.integer(counter %||% 1))
-  outname <- sprintf("corrected_%s.tsv", suffix)
-  out_fp  <- file.path(out_dir_fp, outname)
-  write.table(corrected$Matrix, file = out_fp, sep = "\t", quote = FALSE, col.names = NA)
-
-  if (!is.null(log_file_fp)) {
-    cat(paste0("Batch correction complete. Output: ", out_fp, "\n"), file = log_file_fp, append = TRUE)
-    if (nzchar(log_string)) cat(log_string, file = log_file_fp, append = TRUE)
-  } else {
-    message("Batch correction complete. Output written to: ", out_fp)
-    if (nzchar(log_string)) message(log_string)
-  }
-
-  invisible(TRUE)
-}
-
-
-
-#===========================================================
 # Pure entrypoint (no I/O): returns corrected data.frame
 #===========================================================
 batch_correct <- function(data_df, meta_df, params) {
@@ -395,6 +316,20 @@ batch_correct <- function(data_df, meta_df, params) {
   if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
   batch1 <- batch_cols[[1]]
   batch2 <- if (length(batch_cols) >= 2) batch_cols[[2]] else NULL
+  
+  # fitsamples can be provided directly or as a .txt file path
+  fitsamples <- NULL
+  fs_param <- params$fitsamples_idx_list %||% NULL
+  if (is.character(fs_param) && length(fs_param) == 1 &&
+      grepl("\\.txt$", fs_param, ignore.case = TRUE) && file.exists(fs_param)) {
+    fs_lines <- readLines(fs_param, warn = FALSE)
+    fs_lines <- unique(trimws(fs_lines))
+    fitsamples <- fs_lines[nzchar(fs_lines)]
+    message("###DEBUG### fitsamples_idx_list loaded from file: ", fs_param,
+            " (", length(fitsamples), " entries)")
+  } else if (!is.null(fs_param)) {
+    fitsamples <- fs_param
+  }
 
   batchER <- list(
     correct_method = method,
@@ -406,7 +341,7 @@ batch_correct <- function(data_df, meta_df, params) {
     n_pcs       = params$n_pcs %||% 20,
     harmony_args = params$harmony_args %||% list(),
     covariates_preserve = params$combat_cols_preserve_meta %||% NULL,
-    fitsamples  = params$fitsamples_idx_list %||% NULL
+    fitsamples  = fitsamples
   )
   # ---- Scale guard: ensure correct space per method ---------------------------
   method_upper <- toupper(method)
@@ -448,13 +383,8 @@ main <- function() {
   }
 
   # ---- Load matrices with proper rownames ----
-  DM_df <- data.table::fread(input_file, sep = "\t", data.table = FALSE, check.names = FALSE)
-  rownames(DM_df) <- DM_df[[1]]; DM_df[[1]] <- NULL
-  DM_df <- as.data.frame(DM_df, check.names = FALSE)
-  
-  meta_df <- data.table::fread(args$metadata, sep = "\t", data.table = FALSE, check.names = FALSE)
-  rownames(meta_df) <- meta_df[[1]]; meta_df[[1]] <- NULL
-  meta_df <- as.data.frame(meta_df, check.names = FALSE)
+  DM_df   <- .read_tsv_with_rownames(input_file)
+  meta_df <- .read_tsv_with_rownames(args$metadata)
   
   # ---- Helpers for name reconciliation ----
   .normalize_runs <- function(x) {
