@@ -16,7 +16,7 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
-source("Scripts/helper_functions_R.R")
+source("modules_R/helper_functions_R.R")
 
 # For my testing internally
 #source("/home/alvaro/MyStuff/preprocessing/Old_just_in_case/Testing_Nooshin/Code/helper_functions_R.R")
