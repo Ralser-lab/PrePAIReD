@@ -804,7 +804,7 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
 if __name__ == "__main__":
 
      #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
         run_id = 0
