@@ -576,7 +576,7 @@ def normalize_delayed(arr, module_output, method="trf", bounds=(0,np.inf)):
 if __name__ == "__main__":
 
      #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
         run_id = 0
