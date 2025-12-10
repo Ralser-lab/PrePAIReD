@@ -723,7 +723,7 @@ def update_mask(data_df, axis, method, mask_df, mask_description_df, pre_method_
 if __name__ == "__main__":
 
     #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
         run_id = 0
