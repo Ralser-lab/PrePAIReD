@@ -810,7 +810,7 @@ def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="
 if __name__ == "__main__":
     
    #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
         run_id = 0
