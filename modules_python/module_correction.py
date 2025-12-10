@@ -716,7 +716,7 @@ def adjust_confounders_batchwise(
 if __name__ == "__main__":
 
     #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
         run_id = 0
