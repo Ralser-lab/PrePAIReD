@@ -13,17 +13,8 @@ import re
 import sys
 import numpy as np
 
-#%%
-###### TODO ######
-### Setup config -> DONE
-##### Check of parser and config need to deal with run/rerun -> DONE
-### Write function to check if all parameters are present -> Implement in parameter check
-### Add parser -> DONE
-
-### Add value if no imputation should be done like "no_imputation" -> Add to table
-
-
-### Add parser input for parameter table
+# For internal use
+write_to_disc = True
 
 #%%
 
@@ -49,7 +40,7 @@ if not os.path.isdir(outpath):
     raise ValueError("###ERROR###: Output path not existing")  
     sys.exit(1)
 
-outfile = os.path.join(outpath,"Parameters_test.txt")
+outfile = os.path.join(outpath,"Parameters.txt")
 config_file_path = os.path.join(outpath,"Config.txt")
 
 try:
@@ -79,7 +70,7 @@ setup_order = ["{:02.0f}_".format(int(counter)+ind)+item for ind,item in enumera
 setup_order.insert(0,"00_GENERAL")
 
 # Read in parameter overview
-data = pd.read_csv("Preprocessing Working Tasks - Parameter Overview.tsv",sep="\t")
+data = pd.read_csv("Parameter_Overview.tsv",sep="\t")
 # Get flag parameters
 data_flag = data[data["IsFlag"]==1]
 # Get non-flag parameters
@@ -98,7 +89,9 @@ dict_flags = {step:{
                                                 for item in data_flag[(data_flag["Variable"]==data_flag.loc[index,"Variable"]) & (data_flag.loc[index,"Step"]==step)]["AllowedValues"].values 
                                                     for el in str(item).replace(" ","").split(";")],
                                      "Default":data_flag.loc[index,"PrimaryDefault"],
-                                     "Comment":data_flag.loc[index,"Comment in parameters.txt"]
+                                     "Comment":data_flag.loc[index,"Comment in parameters.txt"],
+                                     "Type":data_flag.loc[index,"Type"],
+                                     "Check Operation":data_flag.loc[index,"Operations"]
                                      }
     for index in data_flag[(data_flag["Step"]==step)].index} 
     for step in data_flag["Step"]}
@@ -150,8 +143,10 @@ data_parameters.reset_index(drop=True,inplace=True)
 dict_parameters = {flag:{flag_value:{parameter:{"Options":[el if re.search(";",str(item)) else item
                                             for item in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)]["AllowedValues"].values 
                                                 for el in str(item).replace(" ","").split(";")],
-                                                "Default":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Default"], ########
-                                                "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"]}
+                                                "Default":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"], ########
+                                                "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"],
+                                                "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
+                                                "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]}
                             for parameter in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)]["Variable"].values}
                         for flag_value in set(data_parameters[data_parameters["Flag_variable"]==flag]["Flag_value"].values)}
                    for flag in data_flag["Variable"].values}
@@ -308,7 +303,7 @@ with open(outfile,"w") as file:
 
 #%%
 # Raw input -> User can check flags
-input("Please set the imputation method and flags if necessary. The parameters file is saved in "+outfile+".\n\tPress Enter after the methods are set.")
+input("Please set the imputation method and flags if necessary. If no imputation step is used, ignore this step. The parameters file is saved in "+outfile+".\n\tPress Enter after the methods are set.")
                     
 #%%
 # Read in and extract blocks
@@ -406,7 +401,7 @@ print("The parameters file is saved in "+outfile+".")
 # Check for internal error
 for item in language:
     if len(set(item))>1:
-        raise ValueError("###Internal Error###: Please report and setup Config.txt manually according to documentation.")
+        raise ValueError("###Internal Error###: Please report and setup "+config_file_path+" manually according to documentation.")
         sys.exit(1)
 #%%
 # Create config file
@@ -417,12 +412,22 @@ with open(config_file_path,"w") as file:
     for step, language_step in zip(steps,language):
         if step != "GENERAL":
             if language_step[0] == "Python":
-                file.write(step+"_py")
+                file.write("{:02.0f}_".format(int(c))+step+"_py")
             elif language_step[0] == "R":
-                file.write(step+"_R")
+                file.write("{:02.0f}_".format(int(c))+step+"_R")
             else:
                 raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
                 sys.exit(1)
         c+=1
         if c<len(steps) and step != "GENERAL":
             file.write(", ")
+            
+#%%
+#### Internal use ####
+
+if write_to_disc:
+    import pickle
+    pickle.dump(dict_flags,open(os.path.join(outpath,"dict_flags.pkl"),"wb"))
+    pickle.dump(dict_parameters,open(os.path.join(outpath,"dict_parameters.pkl"),"wb"))
+
+#### ####

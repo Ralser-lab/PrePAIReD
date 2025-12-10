@@ -301,7 +301,7 @@ def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str,
     :param username: str, name of user
     """
     project_folder_name = os.path.basename(os.path.normpath(project_folder))  # get the project folder name
-    logfile = open(f"{project_folder}/logfile_{run_id}.txt", "w")  # create file
+    logfile = open(f"{project_folder}/log.txt", "w")  # create file
     logfile.write(f"\n-----------------------------------------------\n"
                   f"GENERAL INFORMATION"
                   f"\n-----------------------------------------------\n"
@@ -317,23 +317,24 @@ def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str,
 #%%
 if __name__ == "__main__":
    
-    
    #set parameters
-    if sys.argv == [""]:
+    if len(sys.argv) <= 1:
         #if script called within python
         path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)")
         mass_spec_data_filename = askopenfilename(title="Please select your DIA-NN output report")
         module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
-        parameters_txt_file = os.path.join(path_to_project_directory, "Parameters_test.txt")
+        parameters_txt_file = os.path.join(path_to_project_directory, "Parameters.txt")
+        print(sys.argv)
     else:
+        print(sys.argv)
         #if script called from terminal
-        path_to_project_directory = sys.argv[1]
-        parameters_txt_file = sys.argv[0]
-        module_order_filename = sys.argv[2]
-        mass_spec_data_filename = sys.argv[3]
+        #### Replace with parse
+        path_to_project_directory = sys.argv[2]
+        parameters_txt_file = sys.argv[1]
+        module_order_filename = sys.argv[3]
+        mass_spec_data_filename = sys.argv[4]
     username = os.getlogin()
     preprocessed_filename = "data"
-    
     
     #create subdirectories, read parameters and split parameters by module
     read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, module_order=module_order_filename)
