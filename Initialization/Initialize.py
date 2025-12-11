@@ -23,7 +23,7 @@ def read_parameters_file(txt_file, path_to_project_directory, module_order):
         for line in mo:
             full_line = [x.strip() for x in line.split(" ")]  # extract full line
             # print(full_line)
-            order = [module for module in full_line if module.isupper()]  # keep capitalized entries only
+            order = [module for module in full_line if re.search("[0-9]",module.strip()[0])]  # read and order from config file
             ### Check for alternative to allow for underscore
             order = ["".join(c for c in module if re.match(r'^\w+$', c)) for module in order]
             # print(order)
