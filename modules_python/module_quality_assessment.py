@@ -20,6 +20,8 @@ from matplotlib.ticker import FormatStrFormatter
 import statsmodels.api as sm
 from scipy.optimize import curve_fit
 from sklearn.preprocessing import SplineTransformer
+from matplotlib.patches import Ellipse
+from scipy.stats import chi2
 
 ### Generalize colors as an input_variable
 
@@ -311,7 +313,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     return
 
 # For Imputation, Normalization, Correction, Summarization
-def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None):
+def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
     
     if data_processed is not None:
         group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns and index in data_processed.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
@@ -327,11 +329,23 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     if not group_dict:
         group_dict = group_dict_comp
                     
-    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
+    #cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
+    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index]] for group in group_dict.keys()]
+
+    if write_to_disk:
+        pd.DataFrame(columns=data_origin.index,index=group_dict.keys(),data=cvs_lognormal_origin).T.to_csv(outfile[:-4]+"_CVs_origin.tsv",sep="\t")
+
+    cvs_lognormal_origin = [[el for el in item if not np.isnan(el)] for item in cvs_lognormal_origin]
     cvs_lognormal_origin = [item if item or sum(item)>0 else [np.nan]*2 for item in cvs_lognormal_origin]
     
     if data_processed is not None:
-        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
+        #cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
+        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index]] for group in group_dict.keys()]
+        
+        if write_to_disk:
+            pd.DataFrame(columns=data_processed.index,index=group_dict.keys(),data=cvs_lognormal_processed).T.to_csv(outfile[:-4]+"_CVs_processed.tsv",sep="\t")
+        
+        cvs_lognormal_processed = [[el for el in item if not np.isnan(el)] for item in cvs_lognormal_processed]
         cvs_lognormal_processed = [item if item else [np.nan]*2 for item in cvs_lognormal_processed]
     
     if y_lim:
@@ -430,12 +444,48 @@ def set_aspect_equal(ax):
     ax.set_aspect(aspect)
     return
 
+
+
+
+def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='none', linewidth=2, **kwargs):
+
+    # Covariance matrix
+    cov = np.cov(x, y)
+
+    # Eigen decomposition
+    eigvals, eigvecs = np.linalg.eigh(cov)
+
+    # Sort eigenvalues/vectors
+    order = eigvals.argsort()[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+
+    # Chi-square quantile
+    chi2_val = chi2.ppf(confidence, df=2)
+    #print(chi2_val)
+
+    # Ellipse radii
+    width = 2 * np.sqrt(eigvals[0] * chi2_val)
+    height = 2 * np.sqrt(eigvals[1] * chi2_val)
+
+    # Rotation angle in degrees
+    angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
+    
+    # Get axes extends
+    max_x = np.mean(x)+np.sqrt(chi2_val*cov[0,0])
+    min_x = np.mean(x)-np.sqrt(chi2_val*cov[0,0])
+
+    max_y = np.mean(y)+np.sqrt(chi2_val*cov[1,1])
+    min_y = np.mean(y)-np.sqrt(chi2_val*cov[1,1])
+
+    return angle, width, height, min_x, max_x, min_y, max_y
+
 # For Imputation, Normalization, Correction
 ### Coloring
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95,):
 
     ### Examples:
     ### Drift correction
@@ -473,7 +523,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         data_processed_pca[data_processed_pca==0] = np.nan
         if not use_metadata_coloring:
             column_values_origin, column_values_processed = get_color_values_by_property(data_origin_pca, coloring_property, data_processed_pca, base)
-    else:
+    elif not use_metadata_coloring:
         column_values_origin = get_color_values_by_property(data_origin, coloring_property, base=base)
     
     data_origin_pca.dropna(inplace=True)
@@ -494,8 +544,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         pca_processed = PCA()
         data_processed_transformed = pca_processed.fit_transform(data_processed_scaled)[:,:n_components]
         var_processed = pca_processed.explained_variance_ratio_[:n_components]    
-    
-    if data_processed is not None:
+        
         colors_origin, colors_processed, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed=column_values_processed, cmap=cmap, continuous=continuous)
     else:
         colors_origin, norm, values_dict = get_colors_selection(column_values_origin, column_values_processed=None, cmap=cmap, continuous=continuous)
@@ -507,8 +556,29 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     for i in range(n_components-1):
         for j in range(i+1,n_components):
             ax = fig.add_subplot(gs[j,i])  
-            ax.scatter(data_origin_transformed[:,i],data_origin_transformed[:,j],alpha=0.5, c=colors_origin)
-    
+            ax.scatter(data_origin_transformed[:,i],data_origin_transformed[:,j],alpha=0.5, c=colors_origin)  
+        
+            if not continuous and plot_confidence_ellipse:
+                for color in set(colors_origin):
+                    
+                    group_indices = [index for index in range(len(data_origin_transformed)) if colors_origin[index]==color]
+                    subset_i = data_origin_transformed[group_indices,i]
+                    subset_j = data_origin_transformed[group_indices,j]
+                    
+                    angle, width, height, min_x, max_x, min_y, max_y = get_confidence_ellipse(subset_i,subset_j,confidence=confidence)
+                    ax.add_patch(Ellipse(
+                        (np.mean(subset_i), np.mean(subset_j)),
+                        width=width,height=height,angle=angle,
+                        edgecolor=color,facecolor="None",linewidth=2))
+                    
+
+
+                        
+                    ### Get minimal/maxiaml values for i and j
+                    
+                    
+                    
+                          
             ax.tick_params(labelsize = fontsize)
             set_aspect_equal(ax)
             if i != 0:
@@ -528,6 +598,19 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
             if data_processed is not None:
                 ax = fig.add_subplot(gs[i,j])
                 ax.scatter(data_processed_transformed[:,j],data_processed_transformed[:,i],alpha=0.5, c=colors_processed)
+                
+                if not continuous and plot_confidence_ellipse:
+                    for color in set(colors_origin):
+                        
+                        group_indices = [index for index in range(len(data_processed_transformed)) if colors_origin[index]==color]
+                        subset_i = data_processed_transformed[group_indices,i]
+                        subset_j = data_processed_transformed[group_indices,j]
+                        
+                        angle, width, height, min_x, max_x, min_y, max_y = get_confidence_ellipse(subset_j,subset_i,confidence=confidence)
+                        ax.add_patch(Ellipse(
+                            (np.mean(subset_j), np.mean(subset_i)),
+                            width=width,height=height,angle=angle,
+                            edgecolor=color,facecolor="None",linewidth=2))
     
                 ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
                 set_aspect_equal(ax)
