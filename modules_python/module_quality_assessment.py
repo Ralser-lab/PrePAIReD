@@ -744,15 +744,16 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
         ax_origin.set_title("Before "+step, fontsize=fontsize)
         ax_processed.set_title("After "+step, fontsize=fontsize)
     
-    ax_processed.tick_params(labelsize = fontsize)
-    ax_processed.set_xlabel(xlabel,fontsize=fontsize)
-    ax_processed.set_yticklabels([])
-    ax_processed.grid(axis="y")
+        ax_processed.tick_params(labelsize = fontsize)
+        ax_processed.set_xlabel(xlabel,fontsize=fontsize)
+        ax_processed.set_yticklabels([])
+        ax_processed.grid(axis="y")
     
     plt.savefig(outfile, bbox_inches="tight")
     return
 
 ### Lin Reg per selection -> flag if continuous = False
+### Title Before/After
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
 
     ### change to dummy conversion in future????
