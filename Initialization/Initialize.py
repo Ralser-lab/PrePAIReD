@@ -310,7 +310,7 @@ if __name__ == "__main__":
     preprocessed_filename = "data"
     
     #create subdirectories, read parameters and split parameters by module
-    read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, module_order=module_order_filename)
+    read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory)
     #error check #TODO
     #create logfile
     create_logfile(project_folder=path_to_project_directory, run_id=0, mass_spec_data_filename=mass_spec_data_filename, preprocessed_filename=preprocessed_filename, username=username)
