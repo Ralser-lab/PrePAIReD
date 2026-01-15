@@ -491,7 +491,7 @@ main <- function() {
   # Write output
   corrected_df <- as.data.frame(corrected_df)
   output_file <- file.path(args$out, sprintf("data_%02d.tsv", as.integer(args$counter)))
-  fwrite(corrected_df, output_file, row.names = TRUE)
+  fwrite(corrected_df, output_file, row.names = TRUE, sep = "\t")
 }
 
 if (sys.nframe() == 0) main()
