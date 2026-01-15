@@ -883,12 +883,12 @@ if __name__ == "__main__":
         else:
             data_processed_df = data_df
             module_output += "###WARNING###: Summarization method not found. Skipped module."
-    #except Exception as e:
-    #    helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
-    #    helper.logger(log_file, "###ERROR###: "+str(e))
-    #    sys.exit(1)
-    except ValueError:
-        raise(ValueError)
+    except Exception as e:
+        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
+        helper.logger(log_file, "###ERROR###: "+str(e))
+        sys.exit(1)
+    #except ValueError:
+    #    raise(ValueError)
 
     
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
