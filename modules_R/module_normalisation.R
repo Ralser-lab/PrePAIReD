@@ -249,8 +249,8 @@ main <- function() {
   normalized_df <- as.data.frame(normalized_df)
   output_file <- file.path(args$out, sprintf("data_%s.tsv", as.character(args$counter)))
   output_file_mask <- file.path(args$out, sprintf("data_%s_mask.tsv", as.character(args$counter)))
-  fwrite(normalized_df, output_file, row.names = TRUE)
-  fwrite(mask, output_file_mask, row.names = TRUE)
+  fwrite(normalized_df, output_file, row.names = TRUE, sep = "\t")
+  fwrite(mask, output_file_mask, row.names = TRUE, sep = "\t")
 }
 
 if (sys.nframe() == 0) main()
