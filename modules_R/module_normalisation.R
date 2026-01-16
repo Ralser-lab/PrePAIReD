@@ -16,7 +16,7 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
-source("modules_R/helper_functions_R.R")
+source("/workflow/modules_R/helper_functions_R.R")
 
 # For my testing internally
 #source("/home/alvaro/MyStuff/preprocessing/Old_just_in_case/Testing_Nooshin/Code/helper_functions_R.R")
@@ -232,8 +232,9 @@ main <- function() {
   # Load data
   DM_df <- as.data.frame(as.matrix(fread(args$data), rownames = 1))
   
-  # Load mask
+  # Load mask and mask description
   mask <- as.data.frame(as.matrix(fread(sub("\\.tsv$", "_mask.tsv", args$data)), rownames = 1))
+  mask_description <- as.data.frame(as.matrix(fread(sub("\\.tsv$", "_mask_description.tsv", args$data)), rownames = 1))
   
   # Call normalize() with logging
   normalized_df <- run_with_logging(
@@ -245,12 +246,19 @@ main <- function() {
     args$log
   )
   
-  # Write output
+  # Write output - the mask 
   normalized_df <- as.data.frame(normalized_df)
   output_file <- file.path(args$out, sprintf("data_%s.tsv", as.character(args$counter)))
   output_file_mask <- file.path(args$out, sprintf("data_%s_mask.tsv", as.character(args$counter)))
+<<<<<<< Updated upstream
   fwrite(normalized_df, output_file, row.names = TRUE, sep = "\t")
   fwrite(mask, output_file_mask, row.names = TRUE, sep = "\t")
+=======
+  output_file_mask_description <- file.path(args$out, sprintf("data_%s_mask_description.tsv", as.character(args$counter)))
+  fwrite(normalized_df, output_file, row.names = TRUE, sep = "\t")
+  fwrite(mask, output_file_mask, row.names = TRUE, sep = "\t")
+  fwrite(mask_description, output_file_mask_description, row.names = TRUE, sep = "\t")
+>>>>>>> Stashed changes
 }
 
 if (sys.nframe() == 0) main()
