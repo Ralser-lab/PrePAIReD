@@ -262,30 +262,29 @@ def error_control(parameter_overview_df=pd.DataFrame, metadata_df=pd.DataFrame,
     print("Works so far")
 # Initialize Logger
 
-def create_logfile(project_folder=str, run_id=str, mass_spec_data_filename=str, 
-                   preprocessed_filename=str, username=str):
+def create_logfile(project_folder, run_id, mass_spec_data_filename, metadata_filename, preprocessed_filename, username):
     """
-    Function to create the logfile of a preprocessing run. Contains some general information like user, project, date, 
-    time amd files. This file will be called by the function logger to append module specific information
+    Function to create the logfile of a preprocessing run. Contains some general information like user, project, date, time amd files. This file will be called by the function logger to append module specific information
     :param project_folder: str, path to project folder, where the logfile will be created
     :param run_id: str or int, the unique name or number of the preprocessing run
     :param mass_spec_data_filename: str, source data name (DIA-NN or Spectronaut output e.g.), this file will be preprocessed
+    :param metadata_filename: str, name of the metadata file
     :param preprocessed_filename: str, name of the file where the results will be stored
     :param username: str, name of user
     """
-    project_folder_name = os.path.basename(os.path.normpath(project_folder))  # get the project folder name
-    logfile = open(f"{project_folder}/log.txt", "w")  # create file
+    project_folder_name = os.path.basename(os.path.normpath(project_folder)) # get the project folder name
+    logfile = open(f"{project_folder}/logfile_{run_id}.txt", "w") # create file
     logfile.write(f"\n-----------------------------------------------\n"
                   f"GENERAL INFORMATION"
                   f"\n-----------------------------------------------\n"
                   f"Logfile creation for project {project_folder_name}, run {run_id}, generated on {time.strftime('%Y-%m-%d %H:%M:%S')} by {username}\n"
                   f"Data used from mass spectrometry analysis file: {mass_spec_data_filename}\n"
-                  f"Preprocessing results are stored in file: {preprocessed_filename}\n")  # add some general information about the run
+                  f"Metadata for analysis are in file: {metadata_filename}\n"
+                  f"Preprocessing results are stored in file: {preprocessed_filename}\n") # add some general information about the run
     logfile.write("\n-----------------------------------------------\n"
                   "INDIVIDUAL MODULE INFORMATION"
                   "\n-----------------------------------------------\n")
     logfile.close()
-
 
 #%%
 if __name__ == "__main__":
@@ -295,24 +294,27 @@ if __name__ == "__main__":
         #if script called within python
         path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)")
         mass_spec_data_filename = askopenfilename(title="Please select your DIA-NN output report")
+        metadata_filename = skopenfilename(title="Please select your metadata")
         module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
         parameters_txt_file = os.path.join(path_to_project_directory, "Parameters.txt")
         print(sys.argv)
     else:
         print(sys.argv)
         #if script called from terminal
-        #### Replace with parse
-        path_to_project_directory = sys.argv[2]
-        parameters_txt_file = sys.argv[1]
-        module_order_filename = sys.argv[3]
-        mass_spec_data_filename = sys.argv[4]
+        #### Replace with parser #####
+        path_to_project_directory = sys.argv[2] # -w
+        parameters_txt_file = sys.argv[1] # -p
+        module_order_filename = sys.argv[3] # -s
+        mass_spec_data_filename = sys.argv[4] # -d
+        metadata_filename = sys.argv[5] # -m
     username = os.getlogin()
-    preprocessed_filename = "data"
+    preprocessed_filename = "data_XY.tsv"
     
     #create subdirectories, read parameters and split parameters by module
     read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory)
     #error check #TODO
     #create logfile
-    create_logfile(project_folder=path_to_project_directory, run_id=0, mass_spec_data_filename=mass_spec_data_filename, preprocessed_filename=preprocessed_filename, username=username)
+    ##### parse metadata_filename
+    create_logfile(project_folder=path_to_project_directory, run_id=0, mass_spec_data_filename=mass_spec_data_filename, metadata_filename=metadata_filename, preprocessed_filename=preprocessed_filename, username=username)
     
     
