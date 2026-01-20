@@ -11,34 +11,24 @@ import os
 import re
 import sys
 import pickle
+from tkinter.filedialog import askopenfilename, askdirectory
 
-# For internal use
+# For internal use or updates in parameter file change to False
 load_dictionaries = True
 
-if load_dictionaries:
+if not load_dictionaries:
     import pandas as pd
     #import numpy as np
     write_to_disc = True
 else:
     write_to_disc = False
-
-### generate dictionaries only if flag
-# -> provide table
-# -> provide pickled dictionaries
-
-### put everything to functions and write main
+    
+### TODO
+### Add evaluation config later
 
 #%%
 
-"""
-setup_str = "FILTERING_LONG,FILTERING_WIDE,NORMALIZATION,IMPUTATION,CORRECTION,NORMALIZATION,SUMMARIZATION"
-outfile = "Parameters_test.txt"
-config_file_path = "Config.txt"
-counter = 1
-"""
-
 # Parser to access from terminal
-#"""
 def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
@@ -73,6 +63,11 @@ def init_module():
     except:
         raise TypeError("###ERROR###: Counter need to be an integer")
     
+    setup_order = get_setup_order(setup_str, counter)
+    
+    return setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path
+
+def get_setup_order(setup_str, counter):
     # Account for different seperators
     setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace("/",",").replace("\\",",")
     while ",," in setup_str:
@@ -84,8 +79,7 @@ def init_module():
     setup_order = ["{:02.0f}_".format(int(counter)+ind)+item for ind,item in enumerate(setup_order) if item]
     # Add general parameters -> Will be added to .json directly later
     setup_order.insert(0,"00_GENERAL")
-    
-    return setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path
+    return setup_order
 
 #%%
 
@@ -172,6 +166,7 @@ def expand_dictionary_parameters(data_parameters):
                                   if re.search(";",str(data_parameters.loc[index,"Flag_value"]))
                                                        or re.search(";",str(data_parameters.loc[index,"Flag_variable"]))],inplace=True)
     data_parameters.reset_index(drop=True,inplace=True)
+    return data_parameters
     
 def expand_dictionary_flags(data_flag):
     indices = data_flag.index
@@ -434,10 +429,28 @@ def write_config(config_file_path, steps, language):
 
 if __name__ == "__main__":
     
-    ### TODO
-    ### Add tkinter input as alternative
     # Get input arguments
-    setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path = init_module()
+    if len(sys.argv) <= 1:
+        
+        counter = int(input("Please define the counter value of the first step (int): "))
+        
+        input_order = askopenfilename(title="Please select the file containing the setup order")
+        with open(input_order,"r") as file:
+            setup_str = file.read()
+        
+        outpath = askdirectory(title="Please select your output path", initialdir=os.path.abspath(os.getcwd()))
+        outfile = os.path.join(outpath,"Parameters.txt")
+        config_file_path = config_file_path = os.path.join(outpath,"Config.txt")
+        
+        if load_dictionaries:
+            input_dict_path = askdirectory(title="Please select the dictionary path", initialdir=os.path.abspath(os.getcwd()))
+        else:
+            parameter_overview_table_file_path = askopenfilename(title="Please select the parameter overview file")
+        
+        setup_order = get_setup_order(setup_str, counter)
+    
+    else:
+        setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -470,7 +483,5 @@ if __name__ == "__main__":
     
     # Create config file
     write_config(config_file_path, steps, language)
-    print("The parameters file is saved in "+outfile+".")
+    print("The configuration file is saved in "+config_file_path+".")
     
-    ### TODO
-    ### Add evaluation config later
