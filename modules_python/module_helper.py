@@ -1185,7 +1185,7 @@ def get_seed(parameters_dict, counter):
     """
     return parameters_dict["seed"] + counter
 
-def add_parameters_to_log(log_file, module, parameters_dict):
+def add_parameters_to_log(log_file, module, parameters_dict, counter):
     """
     Writes parameters for the module to the log file
 
@@ -1197,6 +1197,8 @@ def add_parameters_to_log(log_file, module, parameters_dict):
         Module name.
     parameters_dict : dict
         Dictionary containg parameters used for the model.
+    counter: int
+        Counter of the module call.
 
     Returns
     -------
@@ -1205,12 +1207,12 @@ def add_parameters_to_log(log_file, module, parameters_dict):
 
     """
     module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started.\n"
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tCounter of the run: "+"{:02d}".format(counter)+".\n"
     module_output += "\nParameters\n------------\n"
     module_output += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
     module_output += "\n------------\n\n"  
-    logger(log_file, module_output=module_output)
-    
-    return ""
+    #logger(log_file, module_output=module_output)
+    return module_output
 
 ### Load Metadata without index
 """"
@@ -1410,16 +1412,22 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
     else:
         data_df = None
     # Load parameters
+    logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading parameter file " + param_fp + ".\n")
     parameters_dict = load_parameters(param_fp)
+    logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tParameters loaded successfully.\n")
+
     # Load ID mapping
     if get_id_mapping:
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading ID mapping file " + idmap_fp + ".\n")
         id_mapping_df = load_id_mapping(idmap_fp)
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tID mapping loaded successfully.\n")
     else:
         id_mapping_df = []
     # Get seed
     seed = get_seed(parameters_dict, counter)
+    logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tSeed was fixed to "+str(seed)+".\n")
     # Write Parameters to log-file
-    module_output = add_parameters_to_log(log_file, module, parameters_dict)
+    module_output = add_parameters_to_log(log_file, module, parameters_dict, counter)
     # Load meta data
     if get_metadata:
         metadata_df, log = load_metadata(metadata_fp=meta_df_fp,
@@ -1431,7 +1439,9 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         metadata_df = []
     # Load mask
     if get_mask:
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading mask " + data_df_fp[:-4] + "_mask.tsv" + ".\n")
         masked_df = load_mask(data_df_fp)
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMask loaded successfully.\n")
         mask_description_df = load_mask_description(data_df_fp)
     else:
         masked_df = []
