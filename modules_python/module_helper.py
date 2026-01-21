@@ -765,7 +765,7 @@ def load_metadata(metadata_fp,metadata_sheet="Sheet1", filename_col="File.Name",
             initialdir="S:/AG/AG-CF-HTMS/CoreFacility/")
         root.destroy()
     '''
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading metadata " + metadata_fp + "\n"
+    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading metadata " + metadata_fp + ".\n"
     # read tsv file
     if metadata_fp[-4:] in [".txt",".tsv"]:
         metadata_df = pd.read_csv(metadata_fp, sep="\t", encoding=encoding)
@@ -1205,15 +1205,10 @@ def add_parameters_to_log(log_file, module, parameters_dict):
 
     """
     module_output = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+module+" started.\n"
-    module_output += "Parameters\n------------\n"
-    for key,value in parameters_dict.items():
-        module_output += str(key)+"\t\t\t"+str(value)+"\n"
-    module_output += "------------\n"  
-    
+    module_output += "\nParameters\n------------\n"
+    module_output += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    module_output += "\n------------\n\n"  
     logger(log_file, module_output=module_output)
-    
-    ##### Chnage to something similar here as
-    ##### mask_description_df.to_string(index=False)
     
     return ""
 
@@ -1409,7 +1404,9 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
     # Load data
     if not return_data_fp_only:
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + ".\n")
         data_df = load_data(data_df_fp)
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n")
     else:
         data_df = None
     # Load parameters
@@ -1483,7 +1480,7 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         save_mask(masked_df, out_dir_fp, outname)
         save_mask_description(mask_description_df, out_dir_fp, outname)
     # Close function
-    logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
+    logger(log_file, time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tProcessed data saved successfully to " + os.path.join(out_dir_fp, outname)+"\n"+time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n" + "------------\n" + "------------\n")
     if exit_module:
         sys.exit(0)
 

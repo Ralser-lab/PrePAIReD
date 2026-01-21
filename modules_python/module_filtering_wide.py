@@ -27,7 +27,6 @@ import sys
 import os
 import scipy.stats as stats
 import module_helper as helper
-from tkinter.filedialog import askopenfilename, askdirectory
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -71,16 +70,14 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
         log string, logged with ###ERROR### messages if index and column keys not found in metadata
     """
     
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
-
     if index_column not in metadata_df.columns:
-        log = f"{timestamp()}\t###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
+        log = f"###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df, log
 
     metadata_df_indexed = metadata_df.set_index(index_column)
 
     if key_column not in metadata_df_indexed.columns:
-        log = f"{timestamp()}\t###WARNING###: COLUMN KEY WARNING - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
+        log = f"###WARNING###: COLUMN KEY WARNING - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df, log
     
     log = "" #f"{timestamp()}\tAll keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
@@ -117,36 +114,35 @@ def filter_samples_by_detection_proportion(data_df, sample_thresh=None, sample_a
        Log string with error and execution comments.
         
     """
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log = ""
     
     # Validate allowed values for sample_thresh
     if sample_thresh is not None:
         if not isinstance(sample_thresh, (int, float)):
-            log += f"{timestamp()}\t###ERROR###: Invalid type for sample_thresh. Expected int or float, got {type(sample_thresh).__name__}.\n"
+            log += f"###ERROR###: Invalid type for sample_thresh. Expected int or float, got {type(sample_thresh).__name__}.\n"
             return data_df, log
         if not (0 <= sample_thresh <= 1):
-            log += f"{timestamp()}\t###ERROR###: Invalid value for sample_thresh. Must be between 0 and 1. Got {sample_thresh}.\n"
+            log += f"###ERROR###: Invalid value for sample_thresh. Must be between 0 and 1. Got {sample_thresh}.\n"
             return data_df, log
         
         missingness = condition_on_detection_proportion(data_df)
         
         optimal_threshold = sample_thresh * 100
-        log += f"{timestamp()}\tUsing user-defined thresholding at {optimal_threshold:.2f}% missingness for sample filtering.\n"
+        log += f"\t\t\t\tUsing user-defined thresholding at {optimal_threshold:.2f}% missingness for sample filtering.\n"
 
     else:
         # Validate allowed values for alpha_sample
         if not isinstance(sample_alpha, (int, float)):
-            log += f"{timestamp()}\t###ERROR###: Invalid type for sample_alpha. Expected int or float, got {type(sample_alpha).__name__}.\n"
+            log += f"###ERROR###: Invalid type for sample_alpha. Expected int or float, got {type(sample_alpha).__name__}.\n"
             return data_df, log
         if not (0 <= sample_alpha <= 1):
-            log += f"{timestamp()}\t###ERROR###: Invalid value for sample_alpha. Must be between 0 and 1. Got {sample_alpha}.\n"
+            log += f"###ERROR###: Invalid value for sample_alpha. Must be between 0 and 1. Got {sample_alpha}.\n"
             return data_df, log
         
         #calculate optimal sample threshold
         missingness, optimal_threshold = calculate_optimum_threshold(data_df, sample_alpha)
 
-        log += f"{timestamp()}\tUsing automated thresholding {optimal_threshold:.2f}% missingness (alpha={sample_alpha}) for sample filtering.\n"
+        log += f"\t\t\t\tUsing automated thresholding {optimal_threshold:.2f}% missingness (alpha={sample_alpha}) for sample filtering.\n"
     
     #only keep samples with missingness below optimal_threshold
     data_df = data_df.loc[:, missingness < optimal_threshold]
@@ -192,42 +188,41 @@ def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precu
     """
     
     #logging
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log=""
     
     if filter_per_protein and id_mapping_df is None:
-        log += f"{timestamp()}\t###ERROR###: No id_mapping_df passed while filter_per_protein set to True. Either set filter_per_protein to False for global thresholding or provide an id_mapping_df to map precursors to protein groups.\n"
+        log += "###ERROR###: No id_mapping_df passed while filter_per_protein set to True. Either set filter_per_protein to False for global thresholding or provide an id_mapping_df to map precursors to protein groups.\n"
     
     # Validate allowed values for precursor_thresh
     if precursor_thresh is not None:
         if not isinstance(precursor_thresh, (int, float)):
-            log += f"{timestamp()}\t###ERROR###: Invalid type for precursor_thresh. Expected int or float, got {type(precursor_thresh).__name__}.\n"
+            log += f"###ERROR###: Invalid type for precursor_thresh. Expected int or float, got {type(precursor_thresh).__name__}.\n"
             return data_df, log
         if not (0 <= precursor_thresh <= 1):
-            log += f"{timestamp()}\t###ERROR###: Invalid value for precursor_thresh. Must be between 0 and 1. Got {precursor_thresh}.\n"
+            log += f"###ERROR###: Invalid value for precursor_thresh. Must be between 0 and 1. Got {precursor_thresh}.\n"
             return data_df, log
         
         #Calculate missingness
         missingness = condition_on_detection_proportion(data_df.T)
         optimal_threshold = precursor_thresh*100
-        log += f"{timestamp()}\tUsing user-defined thresholding at {optimal_threshold:.2f}% missingness for precursor filtering.\n"
+        log += f"\t\t\t\tUsing user-defined thresholding at {optimal_threshold:.2f}% missingness for precursor filtering.\n"
         
     else:
         # Validate allowed values for alpha_pr
         if not isinstance(precursor_alpha, (int, float)):
-            log += f"{timestamp()}\t###ERROR###: Invalid type for precursor_alpha. Expected int or float, got {type(precursor_alpha).__name__}.\n"
+            log += f"###ERROR###: Invalid type for precursor_alpha. Expected int or float, got {type(precursor_alpha).__name__}.\n"
             return data_df, log
         if not (0 <= precursor_alpha <= 1):
-            log += f"{timestamp()}\t###ERROR###: Invalid value for precursor_alpha. Must be between 0 and 1. Got {precursor_alpha}.\n"
+            log += f"###ERROR###: Invalid value for precursor_alpha. Must be between 0 and 1. Got {precursor_alpha}.\n"
             return data_df, log
     
         # Calculate missingness and global optimal threshold
         missingness, optimal_threshold = calculate_optimum_threshold(data_df.T, precursor_alpha, statistics='non-parametric')
-        log += f"{timestamp()}\tUsing automated thresholding {optimal_threshold:.2f}% missingness (alpha={precursor_alpha}) for precursor filtering.\n"
+        log += f"\t\t\t\tUsing automated thresholding {optimal_threshold:.2f}% missingness (alpha={precursor_alpha}) for precursor filtering.\n"
         
     # Filter by missingness
     if filter_per_protein:
-        log += f"{timestamp()}\tFiltering by missingness per protein according to {protein_col} across samples containing at least one precursor of the same protein.\n"
+        log += f"\t\t\t\tFiltering by missingness per protein according to {protein_col} across samples containing at least one precursor of the same protein.\n"
         keep_precursors = list()
         for pg in id_mapping_df[id_mapping_df[precursor_col].isin(data_df.index)][protein_col].unique():
             precursors_pg = list(set(id_mapping_df[id_mapping_df[protein_col]==pg][precursor_col]) & set(data_df.index))
@@ -270,9 +265,9 @@ def filter_precursors_by_exclusionlist(data_df,id_mapping_df,id_col,exclusion_id
     """
     log = ""
     if id_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{id_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{id_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     if precursor_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
         
     # catch error and return
     if "###ERRROR###" in log:
@@ -280,7 +275,7 @@ def filter_precursors_by_exclusionlist(data_df,id_mapping_df,id_col,exclusion_id
     else:
         exclude_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[id_col].isin(exclusion_id_list)][precursor_col]))
         exclusion_ids_in_data = id_mapping_df.loc[id_mapping_df[precursor_col].isin(exclude_precursors),id_col].unique()
-        log += f"{timestamp()}\t{len(exclusion_ids_in_data)} {id_col} out of {len(exclusion_id_list)} in exclusion list filtered from data matrix.\n"
+        log += f"\t\t\t\t{len(exclusion_ids_in_data)} {id_col} out of {len(exclusion_id_list)} in exclusion list filtered from data matrix.\n"
         return data_df.drop(exclude_precursors,axis=0), log
 
 
@@ -316,17 +311,15 @@ def filter_proteins_by_id_count(data_df, id_mapping_df, min_ids=1, protein_col="
         Log string to pick up run time comments and warnings.
     """
     
-    # Helper function
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log = ""
     
     # Check whether defined columns are present
     if id_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{id_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"##ERROR###: COLUMN KEY ERROR - column '{id_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     if precursor_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     if protein_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     
     # catch error and return
     if "###ERRROR###" in log:
@@ -352,7 +345,6 @@ def filter_proteins_by_id_count(data_df, id_mapping_df, min_ids=1, protein_col="
     filtered_df = data_df.loc[data_df.index.isin(precursors_to_keep)]
 
     # Update logfile with dropped precursor count
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     original_precursor_count = data_df.shape[0]
     filtered_precursor_count = filtered_df.shape[0]
     precursors_dropped = original_precursor_count - filtered_precursor_count
@@ -360,7 +352,7 @@ def filter_proteins_by_id_count(data_df, id_mapping_df, min_ids=1, protein_col="
     #filtered_protein_count = len(set(proteins_to_keep) & set(id_mapping_df[id_mapping_df[precursor_col].isin(data_df.index)][protein_col]))
     filtered_protein_count = len(id_mapping_df[id_mapping_df[precursor_col].isin(filtered_df.index)][protein_col].unique())
     proteins_dropped = original_protein_count - filtered_protein_count
-    log += f"{timestamp()}\tFiltered out {int(precursors_dropped)} precursors (kept {int(filtered_precursor_count)} out of {int(original_precursor_count)}) based on minimum of {min_ids} {id_col}s per protein.\n"
+    log += f"\t\t\t\tFiltered out {int(precursors_dropped)} precursors (kept {int(filtered_precursor_count)} out of {int(original_precursor_count)}) based on minimum of {min_ids} {id_col}s per protein.\n"
     log += f"\t\t\t\tFiltered out {int(proteins_dropped)} proteins (kept {int(filtered_protein_count)} out of {int(original_protein_count)}) based on minimum of {min_ids} {id_col}s per protein.\n"
 
     return filtered_df, log
@@ -446,15 +438,13 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
         filtered wide-format profiles, columns are samples.
 
     """
-    # Helper function
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log = ""
     
     #check if filter column is present
     if filter_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{filter_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{filter_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     if precursor_col not in id_mapping_df.columns:
-        log += f"{timestamp()}\t###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
     
     # catch error and return
     if "###ERRROR###" in log:
@@ -492,11 +482,10 @@ def filter_precursors_by_peptide_labels(data_df, remove_label=None, regex=True):
         Log string to pick up run time comments and warnings.
     """
     
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log = ""
     
     if not remove_label:
-        log += f"{timestamp()}\t###WARNING###: No precursors removed: remove_label is empty or None.\n"
+        log += "###WARNING###: No precursors removed: remove_label is empty or None.\n"
         return data_df, log
     
     #obtain list of precursors to be excluded
@@ -508,9 +497,9 @@ def filter_precursors_by_peptide_labels(data_df, remove_label=None, regex=True):
         appendix = ""
         
     if len(flagged_precursors)>0:
-        log += f"{timestamp()}\t{len(flagged_precursors)} precursors excluded because they contained the label: '{remove_label}'{appendix}.\n"
+        log += f"\t\t\t\t{len(flagged_precursors)} precursors excluded because they contained the label: '{remove_label}'{appendix}.\n"
     else:
-        log += f"{timestamp()}\tNo precursors excluded: label '{remove_label}'{appendix} not found in any index.\n"
+        log += f"\t\t\t\tNo precursors excluded: label '{remove_label}'{appendix} not found in any index.\n"
     
     return data_df.drop(flagged_precursors, axis=0), log
 
@@ -545,13 +534,12 @@ def replace_labelled_precursors(data_df, id_mapping_df, mask_df, precursor_col="
         Log string to pick up run time comments and warnings.
     """
     
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     log = ""
     
     if not target_label:
-        log += f"{timestamp()}\t###WARNING###: No replacement performed: target_label is empty or None.\n"
+        log += "###WARNING###: No replacement performed: target_label is empty or None.\n"
     if replace_label == None:
-        log += f"{timestamp()}\t###WARNING###: No replacement performed: replace_label is None.\n"  
+        log += "###WARNING###: No replacement performed: replace_label is None.\n"  
     if "###WARNING###" in log:
         return data_df, log
     
@@ -571,10 +559,10 @@ def replace_labelled_precursors(data_df, id_mapping_df, mask_df, precursor_col="
         id_mapping_df[precursor_col] = id_mapping_df[precursor_col].replace(replace_df["replaced_precursor"].to_dict())
         # Update log
         num_replaced_precs_in_data = len(set(data_df.index) & set(replace_df["replaced_precursor"]))
-        log += f"{timestamp()}\t{len(flagged_precursors)} precursors replaced: '{target_label}' -> '{replace_label}'\n"
+        log += f"\t\t\t\t{len(flagged_precursors)} precursors replaced: '{target_label}' -> '{replace_label}'\n"
         log += f"\t\t\t\tOf these {num_replaced_precs_in_data} precursors were present in the data matrix.\n"
     else:
-        log += f"{timestamp()}\tNo replacement performed: {target_label} was not found in any of the precursors in data matrix, mask nor id mapping.\n"
+        log += f"\t\t\t\tNo replacement performed: {target_label} was not found in any of the precursors in data matrix, mask nor id mapping.\n"
 
     return data_df, log
 
@@ -766,10 +754,11 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
+        helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
     
@@ -777,11 +766,11 @@ if __name__ == "__main__":
     timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
     
     # Log parameters
-    log = f"{timestamp()}\tFiltering Wide Format\n"
-    log += "\nParameters\n------------\n"
-    log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
-    log += "\n------------\n"  
-    helper.logger(log_file, module_output=log)
+    #log = f"{timestamp()}\tFiltering Wide Format\n"
+    #log += "\nParameters\n------------\n"
+    #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    #log += "\n------------\n"  
+    #helper.logger(log_file, module_output=log)
     
     #parameter extraction
     methods = parameters_dict['filtering_wide_methods'].replace(" ", "").split(";")
@@ -792,7 +781,7 @@ if __name__ == "__main__":
     sample_filters_df.index.name = parameters_dict['metadata_sample_column']
     
     if methods == []:
-        log = f"{timestamp()}\t###WARNING### No filtering methods provided. Skipping filtering on wide format.\n"
+        log = "###WARNING### No filtering methods provided. Skipping filtering on wide format.\n"
         helper.logger(log_file,log)
     else:
         for method in methods:
@@ -841,7 +830,7 @@ if __name__ == "__main__":
                         
                         #log filtering progress
                         num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
-                        log += f"{timestamp()}\t{num_excluded_samples} samples excluded by {key_value} in metadata_column {key_column}.\n"
+                        log += f"\t\t\t\t{num_excluded_samples} samples excluded by {key_value} in metadata_column {key_column}.\n"
                     helper.logger(log_file,log)
                     
             elif method == "filter_samples_by_detection_proportion":
@@ -873,7 +862,7 @@ if __name__ == "__main__":
                 #log filtering progress
                 num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
                 percent_excluded_samples = np.round(num_excluded_samples/len(data_processed_df.columns)*100,2)
-                log += f"{timestamp()}\t{num_excluded_samples} ({percent_excluded_samples}%) samples filtered due to too many missing values.\n"
+                log += f"\t\t\t\t{num_excluded_samples} ({percent_excluded_samples}%) samples filtered due to too many missing values.\n"
                 helper.logger(log_file,log)
             
             elif method == "filter_by_normalization_factors":
@@ -916,7 +905,7 @@ if __name__ == "__main__":
                 #log filtering progress
                 num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
                 percent_excluded_precursors = np.round(num_excluded_precursors/len(pre_method_rows)*100,2)
-                log += f"{timestamp()}\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
+                log += f"\t\t\t\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
                 helper.logger(log_file,log)
 
             elif method == "filter_proteins_by_peptide_count":

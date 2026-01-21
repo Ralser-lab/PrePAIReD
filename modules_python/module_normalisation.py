@@ -11,14 +11,10 @@ import os
 from scipy.optimize import least_squares, minimize
 import time
 import sys
-from tkinter.filedialog import askopenfilename, askdirectory
 from itertools import combinations
 from sklearn.preprocessing import QuantileTransformer
 
 import module_helper as helper
-
-####### Not testes yet #########
-
 
 ####################################################################
 # Normalization functions
@@ -144,7 +140,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         #extract precursors present over all samples
         abs_nan_intersect_thresh=int(nan_intersect_thresh*df.shape[1])
         intersect_precursors=df.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
-        module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
     else:
         intersect_precursors=df.index
     #calculate normalization factors
@@ -160,7 +156,7 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
                 #extract precursors present over all samples
                 abs_nan_intersect_thresh=int(nan_intersect_thresh*df_trim.shape[1])
                 intersect_precursors=df_trim.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
-                module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
+                module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
             else:
                 intersect_precursors=df_trim.index            #repeat normalization procedure on selected samples
             normalization_factors=get_normalization_factors(df_trim.loc[intersect_precursors],axis=axis)
@@ -213,8 +209,8 @@ def exclude_outlier_normalization_factors(profiles_group,normalization_factors,m
     normalization_factors_df["keep"]=normalization_factors_df.map(lambda x: min_nf < x < max_nf)
     #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
-    module_output += "\t\t\t\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
-    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n\n"
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
+    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n"
     return [profiles_group[normalization_factors_df.index[normalization_factors_df["keep"]]], module_output]
 
 def get_normalization_factors(df, axis:int=0):
@@ -637,10 +633,11 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
     if metadata_df is None:
+        helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in module_output:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
     module_output = ""
@@ -658,19 +655,19 @@ if __name__ == "__main__":
             if parameters_dict["on_peptide_list"]:
                # check if file at peptide_list_fp exists, if not exit with an error
                if not os.path.exists(parameters_dict["peptide_list_fp"]):
-                   module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File path to file containing peptides for normalisation is not existent.\n"
+                   module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR###: File path to file containing peptides for normalisation is not existent.\n"
                    helper.logger(log_file, module_output)
                    if exit_module:
-                       sys.exit("Error: file path to file containing peptides for normalisation is not existent.")
+                       sys.exit("###ERROR###: file path to file containing peptides for normalisation is not existent.")
                # read file containing peptide list
                ### ID Mapping ###
                peptide_df = pd.read_csv(parameters_dict["peptide_list_fp"],sep="\t")
                # check if column with peptides and precursors are present in peptide_df
                if parameters_dict["peptide_list_file_peptide_column"] not in peptide_df.columns or parameters_dict["peptide_list_file_precursor_column"] not in peptide_df.columns:
-                   module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR### File containing peptides for normalisation ("+ parameters_dict["peptide_list_fp"] +") does not contain column specified by peptide_list_file_peptide_column or peptide_list_file_precursor_column.\n"
+                   module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"###ERROR###: File containing peptides for normalisation ("+ parameters_dict["peptide_list_fp"] +") does not contain column specified by peptide_list_file_peptide_column or peptide_list_file_precursor_column.\n"
                    helper.logger(log_file, module_output)
                    if exit_module:
-                       sys.exit("Error: File with peptides for normalization does not contain the given column(s).")
+                       sys.exit("###ERROR###: File with peptides for normalization does not contain the given column(s).")
                # extract peptide list
                peptide_list = peptide_df[parameters_dict["peptide_list_file_peptide_column"]].tolist()
                module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median scaling normalization from peptides specified in " + parameters_dict["peptide_list_fp"] + ".\n"
@@ -719,8 +716,8 @@ if __name__ == "__main__":
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
-        helper.logger(log_file, "###ERROR###: Module ran into an error.")
-        helper.logger(log_file, "###ERROR###: "+str(e))
+        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
+        helper.logger(log_file, "###ERROR###: "+str(e)+"\n")
         if exit_module:
             sys.exit(1)
 
@@ -730,7 +727,7 @@ if __name__ == "__main__":
     mask = helper.update_mask(mask)
     """
     
-    helper.logger(log_file, module_output=module_output)
+    #helper.logger(log_file, module_output=module_output)
     
     # Save data
     if parameters_dict["normalization_method"] not in ["delayed"]:
@@ -741,7 +738,7 @@ if __name__ == "__main__":
         # Save mask
         helper.save_mask(masked_df, out_dir_fp, outname)
         helper.save_mask_description(mask_description_df, out_dir_fp, outname)
-        helper.logger(log_file, "Module finished as expected.")
+        helper.logger(log_file, time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tProcessed data saved successfully to " + os.path.join(out_dir_fp, outname)+"\n"+"Module finished as expected.\n"+"------------\n" + "------------\n")
         if exit_module:
              sys.exit(0)
     

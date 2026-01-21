@@ -27,7 +27,7 @@ import pandas as pd
 import numpy as np
 import time
 import functools
-from ctypes import cdll, c_double, POINTER, c_int, util, CDLL
+from ctypes import cdll, c_double, POINTER, c_int, util
 from itertools import combinations
 #from pathlib import Path
 from inspect import getsourcefile
@@ -36,12 +36,12 @@ import os
 import platform
 from numpy.ctypeslib import ndpointer
 from tqdm import tqdm
-from tkinter.filedialog import askopenfilename, askdirectory
 
 #own scripts
 import module_helper as helper 
 
-
+import warnings
+warnings.filterwarnings("ignore")
 
 def print_args(func):
     """ Decorator that prints arguments of a function (sanity checks).
@@ -552,7 +552,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     # unlog data
     #data_df=helper.unlog_transform(data_df)
     data_df.replace(np.nan,0,inplace=True)
-    module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
+    #module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
         
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n"
     module_output += "\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n"
@@ -623,7 +623,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             #else: #protein excluded due to less than min_peptides precursors
             #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
             #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n"
+    #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n"
     pg_profiles_df.index.name="Protein.Group"
     #add gene names
     #trans_df=data_df.reset_index().set_index("Protein.Group")
@@ -760,7 +760,7 @@ def MaxLFQ_summarization(data_df, id_mapping_df, module_output, seq_col="Precurs
     #protein_profiles.columns=peptide_profiles.columns
     #protein_profiles.columns.names=peptide_profiles.columns.names
     
-    module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarization done.\n"
+    module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tMaxLFQ Summarization finished.\n"
     return(data_prot_df, module_output)
 
 def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id", protein_col="Protein.Group"):
@@ -841,7 +841,16 @@ if __name__ == "__main__":
                                                                                                                                                                            counter=counter,
                                                                                                                                                                            outname=outname)
     
-    data_df = helper.load_data(data_df_fp)
+    helper.logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + ".\n")
+    try:
+        data_df = helper.load_data(data_df_fp)
+        helper.logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n")
+    except:
+        data_df = None
+    
+    if data_df is None:
+        helper.logger(log_file,"###ERROR###: Input data file could not be loaded")
+        sys.exit("###ERROR###: Input data file could not be loaded")
     
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         masked_df = helper.load_mask(data_df_fp)
@@ -859,6 +868,7 @@ if __name__ == "__main__":
     # unlog data
     data_df=helper.unlog_transform(data_df)
     helper.save_data(data_df, out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")
+    helper.logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tUnlogged precursor data saved to " + os.path.join(out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")+".\n")
 
     try:
         if parameters_dict["summarization_method"]=="MaxLFQ":
@@ -879,20 +889,20 @@ if __name__ == "__main__":
                                                              protein_col = parameters_dict["protein_col"])
         else:
             data_processed_df = data_df
-            module_output += "###WARNING###: Summarization method not found. Skipped module."
+            module_output += "###WARNING###: Summarization method not found. Skipped module.\n"
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
-        helper.logger(log_file, "###ERROR###: "+str(e))
+        helper.logger(log_file, "###ERROR###: "+str(e)+"\n")
         sys.exit(1)
     #except ValueError:
     #    raise(ValueError)
 
-    
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
     
     # Save without log transformation
     helper.save_data(data_processed_df, out_dir_fp, outname[:-4]+"_unlog.tsv")
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tUnlogged protein data saved to " + os.path.join(out_dir_fp, outname[:-4]+"_unlog.tsv")+".\n"
     data_processed_df = helper.log_transform(data_processed_df)
 
     if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:

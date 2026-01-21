@@ -54,8 +54,6 @@ import time
 import os
 import re
 import module_helper as helper
-from tkinter.filedialog import askopenfilename, askdirectory
-
 
 ##############################################################################
 # File handling
@@ -852,21 +850,22 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
+        helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
     #metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
 
     # Log parameters
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
-    log += "\nParameters\n------------\n"
-    log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
-    log += "\n------------\n"  
-    helper.logger(log_file, module_output=log)
+    #log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Filtering Long Format\n"
+    #log += "\nParameters\n------------\n"
+    #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    #log += "\n------------\n"  
+    #helper.logger(log_file, module_output=log)
          
     # Extract variables from parameters, which need adjustment
     ids_list = parameters_dict["input_ids_columns"].split(";")
@@ -953,6 +952,7 @@ if __name__ == "__main__":
                                                                   filename_col=parameters_dict["metadata_filename_column"], 
                                                                   diann_sample_column=parameters_dict["input_filename_column"])
     elif parameters_dict["input_origin"]=="msfragger":
+        ### TODO
         pass # adjust here for other programs
         
     # Check if filtering was successful, else pass error to log and exit
@@ -960,6 +960,7 @@ if __name__ == "__main__":
         if not input_df.empty:
             log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLong format filtering successful.\n"
             helper.logger(log_file,log)
+            log=""
     else:
         helper.logger(log_file,log)
         if exit_module:
@@ -989,7 +990,7 @@ if __name__ == "__main__":
     # Log Transformation (Base 2)
     wide_df = helper.log_transform(wide_df.replace(0,np.nan), base=2)
     log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
-    helper.logger(log_file,log)
+    #helper.logger(log_file,log)
     
     # Save data
     id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
@@ -997,14 +998,6 @@ if __name__ == "__main__":
     #mask_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask.tsv", sep="\t")
     #mask_description_df.to_csv(out_dir_fp + "data_" + str(counter) + "_mask_description.tsv", sep="\t")
     
-    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n\t\t\tmask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n\t\t\tand table for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
-    helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
+    log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n"+time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n"+time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tTable for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
+    helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=log, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
   
-
-
-
-
-
-
-
-

@@ -28,12 +28,9 @@ import numpy as np
 import re
 import sys
 import time
-import json
-import argparse
 import os
 import itertools
 from collections import Counter
-from tkinter.filedialog import askopenfilename, askdirectory
 
 #statistics and modelling
 import igraph
@@ -837,10 +834,11 @@ if __name__ == "__main__":
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log)
     if metadata_df is None:
+        helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
         if exit_module:
             sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
@@ -850,11 +848,11 @@ if __name__ == "__main__":
     imputation_table_fp = os.path.join(out_dir_fp, "imputation_procedures.tsv")
     
     # Log parameters
-    log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Imputation\n"
-    log += "\nParameters\n------------\n"
-    log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
-    log += "\n------------\n"  
-    helper.logger(log_file, module_output=log)
+    #log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Imputation\n"
+    #log += "\nParameters\n------------\n"
+    #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+    #log += "\n------------\n"  
+    #helper.logger(log_file, module_output=log)
     #log = ""
     
     # replace zeros with NA
@@ -1206,7 +1204,8 @@ if __name__ == "__main__":
         log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tNo missing values identified, imputation skipped.\n"
         helper.logger(log_file,log)
     
-    module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"  
-    helper.close_module(data_processed_df=data_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
+    #module_output = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tmodule_imputation ends without errors.\n"  
+    log = ""
+    helper.close_module(data_processed_df=data_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=log, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
        
     
