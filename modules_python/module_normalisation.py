@@ -210,7 +210,7 @@ def exclude_outlier_normalization_factors(profiles_group,normalization_factors,m
     #print("Following samples were excluded due to extreme normalization factors in group "+group+":")
     #print(normalization_factors[~normalization_factors["keep"]].index.tolist())
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFollowing samples were excluded due to extreme normalization factors:\n\t\t\t\t"
-    module_output += ", ".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n"
+    module_output += "\n\t\t\t\t".join(normalization_factors_df[~normalization_factors_df["keep"]].index.tolist())+"\n"
     return [profiles_group[normalization_factors_df.index[normalization_factors_df["keep"]]], module_output]
 
 def get_normalization_factors(df, axis:int=0):
