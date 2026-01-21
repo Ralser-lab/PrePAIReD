@@ -54,6 +54,7 @@ import argparse
 import json
 import sys
 import itertools
+from tkinter.filedialog import askopenfilename, askdirectory
 
 def zscore_transform(df, robust=False, axis:int=0):
     """
@@ -1053,15 +1054,6 @@ def get_parser():
     parser.add_argument(
         "-m", "--metapath", required=False, 
         help="Filepath to metadatafile") 
-	parser.add_argument(
-        "-w", "--workdirpath", required=False, 
-        help="Filepath to working directory") 
-	parser.add_argument(
-        "-s", "--orderfile", required=False, 
-        help="Filepath to module orderfile (s for steps") 
-   # parser.add_argument(
-   #     "-ma", "--maskpath", required=False,  #### CGenerate with datapath
-   #     help="Filepath to maskfile") 
     parser.add_argument(
         "-l", "--log_file", required=True, 
         help="Filepath to logfile") 
@@ -1219,6 +1211,10 @@ def add_parameters_to_log(log_file, module, parameters_dict):
     module_output += "------------\n"  
     
     logger(log_file, module_output=module_output)
+    
+    ##### Chnage to something similar here as
+    ##### mask_description_df.to_string(index=False)
+    
     return ""
 
 ### Load Metadata without index
@@ -1490,3 +1486,20 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
     logger(log_file, time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n")
     if exit_module:
         sys.exit(0)
+
+def skip_parser_init(module):
+    counter = int(input("Please define the counter value (int): "))
+    workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)",initialdir=os.path.abspath(os.getcwd()))
+    if module == "FILTERING_LONG":
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+    else:
+        data_df_fp = askopenfilename(title="Please select your wide-format data")
+    meta_df_fp = askopenfilename(title="Please select your metadata file")
+    param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_"+module+"_parameters.json")
+    out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
+    log_file = askopenfilename(title="Please select your log_file")
+    idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+    ### TODO
+    ### Implement file exist check here with if/else and askopenfilename
+    outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+    return data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname

@@ -715,20 +715,12 @@ def adjust_confounders_batchwise(
 
 if __name__ == "__main__":
 
+    module = "CORRECTION"
     #set parameters
     if len(sys.argv) <= 1:
         #if script called within python
         skip_parser = True
-        run_id = 0
-        counter = int(input("Please define the counter value (int): "))
-        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
-        data_df_fp = askopenfilename(title="Please select your input data matrix")
-        meta_df_fp = askopenfilename(title="Please select your metadata file")
-        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_CORRECTION_parameters.json")
-        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_CORRECTION")
-        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
-        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
-        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = helper.skip_parser_init(module)
     else:
         #if script called from terminal
         skip_parser = False
@@ -747,7 +739,7 @@ if __name__ == "__main__":
         seed, log_string, metadata_df, masked_df, 
         mask_description_df, out_dir_fp, outname, log_file, counter
         ) = helper.init_module(
-            module = "Correction", 
+            module = module, 
             get_metadata=True, 
             get_id_mapping=True, 
             get_mask=True, 

@@ -809,20 +809,17 @@ def long_to_wide_format(long_df,metadata_df,mask_df,mask_description_df,id_col="
 
 if __name__ == "__main__":
     
-   #set parameters
+    module = "FILTERING_LONG"
+    #set parameters
     if len(sys.argv) <= 1:
         #if script called within python
+        ## counter
+        ## workdir
+        ## data
+        ## metadata
+        ## log file
         skip_parser = True
-        run_id = 0
-        counter = int(input("Please define the counter value (int): "))
-        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
-        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
-        meta_df_fp = askopenfilename(title="Please select your metadata file")
-        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_FILTERING_LONG_parameters.json")
-        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_FILTERING_LONG")
-        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
-        idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
-        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
+        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = helper.skip_parser_init(module)
     else:
         #if script called from terminal
         skip_parser = False
@@ -837,7 +834,7 @@ if __name__ == "__main__":
     exit_module = not skip_parser
     
     #initialize module
-    data_df_fp, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = "Filtering long", 
+    data_df_fp, parameters_dict, id_mapping_df, seed, log, metadata_df, mask_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = module, 
                                                                                                                                                                   get_metadata=True, 
                                                                                                                                                                   get_id_mapping=False, 
                                                                                                                                                                   get_mask=False, 
