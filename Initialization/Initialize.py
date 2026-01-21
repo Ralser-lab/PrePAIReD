@@ -144,6 +144,35 @@ def create_logfile(project_folder, run_id, mass_spec_data_filename, metadata_fil
                   "\n-----------------------------------------------\n")
     logfile.close()
 
+def init_parser(): # build parser outside of the pipeline to read current data
+    parser = argparse.ArgumentParser(description="Necessary files to run the pipeline modules")
+    parser.add_argument("-w","--workdir", help="Path to working directory where results are saved and reloaded",required=True)
+    parser.add_argument("-m","--metadata", help="Name of the metadata file",required=True,default="metadata.xlsx")
+    parser.add_argument("-d","--data", help="Name of the data to be processed",required=True, default="data.tsv")
+    parser.add_argument("-p","--parameters_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
+    parser.add_argument("-s","--steporder", help="Name of the config file to get module order",required=False, default="Config.txt")
+    args = parser.parse_args()
+    
+    # Get input
+    try:
+        with open(args.input_order,"r") as file:
+            setup_str = file.read()
+    except:
+        raise ValueError("###ERROR###: Input file not found")
+        sys.exit(1)
+    # Set output
+    outpath = args.workdir
+        
+    if not os.path.isdir(outpath):
+        raise ValueError("###ERROR###: Output path not existing")  
+        sys.exit(1)
+    
+    parameterfile = os.path.join(outpath,args.parameters_file)
+    config_file_path = os.path.join(outpath, args.steporder)
+    metadata_file = os.path.join(outpath, args.metadata)
+    data_file = os.path.join(outpath, args.data)
+    
+    return parameterfile, outpath, config_file_path, data_file, metadata_file
 #%%
 if __name__ == "__main__":
    
@@ -160,11 +189,11 @@ if __name__ == "__main__":
         print(sys.argv)
         #if script called from terminal
         #### Replace with parser #####
-        path_to_project_directory = sys.argv[2] # -w
-        parameters_txt_file = sys.argv[1] # -p
-        module_order_filename = sys.argv[3] # -s
-        mass_spec_data_filename = sys.argv[4] # -d
-        metadata_filename = sys.argv[5] # -m
+        path_to_project_directory = init_parser[1] # -w
+        parameters_txt_file = init_parser[0] # -p
+        module_order_filename = init_parser[2] # -s
+        mass_spec_data_filename = init_parser[3] # -d
+        metadata_filename = init_parser[4] # -m
     username = os.getlogin()
     preprocessed_filename = "data_XY.tsv"
 
