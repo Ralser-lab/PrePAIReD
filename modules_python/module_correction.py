@@ -719,6 +719,11 @@ if __name__ == "__main__":
     #set parameters
     if len(sys.argv) <= 1:
         #if script called within python
+        ## counter
+        ## workdir
+        ## data
+        ## metadata
+        ## log file
         skip_parser = True
         data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = helper.skip_parser_init(module)
     else:
