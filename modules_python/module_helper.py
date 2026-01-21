@@ -1053,6 +1053,12 @@ def get_parser():
     parser.add_argument(
         "-m", "--metapath", required=False, 
         help="Filepath to metadatafile") 
+	parser.add_argument(
+        "-w", "--workdirpath", required=False, 
+        help="Filepath to working directory") 
+	parser.add_argument(
+        "-s", "--orderfile", required=False, 
+        help="Filepath to module orderfile (s for steps") 
    # parser.add_argument(
    #     "-ma", "--maskpath", required=False,  #### CGenerate with datapath
    #     help="Filepath to maskfile") 
