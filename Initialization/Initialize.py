@@ -150,7 +150,7 @@ if __name__ == "__main__":
    #set parameters
     if len(sys.argv) <= 1:
         #if script called within python
-        path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)")
+        path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)", initialdir=os.path.abspath(os.getcwd()))
         mass_spec_data_filename = askopenfilename(title="Please select your DIA-NN output report")
         metadata_filename = skopenfilename(title="Please select your metadata")
         module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
