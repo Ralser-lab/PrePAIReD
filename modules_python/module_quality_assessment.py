@@ -472,20 +472,20 @@ def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='
     angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
     
     # Get axes extends
-    max_x = np.mean(x)+np.sqrt(chi2_val*cov[0,0])
-    min_x = np.mean(x)-np.sqrt(chi2_val*cov[0,0])
+    #max_x = np.mean(x)+np.sqrt(chi2_val*cov[0,0])
+    #min_x = np.mean(x)-np.sqrt(chi2_val*cov[0,0])
 
-    max_y = np.mean(y)+np.sqrt(chi2_val*cov[1,1])
-    min_y = np.mean(y)-np.sqrt(chi2_val*cov[1,1])
+    #max_y = np.mean(y)+np.sqrt(chi2_val*cov[1,1])
+    #min_y = np.mean(y)-np.sqrt(chi2_val*cov[1,1])
 
-    return angle, width, height, min_x, max_x, min_y, max_y
+    return angle, width, height, #min_x, max_x, min_y, max_y
 
 # For Imputation, Normalization, Correction
 ### Coloring
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95,):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1):
 
     ### Examples:
     ### Drift correction
@@ -565,20 +565,24 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
                     subset_i = data_origin_transformed[group_indices,i]
                     subset_j = data_origin_transformed[group_indices,j]
                     
-                    angle, width, height, min_x, max_x, min_y, max_y = get_confidence_ellipse(subset_i,subset_j,confidence=confidence)
+                    angle, width, height = get_confidence_ellipse(subset_i,subset_j,confidence=confidence)
                     ax.add_patch(Ellipse(
                         (np.mean(subset_i), np.mean(subset_j)),
                         width=width,height=height,angle=angle,
                         edgecolor=color,facecolor="None",linewidth=2))
                     
-
-
-                        
-                    ### Get minimal/maxiaml values for i and j
-                    
-                    
-                    
-                          
+            if set_axis_lim:
+                x_min = np.min(data_origin_transformed[:,i])
+                x_max = np.max(data_origin_transformed[:,i])
+                x_offset = np.max((np.abs(x_min),x_max))*(axis_offset)
+                
+                y_min = np.min(data_origin_transformed[:,j])
+                y_max = np.max(data_origin_transformed[:,j])
+                y_offset = np.max((np.abs(y_min),y_max))*(axis_offset)
+                
+                ax.set_xlim(x_min-x_offset, x_max+x_offset)
+                ax.set_ylim(y_min-y_offset, y_max+y_offset)
+            
             ax.tick_params(labelsize = fontsize)
             set_aspect_equal(ax)
             if i != 0:
@@ -606,12 +610,24 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
                         subset_i = data_processed_transformed[group_indices,i]
                         subset_j = data_processed_transformed[group_indices,j]
                         
-                        angle, width, height, min_x, max_x, min_y, max_y = get_confidence_ellipse(subset_j,subset_i,confidence=confidence)
+                        angle, width, height = get_confidence_ellipse(subset_j,subset_i,confidence=confidence)
                         ax.add_patch(Ellipse(
                             (np.mean(subset_j), np.mean(subset_i)),
                             width=width,height=height,angle=angle,
                             edgecolor=color,facecolor="None",linewidth=2))
     
+                if set_axis_lim:
+                    x_min = np.min(data_processed_transformed[:,j])
+                    x_max = np.max(data_processed_transformed[:,j])
+                    x_offset = np.max((np.abs(x_min),x_max))*(axis_offset)
+
+                    y_min = np.min(data_processed_transformed[:,i])
+                    y_max = np.max(data_processed_transformed[:,i])
+                    y_offset = np.max((np.abs(y_min),y_max))*(axis_offset)
+
+                    ax.set_xlim(x_min-x_offset, x_max+x_offset)
+                    ax.set_ylim(y_min-y_offset, y_max+y_offset)
+                
                 ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
                 set_aspect_equal(ax)
                 
