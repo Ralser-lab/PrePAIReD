@@ -5,7 +5,8 @@ Output: Corrected wide-format data
 
 - batchcorrection_combat: applies combat batch correction
 - batchcorrection_harmony: applies harmony batch correction
-- correct_for_confounders: drift correction per id for a given set of confounders which are statistically significant correlated to the id
+- get_ids_for_correction: calculates association and p-value of IDs with covariates to obtain relevant IDs for covariate correction.
+- adjust_confounders: drift correction per id for a given set of confounders which are statistically significant correlated to the id
 - adjust_confounders_batchwise: applies drift correction per batch for a set of covariates
 
 General comments:
@@ -204,7 +205,7 @@ def batchcorrect_combat(
         if data_processed_df.isna().all().all():
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S: "+"###ERROR###: All Values in DF were transformed to NA.\n"\
-                    +f"Please filter input dataframe for features with high missing values or low variance."  + "\n")
+                    +"Please filter input dataframe for features with high missing values or low variance."  + "\n")
             return log_string
         else:
             log_string += time.strftime(
@@ -214,10 +215,194 @@ def batchcorrect_combat(
             return data_processed_df, log_string
         
 
+
+def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtypes_list,fitsamples_idx_list=None,alpha_significance=0.05):
+    
+    """
+    Calculates association and p-value of IDs (e.g. precursors) with covariates to obtain relevant IDs for confounder correction.
+    
+
+    author: BZ, CD
+
+    Parameters:
+    -----------
+    data_df : pandas.DataFrame
+        DataFrame containing the feature data (e.g., gene expression).
+        Rows are samples, columns are features.
+
+    metadata_df : pandas.DataFrame
+        DataFrame containing metadata variables (e.g., age, sex, batch).
+        Must include all columns listed in `adjust_cols_list`.
+
+    adjust_cols_list : list of str
+        List of metadata column names to consider for adjustment.
+
+    adjust_cols_dtypes_list : list of str
+        List of corresponding data types for each column in `adjust_cols_list`.
+        Options: 'nominal', 'ordinal', or 'continuous'.
+        
+    fitsamples_idx_list : list-like, optional
+        Optional list of sample indices to use for model fitting.
+        If None, all samples in `data_df` are used.
+
+    alpha_significance : float, optional
+        Significance threshold (e.g., 0.05) for determining if a metadata variable is associated 
+        with a feature and should be used for adjustment.
+        
+    Returns:
+    --------
+
+    corr_df : pandas.DataFrame
+        DataFrame summarizing the association statistics between metadata and features.
+        Includes correlation coefficients and p-values for each tested variable.
+        If no significant association was found, NaN is reported for r and p-value.
+    
+    log_string : str
+        String summarizing the adjustment process, warnings, and errors encountered.
+
+    Notes:
+    ------
+
+    - Incomplete or mismatched sample indices between `data_df` and `metadata_df` are logged and dropped.
+    - Uses ANOVA and correlation metrics (point-biserial, Spearman, Pearson) for assessing association:
+        - Nominal variables: ANOVA and point-biserial
+        - Ordinal variables: ANOVA and Spearman
+        - Continuous variables: Pearson
+
+    Warnings:
+    ---------
+    - Skips features if metadata groups contain fewer than 5 samples.
+    - Disagreement between ANOVA and correlation test significance is reported.
+
+    """
+    
+    log_string = ""
+    
+    # select samples used for fit model
+    if fitsamples_idx_list is None:
+        samples_idx_list = data_df.index
+    else:
+        samples_idx_list = fitsamples_idx_list
+    
+    # collect associations with meta data variables
+    corr_df=pd.DataFrame(index=data_df.columns,columns=["R2"])
+    corr_df.sort_index(inplace=True)
+    
+    # iterate over features
+    for idx in data_df.columns:
+        metadata_vars = [] # collect variables that show significant associations with feature
+        for metadata_var, dt in zip(adjust_cols_list,adjust_cols_dtypes_list):
+            # remove missing values and define common samples in meta and feature data
+            samples_meta = metadata_df.loc[samples_idx_list, metadata_var].dropna()
+            samples_data = data_df.loc[samples_idx_list, idx].dropna()
+            common_samples = list(set(samples_meta.index) & set(samples_data.index))
+
+            samples_idx_test_list= [list(metadata_df[metadata_df[metadata_var]==x].index) for x in metadata_df[metadata_var].unique()]
+            samples_idx_test_list = [list(set(x) & set(common_samples)) for x in samples_idx_test_list]
+            # Check if at least 5 samples are defined per group
+
+            # correlation coefficient to be calculated depending on datatype
+            coef_type_str = ""
+            if dt == "nominal":
+                if len(metadata_df.loc[common_samples,metadata_var].unique())==2:
+                    coef_type_str = "pointbiserialr_"
+                else:
+                    coef_type_str = "anova_"
+            elif dt == "ordinal":
+                coef_type_str = "spearmanr_"
+            elif dt == "continuous":
+                coef_type_str = "pearsonr_"
+            else:
+                pass
+
+            # check how many samples are available per feature
+            # do not check association if <5
+            if len(common_samples) < 5:
+                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                        f"No Correction will be applied on {idx}.\n"
+                corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
+                corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
+
+            # check if ordinal or nomonal variable groups have at 
+            # do not check association if <5 samples per group
+            elif (dt == "ordinal") or (dt=="nominal"):
+                if any([len(x) for x in samples_idx_test_list]) < 5:
+                    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                        f"No Correction will be applied on {idx}.\n"
+
+                    
+                    # save nan if sample size was not sufficient
+                    corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
+                    corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
+            
+
+            else:
+                samples_test_list = [data_df.loc[x, idx] for x in samples_idx_test_list]
+            
+                #test for significant associations/correlations
+                if dt=="nominal":
+                    if len(metadata_df.loc[common_samples,metadata_var].unique())==2:
+                        # cast metadata variable to boolean for pointbiserial
+                        if metadata_df.loc[common_samples,metadata_var].dtype not in [bool, float]:
+                            levels_var = metadata_df.loc[common_samples,metadata_var].unique()
+                            metadata_df[metadata_var] = metadata_df[metadata_var].replace(
+                                {levels_var[0]:True, levels_var[1]:False})
+                        # Point biserial correlation + one way ANOVA
+                        
+                        association, pval_corr = stats.pointbiserialr(
+                            metadata_df.loc[common_samples,metadata_var],
+                            data_df.loc[common_samples, idx])
+                        pval_test = stats.f_oneway(*samples_test_list).pvalue
+                        pval = pval_test
+                        if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
+                            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                            + f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}"
+                        corr_df.loc[idx,coef_type_str + metadata_var] = association
+                    elif len(metadata_df.loc[common_samples,metadata_var].unique())<2:
+                        #no association possible with one value per variable
+                        association=0
+                        pval=1
+                    else:
+                        pval=stats.f_oneway(*samples_test_list).pvalue
+                
+                elif dt == "ordinal":
+                    #Spearman correlation + one way ANOVA
+                    association, pval_corr = stats.spearmanr(
+                        metadata_df.loc[common_samples, metadata_var],
+                        data_df.loc[common_samples, idx])
+                    pval_test=stats.f_oneway(*samples_test_list).pvalue
+                    pval = pval_test
+                    if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
+                        log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                        +f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}"
+                    corr_df.loc[idx,coef_type_str + metadata_var]=association
+
+                elif dt =="continuous":
+
+                    
+                    #Pearson correlation
+                    association, pval=stats.pearsonr(
+                        metadata_df.loc[common_samples, metadata_var],
+                        data_df.loc[common_samples, idx])
+                    corr_df.loc[idx,coef_type_str + metadata_var] = association
+                else:
+                    pass
+
+                # if p-value of association test below significance value 
+                # variable will be stored for later adjustment
+                if pval < alpha_significance:
+                    metadata_vars.append(metadata_var)
+                corr_df.loc[idx, "pval_"+ metadata_var] = pval
+
+    return corr_df, log_string
+
+
 def adjust_confounders(
                 data_df, metadata_df, model_string, adjust_cols_list,
                 adjust_cols_dtypes_list, random_state, fitsamples_idx_list=None,
-                alpha_significance=0.05, alphas_models=[-3,3,7]
+                alpha_significance=0.05, alphas_models=[-3,3,7], corr_df=None
             ):
         
     """
@@ -276,7 +461,12 @@ def adjust_confounders(
 
     alphas_models : list-like, optional
         List of alpha values for models with regularization (e.g., RidgeCV, LassoCV, ElasticNetCV).
-
+    
+    corr_df : pandas.DataFrame, optional
+        DataFrame summarizing the association statistics between metadata and features.
+        Includes correlation coefficients and p-values for each tested variable.
+        If no significant association was found, NaN is reported for r and p-value.
+        
     Returns:
     --------
     data_processed_df : pandas.DataFrame
@@ -301,7 +491,7 @@ def adjust_confounders(
         - Nominal variables: ANOVA and point-biserial
         - Ordinal variables: ANOVA and Spearman
         - Continuous variables: Pearson
-
+    
     Warnings:
     ---------
     - Skips features if metadata groups contain fewer than 5 samples.
@@ -314,239 +504,119 @@ def adjust_confounders(
     log_string = ""
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") + "Start Adjustment.\n"
     
-    # use selecterd samples to fit model
-    samples_idx_list = data_processed_df.index
+    #calculate the association and p-value for all IDs if not provided as function argument
+    if corr_df is None:
+        corr_df, log_str = get_ids_for_correction(data_df=data_processed_df,
+                                                  metadata_df=metadata_df,
+                                                  adjust_cols_list=adjust_cols_list,
+                                                  adjust_cols_dtypes_list=adjust_cols_dtypes_list,
+                                                  fitsamples_idx_list=fitsamples_idx_list,
+                                                  alpha_significance=alpha_significance)
+        log_string += log_str
+        
     
-    if fitsamples_idx_list != None:
-        samples_idx_list = fitsamples_idx_list
-    
-    # collect associations with meta data variables
-    corr_df=pd.DataFrame(index=data_processed_df.columns,
-                        columns=["R2"])
-    corr_df.sort_index(inplace=True)
-    # iterate over all features
-
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") + f"{len(fitsamples_idx_list)} samples were selected to fit model.\n"
-
     # iterate over features
-    for feat in data_processed_df.columns:
-        # iterate over defined columns and assess statistical significance
+    for idx in data_df.columns:
         metadata_vars = [] # collect variables that show significant associations with feature
-        for metadata_var, dt in zip(
-            adjust_cols_list,
-            adjust_cols_dtypes_list):
-            # remove missing values and define commindex in meta and feature data
-            idx_meta = metadata_df.loc[samples_idx_list, metadata_var].dropna()
-            idx_data = data_processed_df.loc[samples_idx_list, feat].dropna()
-            common_idx = list(set(idx_meta.index) & set(idx_data.index))
+        for metadata_var, dt in zip(adjust_cols_list,adjust_cols_dtypes_list):
+            if corr_df.loc[idx, "pval_"+ metadata_var] < alpha_significance:
+                metadata_vars.append(metadata_var)
+        if len(metadata_vars)==0:
+            continue
 
-            samples_idx_test_list= [
-                list(metadata_df[metadata_df[metadata_var]==x].index) 
-                for x in metadata_df[metadata_var].unique()]
-            samples_idx_test_list = [list(set(x) & set(common_idx)) for x in samples_idx_test_list]
-            # Check if at least 5 samples are defined per group
+        #transfer categorical covariates for model fitting
+        idx_catgorical_list = [
+            i for i, d in enumerate(
+                adjust_cols_dtypes_list) if d == "nominal"]
+        col_cat_list = [adjust_cols_list[i] for i in idx_catgorical_list]
+        col_cat_list =  list(set(col_cat_list) & set(metadata_vars))
+        if len(col_cat_list)> 0:
 
-            # correlation coefficient to be calculated depending on datatype
-            coef_type_str = ""
-            if dt == "nominal":
-                coef_type_str = "pointbiserialr_"
-            elif dt == "ordinal":
-                coef_type_str = "spearmanr_"
-            elif dt == "continuous":
-                coef_type_str = "pearsonr_"
-            else:
-                pass
+            C_cat=pd.get_dummies(
+                metadata_df[col_cat_list].astype(str),
+                drop_first=True)
+            C_cat.columns = [c.split("_")[0] for c in C_cat.columns]
+            C=C_cat.join(metadata_df[metadata_vars].drop(col_cat_list,axis=1))
+        else:
+            C=metadata_df[metadata_vars]
+        
+        #order profiles and C in the same manner, remove samples with missing values
+        common_samples=list(set(data_processed_df[idx].dropna().index) & set(C.index))
 
-            # check how many samples are available per feature
-            # do not check association if <1ß
-            if len(common_idx) < 5:
+        if len(common_samples)<len(data_processed_df.index):
+            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+            + "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped."
+        if len(common_samples) < len(C):
+            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+            +"###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped."
+        C=C.loc[common_samples]
+        #data_df_sel=data_processed_df.loc[common_samples]
+
+        # C_f -> independent variables for adjustment fit
+        if fitsamples_idx_list is not None:
+            C_f=C.loc[common_samples]
+        else:
+            C_f=C
+        #define indices for fit
+        sample_index=C_f.index
+        
+        #create a linear model with significantly associated/correlated metadata variables
+        
+        # z-scale independent variables
+        # transformer will be fitted on defined samples only and applied 
+        # to all data
+        scaler=StandardScaler()
+        scaler.fit(C_f)
+        C_fz=scaler.transform(C_f)
+        C_z=scaler.transform(C)
+
+        if model_string=="ols":
+            estimator=linear_model.LinearRegression()
+        elif model_string=="ridge":
+            estimator=linear_model.RidgeCV(
+                alphas=alphas_models)           
+        elif model_string=="lasso":
+            estimator=linear_model.LassoCV(
+                alphas=alphas_models, random_state=random_state)
+        elif model_string=="elasticnet":
+            estimator=linear_model.ElasticNetCV(
+                alphas=alphas_models, random_state=random_state)
+        elif model_string=="huber":
+            estimator=linear_model.HuberRegressor()
+        elif model_string=="bayesian":
+            estimator=linear_model.BayesianRidge()
+        elif model_string=="logistic":
+            estimator=linear_model.LogisticRegression()
+        # elif model_string=="GLM":
+        #     pass
+
+        median_abundance=data_processed_df.loc[common_samples, idx].median()
+        if model_string in ["ols", "ridge", "lasso", "elasticnet", "huber", "bayesian"]:
+            estimator.fit(C_fz, data_processed_df.loc[sample_index, idx])
+            corr_df.loc[idx,"R2"] = estimator.score(C_fz,data_processed_df.loc[sample_index, idx])
+            coefs = estimator.coef_
+            n = estimator.intercept_  
+            
+            # apply correction
+            for d in range(len(coefs)):
+                data_processed_df.loc[common_samples, idx]=data_processed_df.loc[common_samples, idx] - coefs[d] * C_z[:,d]
+            data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - n + median_abundance
+
+        elif model_string=="loess":
+            estimator=loess.loess(C_fz, data_processed_df.loc[sample_index, idx])
+            try:
+                estimator.fit()
+            except ValueError:
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
-                        f"No Correction will be applied on {feat}.\n"
-                corr_df.loc[feat, "pval_"+ metadata_var] = np.nan
-                corr_df.loc[feat, coef_type_str+ metadata_var] = np.nan
-
-            # check if ordinal or nomonal variable groups have at 
-            # do not check association if <5 samples per group
-            elif (dt == "ordinal") or (dt=="nominal"):
-                if any([len(x) for x in samples_idx_test_list]) < 5:
-                    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
-                        f"No Correction will be applied on {feat}.\n"
-
-                    
-                    # save nan if sample size was not sufficient
-                    corr_df.loc[feat, "pval_"+ metadata_var] = np.nan
-                    corr_df.loc[feat, coef_type_str+ metadata_var] = np.nan
-            
-
-            else:
-                samples_test_list = [data_processed_df.loc[x, feat] for x in samples_idx_test_list]
-            
-                #test for significant associations/correlations
-                if dt=="nominal":
-                    if len(metadata_df.loc[common_idx,metadata_var].unique())==2:
-                        # cast metadata variable to boolean for pointbiserial
-                        if metadata_df.loc[common_idx,metadata_var].dtype not in [bool, float]:
-                            levels_var = metadata_df.loc[common_idx,metadata_var].unique()
-                            metadata_df[metadata_var] = metadata_df[metadata_var].replace(
-                                {levels_var[0]:True, levels_var[1]:False})
-                        # Point biserial correlation + one way ANOVA
-                        
-                        association, pval_corr = stats.pointbiserialr(
-                            metadata_df.loc[common_idx,metadata_var],
-                            data_processed_df.loc[common_idx, feat])
-                        pval_test = stats.f_oneway(*samples_test_list).pvalue
-                        pval = pval_test
-                        if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
-                            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                            + f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {feat}"
-                        corr_df.loc[feat,"pointbiserialr_" + metadata_var]=association
-                    elif len(metadata_df.loc[common_idx,metadata_var].unique())<2:
-                        #no association possible with one value per variable
-                        association=0
-                        pval=1
-                    else:
-                        pval=stats.f_oneway(*samples_test_list).pvalue
-                
-                elif dt == "ordinal":
-                    #Spearman correlation + one way ANOVA
-                    association, pval_corr = stats.spearmanr(
-                        metadata_df.loc[common_idx, metadata_var],
-                        data_processed_df.loc[common_idx, feat])
-                    pval_test=stats.f_oneway(*samples_test_list).pvalue
-                    pval = pval_test
-                    if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
-                        log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                        +f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {feat}"
-                    corr_df.loc[feat,"spearmanr_" + metadata_var]=association
-
-                elif dt =="continuous":
-
-                    
-                    #Pearson correlation
-                    association, pval=stats.pearsonr(
-                        metadata_df.loc[common_idx, metadata_var],
-                        data_processed_df.loc[common_idx, feat])
-                    corr_df.loc[feat,"pearsonr_" + metadata_var]=association
-                else:
-                    pass
-
-                # if p-value of association test below significance value 
-                # variable will be stored for later adjustment
-                if pval < alpha_significance:
-                    metadata_vars.append(metadata_var)
-                corr_df.loc[feat, "pval_"+ metadata_var] = pval
-
-            
-            if len(metadata_vars)==0:
+                +f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped."
                 continue
+            pred_values=estimator.predict(C_z).values
+            #pred_values_f=estimator.predict(C_fz).values
+            corr_df.loc[idx,"R2_"+";".join(metadata_vars)]= metrics.r2_score(C_fz,data_processed_df.loc[sample_index, idx]) 
+            data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
 
-            #transfer categorical covariates for model fitting
-            idx_catgorical_list = [
-                i for i, d in enumerate(
-                    adjust_cols_dtypes_list) if d == "nominal"]
-            col_cat_list = [adjust_cols_list[i] for i in idx_catgorical_list]
-            col_cat_list =  list(set(col_cat_list) & set(metadata_vars))
-            if len(col_cat_list)> 0:
-
-                C_cat=pd.get_dummies(
-                    metadata_df[col_cat_list].astype(str),
-                    drop_first=True)
-                C_cat.columns = [c.split("_")[0] for c in C_cat.columns]
-                C=C_cat.join(metadata_df[metadata_vars].drop(col_cat_list,axis=1))
-            else:
-                C=metadata_df[metadata_vars]
-            
-            #order profiles and C in the same manner
-            common_samples=list(set(data_processed_df.index) & set(C.index))
     
-            if len(common_samples)<len(data_processed_df.index):
-                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                + "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped."
-            if len(common_samples) < len(C):
-                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +"###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped."
-            C=C.loc[common_samples]
-            data_df_sel=data_processed_df.loc[common_samples]
-
-            # C_f -> independent variables for adjustment fit
-            if fitsamples_idx_list is not None:
-                C_f=C.loc[common_idx]
-            else:
-                C_f=C
-            #define indices for fit
-            sample_index=C_f.index
-            
-            #create a linear model with significantly associated/correlated metadata variables
-            
-            # z-scale independent variables
-            # transformer will be fitted on defined samples only and applied 
-            # to all data
-            scaler=StandardScaler()
-            scaler.fit(C_f)
-            C_fz=scaler.transform(C_f)
-            C_z=scaler.transform(C)
-
-            if model_string=="ols":
-                estimator=linear_model.LinearRegression()
-            elif model_string=="ridge":
-                estimator=linear_model.RidgeCV(
-                    alphas=alphas_models)           
-            elif model_string=="lasso":
-                estimator=linear_model.LassoCV(
-                    alphas=alphas_models, random_state=random_state)
-            elif model_string=="elasticnet":
-                estimator=linear_model.ElasticNetCV(
-                    alphas=alphas_models, random_state=random_state)
-            elif model_string=="huber":
-                estimator=linear_model.HuberRegressor()
-            elif model_string=="bayesian":
-                estimator=linear_model.BayesianRidge()
-            elif model_string=="logistic":
-                estimator=linear_model.LogisticRegression()
-            # elif model_string=="GLM":
-            #     pass
-
-            median_abundance=data_processed_df.loc[:, feat].median()
-            if model_string in ["ols", "ridge", "lasso", "elasticnet", "huber", "bayesian"]:
-                estimator.fit(C_fz, data_processed_df.loc[sample_index, feat])
-                corr_df.loc[feat,"R2"] = estimator.score(C_fz,data_processed_df.loc[sample_index, feat])
-                coefs = estimator.coef_
-                n = estimator.intercept_  
-                
-                # apply correction
-                if fitsamples_idx_list is not None:
-                    for d in range(len(coefs)):
-                        data_processed_df.loc[:, feat]=data_processed_df.loc[
-                            :, feat]- coefs[d] * C_z[:,d]
-                    data_processed_df.loc[common_idx, feat] = data_processed_df.loc[
-                        common_idx, feat]-n + median_abundance
-                else:
-                    for d in range(len(coefs)):
-                        data_processed_df.loc[:, feat]=data_processed_df.loc[:, feat]-coefs[d]*C_z[:,d]
-                    data_processed_df.loc[:, feat]=data_processed_df.loc[:, feat]-n + median_abundance
-
-            elif model_string=="loess":
-                estimator=loess.loess(
-                    C_fz, data_processed_df.loc[sample_index, feat])
-                try:
-                    estimator.fit()
-                except ValueError:
-                    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    +f"###WARNING###: Fitting did not work (probably too similar outcomes), feature {feat} skipped."
-                    continue
-                pred_values=estimator.predict(C_fz).values
-                if fitsamples_idx_list is not None:
-                    corr_df.loc[feat,"R2"]= metrics.r2_score(
-                        data_processed_df.loc[common_idx, feat],pred_values)
-                    data_processed_df.loc[common_idx, feat] = data_processed_df.loc[
-                        common_idx, feat]-pred_values+median_abundance
-                else:
-                    corr_df.loc[feat,"R2"] = metrics.r2_score(data_processed_df[feat],pred_values)
-                    data_processed_df.loc[:, feat]=data_processed_df.loc[:, feat]-pred_values + median_abundance
-    
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") +f"Adjustment finished!"
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") +"Adjustment finished!"
     
     return data_processed_df, log_string, corr_df
 
@@ -557,7 +627,8 @@ def adjust_confounders_batchwise(
     model_string, batch_level, random_state, 
     covariates, covariates_dtypes_list,
     alpha_significance=0.05, alphas_models=[-3,3,7],
-    fitsamples_idx_list=None, correct_one_by_one=True):
+    fitsamples_idx_list=None, correct_one_by_one=True, 
+    correct_over_same_ids_per_batch=False):
 
     """
     Applies "adjust_confounders" function to batches of data, either 
@@ -617,6 +688,10 @@ def adjust_confounders_batchwise(
     correct_one_by_one : bool, optional (default=True)
         If True, corrects for each covariate independently. 
         If False, corrects for all covariates simultaneously.
+        
+    correct_over_same_ids_per_batch : bool, optional (default=True)
+        If True, corrects all IDs which are associated with the covariate in any batch.
+        If False, correct only IDs which are associated with the covariate per batch.
 
     Returns
     -------
@@ -633,61 +708,104 @@ def adjust_confounders_batchwise(
 
     data_processed_df = data_df.copy()
     log_string = ""
-
+    #select samples used to fit the model
     if fitsamples_idx_list is None:
         fitsamples_idx_list = list(data_df.index)
 
     corr_dfs=list()
+    processed_df_list=list()
+    
+    #get batches
     batch_levels = sorted(metadata_df[batch_level[0]].unique())
-
-    if correct_one_by_one:
-        for covariate, covariate_dtype in zip(
-            covariates, covariates_dtypes_list):
-            processed_df_list=list()
-            
+    
+    if correct_one_by_one: #correct for one covariate at a time
+        for covariate, covariate_dtype in zip(covariates, covariates_dtypes_list):
+            processed_batch_df_list = list()
+            corr_dfs_covariate_list = list()
+            #identify associated ids per batch
+            if correct_over_same_ids_per_batch:
+                corr_dfs_association = list()
+                for batch in batch_levels:
+                    #subset fitsamples to fitsamples in given batch
+                    idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
+                    fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                    corr_df_batch, log_str = get_ids_for_correction(data_df = data_processed_df,
+                                                                    metadata_df = metadata_df,
+                                                                    adjust_cols_list = [covariate],
+                                                                    adjust_cols_dtypes_list = [covariate_dtype],
+                                                                    fitsamples_idx_list = fitsamples_idx_batch_list,
+                                                                    alpha_significance = alpha_significance)
+                    corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
+                    corr_dfs_association.append(corr_df_batch)
+                corr_df_covariate = pd.concat(corr_dfs_association,axis=1)
+                #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
+                corr_df_covariate["pval"] = corr_df_covariate[list(filter(lambda x: "pval" in x, corr_df_covariate.columns))].min()
+            else:
+                corr_df_covariate = None
+            #batchwise correction
             for batch in batch_levels:
-                idx_batch_list = list(
-                    metadata_df[
-                        metadata_df[batch_level[0]]==batch].index)
-                fitsamples_idx_batch_list = list(metadata_df.loc[
-                    list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
-                (
-                    data_processed_batch_df, log_string_batch, 
-                    corr_df
-                ) =  adjust_confounders(
-                    data_df = data_processed_df.loc[idx_batch_list],
-                    metadata_df = metadata_df.loc[idx_batch_list],
-                    model_string = model_string,
-                    adjust_cols_list = [covariate],
-                    adjust_cols_dtypes_list = [covariate_dtype],
-                    random_state = random_state,
-                    fitsamples_idx_list = fitsamples_idx_batch_list,
-                    alpha_significance = alpha_significance,
-                    alphas_models = np.logspace(*alphas_models)
-                    )
+                idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
+                fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                data_processed_batch_df, log_string_batch, corr_df_batch =  adjust_confounders(data_df = data_processed_df.loc[idx_batch_list],
+                                                                                               metadata_df = metadata_df.loc[idx_batch_list],
+                                                                                               model_string = model_string,
+                                                                                               adjust_cols_list = [covariate],
+                                                                                               adjust_cols_dtypes_list = [covariate_dtype],
+                                                                                               random_state = random_state,
+                                                                                               fitsamples_idx_list = fitsamples_idx_batch_list,
+                                                                                               alpha_significance = alpha_significance,
+                                                                                               alphas_models = np.logspace(*alphas_models),
+                                                                                               corr_df = corr_df_covariate)
                 log_string += log_string_batch
-                corr_df.columns = [x + " batch"+str(batch) for x in corr_df.columns]
-                corr_dfs.append(corr_df)
-                processed_df_list.append(data_processed_batch_df)
+                corr_df_batch.columns = [x + "_batch"+str(batch) for x in corr_df_batch.columns]
+                corr_dfs_covariate_list.append(corr_df_batch)
+                processed_batch_df_list.append(data_processed_batch_df)
+            #combine corrected data over batches
+            data_processed_df = pd.concat(processed_batch_df_list,axis=1)
+            #combine_corr_dfs
+            corr_dfs.append(pd.concat(corr_dfs_covariate_list,axis=1))
+            
     else: #correct for all covariates at once
-        processed_df_list=list()
+        #identify associated ids per batch
+        if correct_over_same_ids_per_batch:
+            #create a list with corr_df for every batch
+            corr_dfs_association = list()
+            for batch in batch_levels:
+                #subset fitsamples to fitsamples in given batch
+                idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
+                fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                corr_df_batch, log_str = get_ids_for_correction(data_df = data_processed_df,
+                                                                metadata_df = metadata_df,
+                                                                adjust_cols_list = covariates,
+                                                                adjust_cols_dtypes_list = covariates_dtypes_list,
+                                                                fitsamples_idx_list = fitsamples_idx_batch_list,
+                                                                alpha_significance = alpha_significance)
+                corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
+                corr_dfs_association.append(corr_df_batch)
+            #concatenate all corr_dfs over batches
+            corr_pre_df = pd.concat(corr_dfs_association,axis=1)
+            #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
+            corr_pre_df["pval"] = corr_pre_df[list(filter(lambda x: "pval" in x, corr_pre_df.columns))].min() #HANDLE DIFFERENT COVARIATES #TODO
+        else:
+            corr_pre_df = None
+        #batchwise correction
         for batch in batch_levels:
-            idx_batch_list = list(
-                    metadata_df[
-                        metadata_df[batch_level[0]]==batch].index)
-            fitsamples_idx_batch_list = list(metadata_df.loc[
-                list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+            #subset fitsamples to fitsamples in given batch
+            idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
+            fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
             if len(fitsamples_idx_batch_list)==0:
                 warning_batch_level_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    +f"###ERROR###: No correction variable defined.\n"
+                    +"###ERROR###: No correction variable defined.\n"
                 log_string += warning_batch_level_str
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                 + "###ERROR###:No samples for model-fitting present in batch "+str(batch)+"\nPlease adjust fitsamples argument.\n" 
                 return data_processed_df, log_string, corr_dfs
+            
+            #call correction
             (
                 data_processed_batch_df, log_string_batch, 
-                corr_df
+                corr_df_batch
             ) =  adjust_confounders(
                 data_df = data_processed_df.loc[idx_batch_list],
                 metadata_df = metadata_df.loc[idx_batch_list],
@@ -697,35 +815,56 @@ def adjust_confounders_batchwise(
                 random_state = random_state,
                 fitsamples_idx_list = fitsamples_idx_batch_list,
                 alpha_significance = alpha_significance,
-                alphas_models = np.logspace(*alphas_models)
+                alphas_models = np.logspace(*alphas_models),
+                corr_df = corr_pre_df
                 )  
-            log_string += log_string_batch      
-            corr_df.columns = [x + " batch"+str(batch) for x in corr_df.columns]
-        corr_dfs.append(corr_df)
-        processed_df_list.append(data_processed_batch_df)
+            
+            log_string += log_string_batch
+            processed_df_list.append(data_processed_batch_df)
+            
+            #save corr_df_batch to list
+            corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
+            corr_dfs.append(corr_df_batch)
     
-    # #concatenate all corrected profiles
-    data_processed_df=pd.concat(processed_df_list)
-    corr_dfs=pd.concat(corr_dfs,axis=1)
+        # #concatenate all corrected profiles
+        data_processed_df=pd.concat(processed_df_list,axis=1)
+    
+    #concatenate all corr_dfs over batches
+    corr_df = pd.concat(corr_dfs,axis=1)
+    if correct_over_same_ids_per_batch:
+        #add r2 values
+        corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
         
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-    +f"Batchwise Adjustment finished!"
-    return data_processed_df, log_string, corr_dfs    
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") + "\tBatchwise Adjustment finished!\n"
+    
+    return data_processed_df, log_string, corr_df    
 
+
+
+#%%
 
 if __name__ == "__main__":
-
+    
     module = "CORRECTION"
+    
     #set parameters
     if len(sys.argv) <= 1:
         #if script called within python
-        ## counter
-        ## workdir
-        ## data
-        ## metadata
-        ## log file
         skip_parser = True
+        #REMOVE AFTER SUCCESSFULL TESTING #TODO
+        '''
+        run_id = 0
+        counter = int(input("Please define the counter value (int): "))
+        workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)")
+        data_df_fp = askopenfilename(title="Please select your input data matrix")
+        meta_df_fp = askopenfilename(title="Please select your metadata file")
+        param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_CORRECTION_parameters.json")
+        out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_CORRECTION")
+        log_file = os.path.join(workdir_fp, "logfile_"+str(run_id)+".txt")
+        idmap_fp = os.path.join(workdir_fp, "02_FILTERING_LONG/id_mapping.tsv")
+        outname = "data_"+"{:02d}".format(int(counter))+".tsv"
         data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = helper.skip_parser_init(module)
+        '''
     else:
         #if script called from terminal
         skip_parser = False
@@ -864,12 +1003,13 @@ if __name__ == "__main__":
                 if exit_module:
                     sys.exit(1)
     
+    #transpose data
+    data_df = data_df.T
     
     # -------------------------------------------------------------------------#
     # Perform Batch Correction                                                 #
     # -------------------------------------------------------------------------#
-    #transpose data
-    data_df = data_df.T
+    
 
     if parameters_dict["correct_method"] == "harmony":
 
@@ -983,6 +1123,7 @@ if __name__ == "__main__":
                 n_na = metadata_df[metadata_df["MS.Batch"].isna()].shape[0]
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                     +f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
+        if "###ERROR###" in log_string:
             helper.logger(log_file, log_string)
             if exit_module:
                 sys.exit(1)
@@ -1016,7 +1157,7 @@ if __name__ == "__main__":
                     +f"###ERROR###: Column {var} could not be casted to {dt}.\n"
             else:
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###ERROR###: Datatype not valid.\n"                
+                + "###ERROR###: Datatype not valid.\n"                
 
         # Check if requested model is implemented
         if parameters_dict["adjust_model"].lower() not in [
@@ -1024,7 +1165,12 @@ if __name__ == "__main__":
                 
                 log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
                 +f"###ERROR###: Model {parameters_dict['adjust_model']} not implemented, no correction applied.\n"                
-
+        
+        #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
+        if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
+            parameters_dict["adjust_covariates_onebyone"] = 1
+            log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+        
         if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
             
             fit_col, fit_level = parameters_dict["adjust_fitsamples_meta"]
@@ -1035,8 +1181,8 @@ if __name__ == "__main__":
                     +f"Level {fit_level} in meta column {fit_col} will be used to adjust samples."  + "\n"
             log_string += info_fitsamples_str
 
-            # Check whether the same levels are defined in samples
-
+            # Check whether the same levels are defined in samples #DO WE NEEDED? #???
+            """
             levels_fitsamples = set(
                 metadata_df.loc[
                     fitsamples_idx_list, parameters_dict["adjust_cols"][0]])
@@ -1053,7 +1199,8 @@ if __name__ == "__main__":
                 ~metadata_df[parameters_dict["adjust_cols"][0]].isin(
                     list(levels_data-levels_fitsamples))]
             data_df = data_df.loc[metadata_df.index]
-        
+            """
+            
         if "ERROR" in log_string:
             # Exit module because of error
             helper.logger(log_file,log_string)
@@ -1061,18 +1208,41 @@ if __name__ == "__main__":
                 sys.exit(1)
         
         else:
-                
-            data_processed_df, log_string_adjust, corr_df = adjust_confounders(
-                data_df = data_df,
-                metadata_df = metadata_df,
-                model_string = parameters_dict['adjust_model'],
-                adjust_cols_list = parameters_dict["adjust_cols"],
-                adjust_cols_dtypes_list = parameters_dict["adjust_cols_dtypes"],
-                random_state = seed,
-                fitsamples_idx_list = fitsamples_idx_list,
-                alpha_significance = parameters_dict["adjust_alpha"],
-                alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"])
-            )
+            if parameters_dict["adjust_covariates_onebyone"]:   
+                data_processed_df = data_df
+                corr_df, log_str = get_ids_for_correction(data_df=data_processed_df,
+                                                          metadata_df=metadata_df,
+                                                          adjust_cols_list=parameters_dict["adjust_cols"],
+                                                          adjust_cols_dtypes_list=parameters_dict["adjust_cols_dtypes"],
+                                                          fitsamples_idx_list=fitsamples_idx_list,
+                                                          alpha_significance=parameters_dict["adjust_alpha"])
+                log_string += log_str
+                for c in range(len(parameters_dict["adjust_cols"])):
+                    data_processed_df, log_string_adjust, corr_df = adjust_confounders(
+                        data_df = data_processed_df,
+                        metadata_df = metadata_df,
+                        model_string = parameters_dict['adjust_model'],
+                        adjust_cols_list = [parameters_dict["adjust_cols"][c]],
+                        adjust_cols_dtypes_list = [parameters_dict["adjust_cols_dtypes"][c]],
+                        random_state = seed,
+                        fitsamples_idx_list = fitsamples_idx_list,
+                        alpha_significance = parameters_dict["adjust_alpha"],
+                        alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
+                        corr_df = corr_df)
+                    log_string += log_string_adjust
+                    
+            else:
+                data_processed_df, log_string_adjust, corr_df = adjust_confounders(
+                    data_df = data_df,
+                    metadata_df = metadata_df,
+                    model_string = parameters_dict['adjust_model'],
+                    adjust_cols_list = parameters_dict["adjust_cols"],
+                    adjust_cols_dtypes_list = parameters_dict["adjust_cols_dtypes"],
+                    random_state = seed,
+                    fitsamples_idx_list = fitsamples_idx_list,
+                    alpha_significance = parameters_dict["adjust_alpha"],
+                    alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
+                    corr_df = None)
 
     elif parameters_dict["correct_method"] == "adjust_confounders_batchwise":
         
@@ -1084,6 +1254,12 @@ if __name__ == "__main__":
             helper.logger(log_file, log_string)
             if exit_module:
                 sys.exit(1)
+        
+        #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
+        if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
+            parameters_dict["adjust_covariates_onebyone"] = 1
+            log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+
 
         fitsamples_idx_list = None
         if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
@@ -1110,19 +1286,24 @@ if __name__ == "__main__":
                     +f"Correction model will be fitted on {len(fitsamples_idx_list)} samples.\n"\
                     +f"Level {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
             log_string += info_fitsamples_str
-
+        
         data_processed_df, log_string, corr_dfs = adjust_confounders_batchwise(
-            data_df,
-            metadata_df, 
+            data_df=data_df,
+            metadata_df=metadata_df, 
             model_string=parameters_dict["adjust_model"], 
             batch_level=parameters_dict["batch_cols_meta"], 
             random_state=seed, 
             covariates=parameters_dict["adjust_cols"], 
             covariates_dtypes_list=parameters_dict["adjust_cols_dtypes"],
-            alpha_significance=0.05, alphas_models=[-3,3,7],
-            fitsamples_idx_list=fitsamples_idx_list, correct_one_by_one=parameters_dict["adjust_batchwise_onebyone"])
+            alpha_significance=parameters_dict["adjust_alpha"], 
+            alphas_models=parameters_dict["adjust_alphas_models"],
+            fitsamples_idx_list=fitsamples_idx_list, 
+            correct_one_by_one=parameters_dict["adjust_covariates_onebyone"],
+            correct_over_same_ids_per_batch=parameters_dict["adjust_covariates_over_same_ids_per_batch"])
     else:
-        data_processed_df = data_df.copy()
+        data_processed_df = data_df
+        log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+        +f"###ERROR###: correct_method '{parameters_dict['correct_method']}' not implemented. No correction applied.\n"
 
     data_processed_df = data_processed_df.T
 
@@ -1132,4 +1313,4 @@ if __name__ == "__main__":
                         log_file=log_file, module_output=log_string,
                         out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
 
-# %%
+
