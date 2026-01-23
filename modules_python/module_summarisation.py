@@ -40,8 +40,8 @@ from tqdm import tqdm
 #own scripts
 import module_helper as helper 
 
-import warnings
-warnings.filterwarnings("ignore")
+#import warnings
+#warnings.filterwarnings("ignore")
 
 def print_args(func):
     """ Decorator that prints arguments of a function (sanity checks).
@@ -594,7 +594,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             corrs=temp_df.T.corr()
             corrs_hmean=[weighted_harmonic_mean(corrs.loc[x]) for x in corrs.index]
             temp_mask=filter_mask_z.loc[temp_df.index].map(lambda x: int(str(float(x)).split(".")[-1]))
-            measured_precs=(temp_mask!=0).sum(axis=1)
+            measured_precs=(temp_mask==0).sum(axis=1)
             
             hmean_df["norm. Abundance"]=sums/sums.max() #division by zero if peptide not abundant over all fractions => should be excluded in remove_peptides_with_excessing_nans
             hmean_df["norm. Correlation"]=corrs_hmean/np.max(corrs_hmean) #division by zero if all precursors correlate zero
