@@ -512,7 +512,7 @@ def get_normalization_factors_delayed(arr, module_output, method="trf", bounds=(
         normalization factors for all samples and fractions (if present).
 
     """
-    module_output += "### WARNING: This is preliminary code and hasn't been sufficiently tested.\n"
+    module_output += "###WARNING###: This is preliminary code and hasn't been sufficiently tested.\n"
 
     #global intensities
     x0 = np.ones(arr.shape[1:]).flatten()
@@ -712,7 +712,7 @@ if __name__ == "__main__":
             data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
         else:
             data_processed_df = data_df
-            module_output += "###WARNING###: Normalzation method not implemented. Skipped module."
+            module_output += f"###WARNING###: Unknown filtering method: {parameters_dict["normalization_method"]} — skipping.\n"
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
