@@ -901,7 +901,7 @@ if __name__ == "__main__":
             if parameters_dict["eval_missingness_on_protein_presence"]:
                 #check that parameters_dict["missingness_type_protein_absence"] is in missingness types
                 if parameters_dict["missingness_type_protein_absence"] not in impu_table_df["missingness_type"].drop_duplicates().tolist() and parameters_dict["hierarchical_imputation"]:
-                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
+                    log = "###WARNING###: Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
                 else:
                     # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
                     protmissing_mask_df = assign_missingness(data_df=data_df,
@@ -1108,7 +1108,7 @@ if __name__ == "__main__":
                     missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
                     notimplemented_missingness_types = set(missingness_types) - {"MAR","MNAR",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/MAR",parameters_dict["missingness_type_protein_absence"] + "/MNAR"}
                     if  notimplemented_missingness_types != set():
-                        log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\t###WARNING### No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
+                        log = "###WARNING###: No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
                         helper.logger(log_file, module_output=log)
                 else: 
                     missingness_types = ["simple"]
