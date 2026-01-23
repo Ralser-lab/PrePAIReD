@@ -889,7 +889,7 @@ if __name__ == "__main__":
                                                              protein_col = parameters_dict["protein_col"])
         else:
             data_processed_df = data_df
-            module_output += "###WARNING###: Summarization method not found. Skipped module.\n"
+            module_output += f"###WARNING###: Unknown summarization method: {parameters_dict["summarization_method"]} — skipping.\n"
     except Exception as e:
         helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
         helper.logger(log_file, "###ERROR###: "+str(e)+"\n")
