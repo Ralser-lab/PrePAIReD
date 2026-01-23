@@ -712,7 +712,7 @@ if __name__ == "__main__":
             data_processed_arr, module_output = normalize_delayed(data_arr, module_output, parameters_dict["method"], parameters_dict["bounds"])
         else:
             data_processed_df = data_df
-            module_output += f"###WARNING###: Unknown normalization method: {parameters_dict["normalization_method"]} — skipping.\n"
+            module_output += f"###WARNING###: Unknown normalization method: {parameters_dict['normalization_method']} — skipping.\n"
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
