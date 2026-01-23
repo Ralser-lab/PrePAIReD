@@ -67,7 +67,7 @@ def batchcorrect_harmony(
             - `log_list` (list of str): Log messages detailing the correction process.
     """
     log_string = ""
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"Start HARMONY batch correction\n")
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "+"\tStart HARMONY batch correction\n")
 
     data_arr = data_df.to_numpy()
     # Apply harmony algorithm
@@ -79,8 +79,8 @@ def batchcorrect_harmony(
         data_processed_arr, 
         index=data_df.index, columns=data_df.columns)
 
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: "\
-                      +"Finished HARMONY batch correction")
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S"\
+                      +"\tFinished HARMONY batch correction")
 
     return data_processed_df, log_string
 
@@ -133,7 +133,7 @@ def batchcorrect_combat(
         """
         log_string = ""
         log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S: "+"Start COMBAT batch correction.\n")
+                "%Y-%m-%d%t%H:%M:%S"+"\tStart COMBAT batch correction.\n")
 
         # effects to preserve during batch correction
         if cov_preserve_list != None:
@@ -149,7 +149,7 @@ def batchcorrect_combat(
         if fitsamples_idx_list != None:
             
             log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on defined samples.\n")
+                    "%Y-%m-%d%t%H:%M:%S"+"\tFit COMBAT Class on defined samples.\n")
 
             Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
@@ -166,7 +166,7 @@ def batchcorrect_combat(
         else:
             
             log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S: "+"Fit COMBAT Class on all samples.\n")
+                    "%Y-%m-%d%t%H:%M:%S"+"\tFit COMBAT Class on all samples.\n")
 
             c_fit = combat_model.fit(
                 Y=data_df.T.to_numpy(),
@@ -177,7 +177,7 @@ def batchcorrect_combat(
 
 
         log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S: "+"Transform data.\n")
+                    "%Y-%m-%d%t%H:%M:%S"+"\tTransform data.\n")
 
         samples_all = data_df.index
         Y_all = data_df.to_numpy()
@@ -201,14 +201,13 @@ def batchcorrect_combat(
         # Check if output df consists of NA's exclusively
         # if so return error in Log and don't return processed df
         if data_processed_df.isna().all().all():
-            log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S: "+"###ERROR###: All Values in DF were transformed to NA.\n"\
-                    +"Please filter input dataframe for features with high missing values or low variance."  + "\n")
+            log_string += "###ERROR###: All Values in DF were transformed to NA.\n"\
+                    +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance."  + "\n"
             return log_string
         else:
             log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S: "\
-                +"Finished COMBAT batch correction successfully.\n")
+                "%Y-%m-%d%t%H:%M:%S"\
+                +"\tFinished COMBAT batch correction successfully.\n")
 
             return data_processed_df, log_string
         
@@ -316,9 +315,8 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # check how many samples are available per feature
             # do not check association if <5
             if len(common_samples) < 5:
-                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
-                        f"No Correction will be applied on {idx}.\n"
+                log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                        f"\t\t\t\tNo Correction will be applied on {idx}.\n"
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
 
@@ -326,9 +324,8 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # do not check association if <5 samples per group
             elif (dt == "ordinal") or (dt=="nominal"):
                 if any([len(x) for x in samples_idx_test_list]) < 5:
-                    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    + f"###Warning###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
-                        f"No Correction will be applied on {idx}.\n"
+                    log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                        f"\t\t\t\tNo Correction will be applied on {idx}.\n"
 
                     
                     # save nan if sample size was not sufficient
@@ -355,8 +352,7 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                         pval_test = stats.f_oneway(*samples_test_list).pvalue
                         pval = pval_test
                         if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
-                            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                            + f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}"
+                            log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
                         corr_df.loc[idx,coef_type_str + metadata_var] = association
                     elif len(metadata_df.loc[common_samples,metadata_var].unique())<2:
                         #no association possible with one value per variable
@@ -373,8 +369,7 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                     pval_test=stats.f_oneway(*samples_test_list).pvalue
                     pval = pval_test
                     if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
-                        log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                        +f"WARNING: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}"
+                        log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
                     corr_df.loc[idx,coef_type_str + metadata_var]=association
 
                 elif dt =="continuous":
@@ -500,7 +495,7 @@ def adjust_confounders(
     data_processed_df = data_df.copy()
 
     log_string = ""
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") + "Start Adjustment.\n"
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tStart Adjustment.\n"
     
     #calculate the association and p-value for all IDs if not provided as function argument
     if corr_df is None:
@@ -542,11 +537,9 @@ def adjust_confounders(
         common_samples=list(set(data_processed_df[idx].dropna().index) & set(C.index))
 
         if len(common_samples)<len(data_processed_df.index):
-            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-            + "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped."
+            log_string += "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped.\n"
         if len(common_samples) < len(C):
-            log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-            +"###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped."
+            log_string += "###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped.\n"
         C=C.loc[common_samples]
         #data_df_sel=data_processed_df.loc[common_samples]
 
@@ -605,8 +598,7 @@ def adjust_confounders(
             try:
                 estimator.fit()
             except ValueError:
-                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                +f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped."
+                log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped.\n"
                 continue
             pred_values=estimator.predict(C_z).values
             #pred_values_f=estimator.predict(C_fz).values
@@ -614,7 +606,7 @@ def adjust_confounders(
             data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
 
     
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") +"Adjustment finished!"
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
     
     return data_processed_df, log_string, corr_df
 
@@ -792,12 +784,9 @@ def adjust_confounders_batchwise(
             idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
             fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
             if len(fitsamples_idx_batch_list)==0:
-                warning_batch_level_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    +"###ERROR###: No correction variable defined.\n"
+                warning_batch_level_str = "###ERROR###: No correction variable defined.\n"
                 log_string += warning_batch_level_str
-                log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                + "###ERROR###:No samples for model-fitting present in batch "+str(batch)+"\nPlease adjust fitsamples argument.\n" 
+                log_string += "###ERROR###: No samples for model-fitting present in batch "+str(batch)+"\n\t\t\t\tPlease adjust fitsamples argument.\n" 
                 return data_processed_df, log_string, corr_dfs
             
             #call correction
@@ -833,7 +822,7 @@ def adjust_confounders_batchwise(
         #add r2 values
         corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
         
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S: ") + "\tBatchwise Adjustment finished!\n"
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tBatchwise Adjustment finished!\n"
     
     return data_processed_df, log_string, corr_df    
 
@@ -1033,7 +1022,7 @@ if __name__ == "__main__":
             fit_col, fit_level = combat_kwargs_dict["fitsamples_meta"]
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
                     +f"\tCOMBAT will be fitted on {len(fitsamples_idx_list)} samples."\
                     +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit COMBAT Model."  + "\n"
             log_string += info_fitsamples_str
@@ -1152,7 +1141,7 @@ if __name__ == "__main__":
             fit_col, fit_level = parameters_dict["adjust_fitsamples_meta"]
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
                     +f"\tAdjustment models will be fitted on {len(fitsamples_idx_list)} samples."\
                     +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to adjust samples."  + "\n"
             log_string += info_fitsamples_str
@@ -1255,7 +1244,7 @@ if __name__ == "__main__":
                     sys.exit(1)
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
                     +f"\tCorrection model will be fitted on {len(fitsamples_idx_list)} samples."\
                     +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
             log_string += info_fitsamples_str
