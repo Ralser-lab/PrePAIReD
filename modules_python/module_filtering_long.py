@@ -188,7 +188,7 @@ def exclude_runs_not_in_metadata(input_df, metadata_df=None, input_filename_colu
             return([input_df,log])
         input_df = input_df[intersect_files]
         if len_input_df_before > len(input_df):
-            log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(len(intersect_files)) + " files present in metadata.\n"
+            log += "\t\t\t\t###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(len(intersect_files)) + " files present in metadata.\n"
     return([input_df, log])
 
 
@@ -414,7 +414,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     if filters_dict["filter_by_MScorr_evidence_combined"]:
         if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
             if keep_track:
-                log += "###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet"#IMPLEMENT IF NECCESSARY
+                log += "\t\t\t\t###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet"#IMPLEMENT IF NECCESSARY
             input_df = input_df[input_df["Ms1.Profile.Corr"] + 0.5 *
                         input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
             filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
@@ -438,7 +438,7 @@ def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=N
     log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during filtering of input_df\n\n"
     log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
     if input_df.index.tolist() == []:
-        log += "\t\t\t\t###WARNING### Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
+        log += "\t\t\t\t###WARNING###: Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
     return([input_df,mask_df,mask_description_df,log])
 
 
@@ -907,7 +907,7 @@ if __name__ == "__main__":
                 #switch off filters linked to missing columns
                 for missing_col in missing_cols_set:
                     parameters_dict[columns_filter_dict[missing_col]] = False
-                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "###WARNING###"+"Filter " + columns_filter_dict[missing_col] + " set to False, because the column(s) "+", ".join(list(missing_cols_set)) + " is/are missing in the DIA-NN output file."
+                    log = "###WARNING###: "+"Filter " + columns_filter_dict[missing_col] + " set to False, because the column(s) "+", ".join(list(missing_cols_set)) + " is/are missing in the DIA-NN output file."
             if len(missing_cols_set & set(["Mass.Evidence","Ms1.Profile.Corr"])) > 0:
                 parameters_dict["filter_by_MScorr_evidence_combined"]=False
             else:
