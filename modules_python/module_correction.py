@@ -945,7 +945,7 @@ if __name__ == "__main__":
     
     if flag_sample_intersect_int:
         log_string += time.strftime('%Y-%m-%d\t%H:%M:%S') \
-                +f"\t{metadata_df.shape[0]} remain for analysis.\n"
+                +f"\t{metadata_df.shape[0]} sample(s) remain for analysis.\n"
         
     # Warn user that some samples do not have a batch annotation
     if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
