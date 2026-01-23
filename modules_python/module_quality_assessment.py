@@ -25,6 +25,14 @@ from scipy.stats import chi2
 
 ### Generalize colors as an input_variable
 
+### Possible extensions
+## Options to add later
+## Group-wise plots
+## if sample list is provided samples vs. all
+## Clustermap of DIANN metrics
+## Clustermap with groups (before and after), multi layer (QC vs. biological)
+## PCA with explained confounders (MPCA?)
+
 def get_CV_log(values, base=2):
     cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
     return cv
@@ -124,8 +132,7 @@ def get_color_values_by_property(data_origin, coloring_property, data_processed=
         return column_values_origin, column_values_processed
     return column_values_origin
 
-def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous"):
-
+def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous", shuffle=False, seed=42, take_abs = False):
     if plot_by == "Missingness":
         property_peptide = data[indices].isna().T.sum()
     elif plot_by == "Mean":
@@ -141,18 +148,26 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     elif plot_by in ["Correlation","Corr_pvalue"]:
         if metadata is None or not column_metadata:
             raise ValueError("Metadata or Metadata column or not defined.")
+        metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data.index]
+        if shuffle:
+            np.random.seed(seed)
+            for item in metadata_values_:
+                np.random.shuffle(item)
         if data_type == "continuous":
-            stats = [pearsonr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
+            stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
         elif data_type == "ordinal":
-            stats = [spearmanr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
+            stats = [spearmanr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
         elif data_type == "nominal":
-            stats = [pointbiserialr(metadata.loc[data.loc[index,indices].dropna().index,column_metadata],data.loc[index,data.loc[index,indices].dropna().index]) for index in data.index]
-        if plot_by == "Correlation":
-            property_peptide = pd.Series(index=data.index, data=[abs(el[0]) for el in stats])
-        elif plot_by == "Corr_pvalue":
-            property_peptide = pd.Series(index=data.index, data=[-1*np.log10(el[1]) for el in stats])
+            stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
         else:
             raise ValueError("data_type not defined.")
+        if plot_by == "Correlation":
+            if take_abs:
+                property_peptide = pd.Series(index=data.index, data=[abs(el[0]) for el in stats])
+            else:
+                property_peptide = pd.Series(index=data.index, data=[el[0] for el in stats])
+        elif plot_by == "Corr_pvalue":
+            property_peptide = pd.Series(index=data.index, data=[-1*np.log10(el[1]) for el in stats])
     return property_peptide
 
 ### For all modules to check how either plot changes, adjust labels for summarization
@@ -444,9 +459,6 @@ def set_aspect_equal(ax):
     ax.set_aspect(aspect)
     return
 
-
-
-
 def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='none', linewidth=2, **kwargs):
 
     # Covariance matrix
@@ -497,9 +509,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     #continuous = False
     #column_color = "MS.Batch"
     #column_color = "Sample.Type"
-    
-    ### Error handling needed if metadata column is not float!!!
-    
+        
     if not use_metadata_coloring:
         if not continuous:
             continuous = True
@@ -770,7 +780,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
 
 ### Lin Reg per selection -> flag if continuous = False
 ### Title Before/After
-def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2):
+def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step=""):
 
     ### change to dummy conversion in future????
     try:
@@ -785,7 +795,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
         
     # Calculate property
-    property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type)
+    property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type, take_abs=True)
     # Get n top hits
     selection = property_peptide.sort_values(ascending=False).index[:top_n]
     
@@ -863,6 +873,10 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
             ax_scatter_processed.grid(axis="y")
             ax_scatter_processed.tick_params(labelsize=fontsize)
             
+            if ind == 0:
+                ax_scatter_origin.set_title("Before "+step, fontsize=fontsize)
+                ax_scatter_processed.set_title("After "+step, fontsize=fontsize)
+            
             if plot_linreg:
                 indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index])]
                 coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
@@ -873,7 +887,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_decision_boundary_estimation_curve(data_origin, metadata, method="response-binned-splines", outfile="Decision_boundary_estimation.png", sample_type_column=None, sample_type=None, size=(5,5), n_knots=3, boundary=0.5, detection_proportion_cap=1, x_lim=None, x_label="Mean(log2(Abundance))", plot_all_fits=True, fs=15):
+def plot_decision_boundary_estimation_curve(data_origin, metadata, method="response-binned-splines", outfile="Decision_boundary_estimation.png", sample_type_column=None, sample_type=None, size=(5,5), n_knots=3, boundary=0.5, detection_proportion_cap=1, x_lim=None, x_label="Mean(log2(Abundance))", plot_all_fits=True, fontsize=15):
     
     def func1_logitlinear(x,b0,b1):
             return b0 + b1 * x
@@ -982,14 +996,121 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
         
     ax.set_xlim(x_lim)
     ax.set_ylim(0,1)
-    ax.tick_params(labelsize=fs)
+    ax.tick_params(labelsize=fontsize)
     
-    ax.set_xlabel(x_label, fontsize=fs)
-    ax.set_ylabel("Completeness", fontsize=fs)
-    ax.set_title("Decision Boundary: {:.2f}".format(decision_boundary), fontsize = fs)
+    ax.set_xlabel(x_label, fontsize=fontsize)
+    ax.set_ylabel("Completeness", fontsize=fontsize)
+    ax.set_title("Decision Boundary: {:.2f}".format(decision_boundary), fontsize=fontsize)
     
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize = fs)
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=fontsize)
     ax.set_axisbelow(True)
     ax.grid()
     
     plt.savefig(outfile,bbox_inches="tight")
+    
+def plot_correlation_distribution(data_origin, metadata, data_processed = None, sample_type = None, sample_type_column = None, column_metadata = "Order", data_type = "continuous", seed = 42, nbins = 50, size = (10,5), fontsize = 15, fontsize_legend = 15, outfile = "Correlation_distribution.png", use_same_random = True, legend_loc = "upper right", step = ""):
+    ### change to dummy conversion in future????
+    try:
+        metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
+    except:
+        raise TypeError("Meta data column needs to be numeric.")
+    
+    # sample_type selection
+    if data_processed is not None:
+        indices_origin, indices_processed = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
+    else:
+        indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
+        
+    # Calculate correlation
+    corr_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, data_type=data_type, take_abs=False)
+    corr_peptide_random = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, data_type=data_type, shuffle=True, seed=seed)
+    
+    range_min_origin = np.min((np.min(corr_peptide),np.min(corr_peptide_random)))
+    range_max_origin = np.max((np.max(corr_peptide),np.max(corr_peptide_random)))
+    
+    hist_corr_origin = np.histogram(corr_peptide,bins=nbins,range=(range_min_origin,range_max_origin))
+    hist_corr_random_origin = np.histogram(corr_peptide_random,bins=nbins,range=(range_min_origin,range_max_origin))
+    
+    if data_processed is not None:
+        # Calculate correlation
+        corr_peptide = get_property(data_processed, indices_processed, metadata, column_metadata=column_metadata, data_type=data_type, take_abs=False)
+        if not use_same_random:
+            corr_peptide_random = get_property(data_processed, indices_processed, metadata, column_metadata=column_metadata, data_type=data_type, shuffle=True, seed=seed)
+        
+        range_min_processed = np.min((np.min(corr_peptide),np.min(corr_peptide_random)))
+        range_max_processed = np.max((np.max(corr_peptide),np.max(corr_peptide_random)))
+    
+        hist_corr_processed = np.histogram(corr_peptide,bins=nbins,range=(range_min_processed,range_max_processed))
+        if not use_same_random:
+            hist_corr_random_processed = np.histogram(corr_peptide_random,bins=nbins,range=(range_min_processed,range_max_processed))
+        else: 
+            hist_corr_random_processed = hist_corr_random_origin
+            
+    if data_processed is not None:
+        x_min = np.min((range_min_origin,range_min_processed))
+        x_max = np.max((range_max_origin,range_max_processed))
+        y_max = np.max((np.max((np.max(hist_corr_origin[0]),np.max(hist_corr_random_origin[0]))),np.max((np.max(hist_corr_processed[0]),np.max(hist_corr_random_processed[0])))))
+    else:
+        x_min = range_min_origin
+        x_max = range_max_origin
+        y_max = np.max((np.max(hist_corr_origin[0]),np.max(hist_corr_random_origin[0])))
+        
+    fig = plt.figure(figsize=size)
+    fig.set_size_inches(size)
+    
+    if data_processed is not None:
+        gs = GridSpec(1,2, width_ratios = [0.5,0.5], hspace = 0.05, wspace = 0.05)
+    else:
+        gs = GridSpec(1,1, hspace= 0.05)
+        
+    ax_origin = fig.add_subplot(gs[0,0])
+    ax_origin.bar((hist_corr_origin[1][:-1]+hist_corr_origin[1][1:])/2, hist_corr_origin[0],alpha=1, color="w",width=hist_corr_origin[1][1]-hist_corr_origin[1][0])
+    ax_origin.bar((hist_corr_random_origin[1][:-1]+hist_corr_random_origin[1][1:])/2, hist_corr_random_origin[0],alpha=1, color="w",width=hist_corr_random_origin[1][1]-hist_corr_random_origin[1][0])
+    ax_origin.bar((hist_corr_origin[1][:-1]+hist_corr_origin[1][1:])/2, hist_corr_origin[0],alpha=0.5, color="C0",width=hist_corr_origin[1][1]-hist_corr_origin[1][0],label=column_metadata)
+    ax_origin.bar((hist_corr_random_origin[1][:-1]+hist_corr_random_origin[1][1:])/2, hist_corr_random_origin[0],alpha=0.5, color="C1",width=hist_corr_random_origin[1][1]-hist_corr_random_origin[1][0],label="Random")
+    
+    ax_origin.tick_params(labelsize = fontsize)
+    if data_type == "continuous":
+        ax_origin.set_xlabel("Pearson R",fontsize=fontsize)
+    elif data_type == "ordinal":
+        ax_origin.set_xlabel("Spearman R",fontsize=fontsize)
+    elif data_type == "nominal":
+        ax_origin.set_xlabel("Point biserial R",fontsize=fontsize)
+    ax_origin.set_ylabel("Occurence",fontsize=fontsize)
+    ax_origin.set_axisbelow(True)
+    ax_origin.grid(axis="y")
+    ax_origin.set_xlim(x_min,x_max)
+    ax_origin.set_ylim(0,y_max*1.05)
+    
+    if data_processed is not None:
+        ax_processed = fig.add_subplot(gs[0,1])
+        ax_processed.bar((hist_corr_processed[1][:-1]+hist_corr_processed[1][1:])/2, hist_corr_processed[0],alpha=1, color="w",width=hist_corr_processed[1][1]-hist_corr_processed[1][0])
+        ax_processed.bar((hist_corr_random_processed[1][:-1]+hist_corr_random_processed[1][1:])/2, hist_corr_random_processed[0],alpha=1, color="w",width=hist_corr_random_processed[1][1]-hist_corr_random_processed[1][0])
+        ax_processed.bar((hist_corr_processed[1][:-1]+hist_corr_processed[1][1:])/2, hist_corr_processed[0],alpha=0.5, color="C0",width=hist_corr_processed[1][1]-hist_corr_processed[1][0])
+        ax_processed.bar((hist_corr_random_processed[1][:-1]+hist_corr_random_processed[1][1:])/2, hist_corr_random_processed[0],alpha=0.5, color="C1",width=hist_corr_random_processed[1][1]-hist_corr_random_processed[1][0])
+        
+        ax_processed.tick_params(labelsize = fontsize)
+        if data_type == "continuous":
+            ax_processed.set_xlabel("Pearson R",fontsize=fontsize)
+        elif data_type == "ordinal":
+            ax_processed.set_xlabel("Spearman R",fontsize=fontsize)
+        elif data_type == "nominal":
+            ax_processed.set_xlabel("Point biserial R",fontsize=fontsize)
+        ax_processed.set_ylabel("")
+        ax_processed.set_yticklabels([])
+        ax_processed.set_axisbelow(True)
+        ax_processed.grid(axis="y")
+        ax_processed.set_xlim(x_min,x_max)
+        ax_processed.set_ylim(0,y_max*1.05)
+        
+        ax_origin.set_title("Before "+step, fontsize=fontsize)
+        ax_processed.set_title("After "+step, fontsize=fontsize)
+        
+    try:
+        ax_origin.legend(loc=legend_loc, fontsize=fontsize_legend)
+    except:
+        ax_origin.legend(loc="best", fontsize=fontsize_legend)
+        print("legend_loc not found. Using best")
+    
+    plt.savefig(outfile, bbox_inches="tight")
+    return
