@@ -1114,3 +1114,49 @@ def plot_correlation_distribution(data_origin, metadata, data_processed = None, 
     
     plt.savefig(outfile, bbox_inches="tight")
     return
+
+def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = "Order", sample_type = None, sample_type_column = None, size = (5,5), fontsize = 15, fontsize_legend = 15, outfile = "Imputation.png", detailed = True, imputation_value = 99):
+    try:
+        metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
+    except:
+        raise TypeError("Meta data column needs to be numeric.")
+    
+    # sample_type selection
+    indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column, sample_type)
+    
+    fig,ax = plt.subplots()
+    fig.set_size_inches(size)
+    x = metadata.loc[indices_origin,column_metadata]
+    
+    if detailed:
+        mask.fillna("0",inplace=True)
+        mask_entries = np.unique(mask.values)
+        for entry in mask_entries:
+            if entry!= "0":
+                count_entry = (mask==entry).sum()
+                ax.plot(x,count_entry[indices_origin],label=entry)
+                
+        imputation_comp = (mask!="0").sum()
+        ax.plot(x,imputation_comp[indices_origin], c="k",ls="--",label="Total")
+    else:
+        if any(mask=="MAR") or any(mask=="MNAR") or any(mask=="ProtAbsence") or any("ProtAbsence/MAR") or any("ProtAbsence/MNAR"):
+            mask = mask.isna().astype(float)*0.99
+        temp_mask=mask.map(lambda x: int(str(float(x)).split(".")[-1]))  
+        imputed_precs=(temp_mask!=imputation_value).sum(axis=0)
+        ax.plot(x,imputed_precs[indices_origin], c="k",ls="--",label="Total")
+    
+    ax.tick_params(which="both",labelsize = fontsize)
+    ax.set_xlabel(column_metadata, fontsize=fontsize)
+    ax.set_ylabel("Occurence", fontsize=fontsize)
+    if detailed:
+        ax.set_ylim(0,np.max(imputation_comp[indices_origin])*1.1)
+    else:
+        ax.set_ylim(0,np.max(imputed_precs[indices_origin])*1.1)
+    
+    ax.legend(loc="center left",fontsize=fontsize_legend, bbox_to_anchor=(1, 0.5))
+    
+    ax.set_axisbelow(True)
+    ax.grid()
+    
+    plt.savefig(outfile, bbox_inches="tight")
+    return
