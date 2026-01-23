@@ -781,7 +781,7 @@ if __name__ == "__main__":
     sample_filters_df.index.name = parameters_dict['metadata_sample_column']
     
     if methods == []:
-        log = "###WARNING### No filtering methods provided. Skipping filtering on wide format.\n"
+        log = "###WARNING###: No filtering methods provided. Skipping filtering on wide format.\n"
         helper.logger(log_file,log)
     else:
         for method in methods:
@@ -1084,7 +1084,7 @@ if __name__ == "__main__":
                     helper.logger(log_file,log)
                 
             else:
-                log = f"{timestamp()}\t###WARNING### Unknown filtering method: {method} — skipping.\n"
+                log = f"###WARNING###: Unknown filtering method: {method} — skipping.\n"
                 helper.logger(log_file,log)
 
 
