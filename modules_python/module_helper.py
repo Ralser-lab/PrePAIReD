@@ -1496,7 +1496,7 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         sys.exit(0)
 
 def skip_parser_init(module):
-	"""
+    """
     Import of neccessary files for module initialization if a module is called within python directly without parser.
 
     Parameters
