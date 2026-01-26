@@ -38,6 +38,7 @@ functions:
 	- save_data: saves data after processing to disk
 	- init_module: initializes the module and reads in all necessary data and arguments
 	- close_module: saves data to disk and exits the module
+	- skip_parser_init: import of neccessary files for module initialization if a module is called within python directly without parser.
 
 """
 
@@ -1495,16 +1496,44 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         sys.exit(0)
 
 def skip_parser_init(module):
+	"""
+    Import of neccessary files for module initialization if a module is called within python directly without parser.
+
+    Parameters
+    ----------
+    module : str
+        name of calling module, e.g. "NORMALISATION".
+
+    Returns
+    -------
+    data_df_fp : str
+        File path to input data that should be processed. 
+    param_fp : str
+        Directory containing parameter files.
+    out_dir_fp : str
+        Directory for files generated during the module.
+    meta_df_fp : str
+        File path to the metadata file.
+    log_file : str
+        File path to the log file.
+    idmap_fp : str
+        File path to the id mapping file.
+    counter : int
+        Counter for the step, used to modfiy the seed and output file naming.
+    outname : str
+        Name of the output file: data_${counter}.tsv using a two digit counter.
+
+    """
     counter = int(input("Please define the counter value (int): "))
     workdir_fp = askdirectory(title="Please select your working directory (where you can find all module subdirectories)",initialdir=os.path.abspath(os.getcwd()))
     if module == "FILTERING_LONG":
-        data_df_fp = askopenfilename(title="Please select your DIA-NN output report")
+        data_df_fp = askopenfilename(title="Please select your DIA-NN output report",initialdir=workdir_fp)
     else:
-        data_df_fp = askopenfilename(title="Please select your wide-format data")
+        data_df_fp = askopenfilename(title="Please select your wide-format data",initialdir=workdir_fp)
     meta_df_fp = askopenfilename(title="Please select your metadata file")
     param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_"+module+"_parameters.json")
     out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
-    log_file = askopenfilename(title="Please select your log_file")
+    log_file = askopenfilename(title="Please select your log_file",initialdir=workdir_fp)
     idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
     ### TODO
     ### Implement file exist check here with if/else and askopenfilename
