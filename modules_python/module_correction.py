@@ -26,6 +26,7 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 import time
+import os
 
 #statistics and modelling
 import pycombat #CoAxLab
@@ -282,7 +283,7 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
         samples_idx_list = fitsamples_idx_list
     
     # collect associations with meta data variables
-    corr_df=pd.DataFrame(index=data_df.columns,columns=["R2"])
+    corr_df=pd.DataFrame(index=data_df.columns)
     corr_df.sort_index(inplace=True)
     
     # iterate over features
@@ -315,7 +316,7 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # check how many samples are available per feature
             # do not check association if <5
             if len(common_samples) < 5:
-                log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
                         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
@@ -535,11 +536,12 @@ def adjust_confounders(
         
         #order profiles and C in the same manner, remove samples with missing values
         common_samples=list(set(data_processed_df[idx].dropna().index) & set(C.index))
-
+        '''
         if len(common_samples)<len(data_processed_df.index):
             log_string += "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped.\n"
         if len(common_samples) < len(C):
             log_string += "###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped.\n"
+        '''
         C=C.loc[common_samples]
         #data_df_sel=data_processed_df.loc[common_samples]
 
@@ -751,7 +753,7 @@ def adjust_confounders_batchwise(
                 corr_dfs_covariate_list.append(corr_df_batch)
                 processed_batch_df_list.append(data_processed_batch_df)
             #combine corrected data over batches
-            data_processed_df = pd.concat(processed_batch_df_list,axis=1)
+            data_processed_df = pd.concat(processed_batch_df_list,axis=0)
             #combine_corr_dfs
             corr_dfs.append(pd.concat(corr_dfs_covariate_list,axis=1))
             
@@ -814,7 +816,7 @@ def adjust_confounders_batchwise(
             corr_dfs.append(corr_df_batch)
     
         # #concatenate all corrected profiles
-        data_processed_df=pd.concat(processed_df_list,axis=1)
+        data_processed_df=pd.concat(processed_df_list,axis=0)
     
     #concatenate all corr_dfs over batches
     corr_df = pd.concat(corr_dfs,axis=1)
@@ -982,7 +984,7 @@ if __name__ == "__main__":
     data_df = data_df.T
     
     # -------------------------------------------------------------------------#
-    # Perform Batch Correction                                                 #
+    # Perform Correction                                                 #
     # -------------------------------------------------------------------------#
     
 
@@ -1146,7 +1148,7 @@ if __name__ == "__main__":
                     +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to adjust samples."  + "\n"
             log_string += info_fitsamples_str
 
-            # Check whether the same levels are defined in samples #DO WE NEEDED? #???
+            # Check whether the same levels are defined in samples #DO WE NEEDED? Does not work for continuous variables anyway #???
             """
             levels_fitsamples = set(
                 metadata_df.loc[
@@ -1208,6 +1210,9 @@ if __name__ == "__main__":
                     alpha_significance = parameters_dict["adjust_alpha"],
                     alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
                     corr_df = None)
+            
+            #save dataframe with association pvalues, effect sizes and R2 after correction
+            corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
 
     elif parameters_dict["correct_method"] == "adjust_confounders_batchwise":
         
@@ -1249,7 +1254,7 @@ if __name__ == "__main__":
                     +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
             log_string += info_fitsamples_str
         
-        data_processed_df, log_string, corr_dfs = adjust_confounders_batchwise(
+        data_processed_df, log_string, corr_df = adjust_confounders_batchwise(
             data_df=data_df,
             metadata_df=metadata_df, 
             model_string=parameters_dict["adjust_model"], 
@@ -1262,6 +1267,10 @@ if __name__ == "__main__":
             fitsamples_idx_list=fitsamples_idx_list, 
             correct_one_by_one=parameters_dict["adjust_covariates_onebyone"],
             correct_over_same_ids_per_batch=parameters_dict["adjust_covariates_over_same_ids_per_batch"])
+        
+        #save dataframe with association pvalues, effect sizes and R2 after correction
+        corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
+        
     else:
         data_processed_df = data_df
         log_string += f"###WARNING###: Unknown correction method: {parameters_dict['correct_method']} — skipping.\n"
