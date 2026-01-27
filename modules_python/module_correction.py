@@ -727,11 +727,11 @@ def adjust_confounders_batchwise(
                                                                     adjust_cols_dtypes_list = [covariate_dtype],
                                                                     fitsamples_idx_list = fitsamples_idx_batch_list,
                                                                     alpha_significance = alpha_significance)
-                    corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
+                    corr_df_batch.columns = [col + "_" + covariate + "_batch"+str(batch) for col in corr_df_batch.columns]
                     corr_dfs_association.append(corr_df_batch)
                 corr_df_covariate = pd.concat(corr_dfs_association,axis=1)
                 #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
-                corr_df_covariate["pval"] = corr_df_covariate[list(filter(lambda x: "pval" in x, corr_df_covariate.columns))].min()
+                corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min()
             else:
                 corr_df_covariate = None
             #batchwise correction
