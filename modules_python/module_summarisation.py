@@ -570,13 +570,12 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
         return data_df, id_mapping_df, module_output
     
     # add new column to id_mapping_df
-    ##### ID Mapping as output for summarization
-    ######## Add save function
-    id_mapping_df_c = id_mapping_df.copy().set_index(seq_col, drop=False) ### remove to left precursors!!!!
-    id_mapping_df_c["Summarisation"] = 0
+    id_mapping_df["Summarisation"] = 0
         
-    pgs_list = id_mapping_df_c[protein_col].unique() ###
-    id_mapping_dict = {pg:list(id_mapping_df_c[id_mapping_df_c[protein_col]==pg][seq_col]) for pg in pgs_list} ### add _c here
+    pgs_list = id_mapping_df[protein_col].unique() 
+    id_mapping_dict = {pg:list(id_mapping_df[id_mapping_df[protein_col]==pg][seq_col]) for pg in pgs_list}
+    
+    id_mapping_df.set_index(seq_col,inplace=True)
     
     #for every protein group
     for pg in pgs_list:
@@ -607,7 +606,7 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
                 mask_indices=prec_df.index
                            
             if len(temp_df)>=min_peptides:
-                id_mapping_df_c.loc[mask_indices,"Summarisation"] = 1
+                id_mapping_df.loc[mask_indices,"Summarisation"] = 1
                 if pooling=="mean":
                     pg_profiles_df.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
                 elif pooling=="hmean":
@@ -616,11 +615,11 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
                     pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
                 #filter_mask.loc[mask_indices,data_df.columns]="s"
             else:
-                id_mapping_df_c.loc[mask_indices,"Summarisation"] = -1
+                id_mapping_df.loc[mask_indices,"Summarisation"] = -1
 
     pg_profiles_df.index.name="Protein.Group"
 
-    return(pg_profiles_df,id_mapping_df_c,module_output)
+    return(pg_profiles_df,id_mapping_df,module_output)
 
 def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
     """
