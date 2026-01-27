@@ -550,16 +550,13 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
         weights=[1,1,1]
 
     # unlog data
-    #data_df=helper.unlog_transform(data_df)
     data_df.replace(np.nan,0,inplace=True)
-    #module_output += "Begin Data Summarization: "+time.strftime("%Y-%m-%d%t%H:%M:%S")
         
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n"
     module_output += "\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n"
     module_output += "\t\t\t\t- for the summarization precursors were selected by high abundance, correlation and low number of imputed values with following weights: "+", ".join([str(x) for x in weights])+"\n"
 
     indices=data_df.index
-    #filter_mask = pd.DataFrame(columns=["Precursor summarized for Protein"],index=indices, values=0)    
         
     filter_mask_z = filter_mask.copy().replace(np.nan,0)
     
@@ -575,10 +572,11 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     # add new column to id_mapping_df
     ##### ID Mapping as output for summarization
     ######## Add save function
-    id_mapping_df["Summarisation"] = 0
+    id_mapping_df_c = id_mapping_df.copy().set_index(seq_col, drop=False) ### remove to left precursors!!!!
+    id_mapping_df_c["Summarisation"] = 0
         
-    pgs_list = id_mapping_df[protein_col].unique()
-    id_mapping_dict = {pg:list(id_mapping_df[id_mapping_df[protein_col]==pg][seq_col]) for pg in pgs_list}
+    pgs_list = id_mapping_df_c[protein_col].unique() ###
+    id_mapping_dict = {pg:list(id_mapping_df_c[id_mapping_df_c[protein_col]==pg][seq_col]) for pg in pgs_list} ### add _c here
     
     #for every protein group
     for pg in pgs_list:
@@ -607,11 +605,9 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
             else: 
                 prec_df=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]]
                 mask_indices=prec_df.index
-               
-            id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
-            id_mapping_df_c.loc[mask_indices,"Summarisation"] = 1
-            
+                           
             if len(temp_df)>=min_peptides:
+                id_mapping_df_c.loc[mask_indices,"Summarisation"] = 1
                 if pooling=="mean":
                     pg_profiles_df.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
                 elif pooling=="hmean":
@@ -619,25 +615,12 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
                 elif pooling=="gmean":
                     pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
                 #filter_mask.loc[mask_indices,data_df.columns]="s"
-                
-            #else: #protein excluded due to less than min_peptides precursors
-            #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["measured and kept"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-            #    filter_mask.loc[mask_indices,data_df.columns]=filter_mask.loc[mask_indices,data_df.columns].replace(mask_description.loc["Imputed"].values,mask_description.loc["Min. "+str(min_peptides)+" Peptides"])
-    #module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tEnd data summarization.\n"
+            else:
+                id_mapping_df_c.loc[mask_indices,"Summarisation"] = -1
+
     pg_profiles_df.index.name="Protein.Group"
-    #add gene names
-    #trans_df=data_df.reset_index().set_index("Protein.Group")
-    #trans_df=trans_df[~trans_df.index.duplicated(keep="first")] #remove duplicated PGs
-    #pg_profiles["Genes"]=trans_df.loc[pg_profiles.index,"Genes"]
-    #pg_profiles=pg_profiles.reset_index().set_index(["Genes","Protein.Group"])
-    #pg_profiles.columns=pg_profiles.columns.get_level_values(0)
-    #pg_profiles.columns.name=None
-    #return(pg_profiles,filter_mask,mask_description,module_output)
 
-    # log data
-    #pg_profiles_df = log_transform(pg_profiles_df)
-
-    return(pg_profiles_df.copy(),id_mapping_df_c,module_output)
+    return(pg_profiles_df,id_mapping_df_c,module_output)
 
 def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
     """
