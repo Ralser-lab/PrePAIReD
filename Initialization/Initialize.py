@@ -188,12 +188,7 @@ if __name__ == "__main__":
     else:
         print(sys.argv)
         #if script called from terminal
-        #### Replace with parser #####
-        path_to_project_directory = init_parser[1] # -w
-        parameters_txt_file = init_parser[0] # -p
-        module_order_filename = init_parser[2] # -s
-        mass_spec_data_filename = init_parser[3] # -d
-        metadata_filename = init_parser[4] # -m
+        parameters_txt_file, path_to_project_directory, module_order_filename, mass_spec_data_filename, metadata_filename = init_parser()
     username = os.getlogin()
     preprocessed_filename = "data_XY.tsv"
 
