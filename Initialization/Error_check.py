@@ -19,7 +19,13 @@ def read_dataframe_header(filepath: str):
     """
     if not isinstance(filepath, str):  # check if filepath is str
         raise TypeError(f"{filepath} is not a string.")
-    df = pd.read_excel(filepath, nrows=10)  # read only the first 10 lines to save time
+    if metadata_file[:-5] == ".xlsx":  # read excel
+        df = pd.read_excel(filepath)  # read only the first 10 lines to save time
+    elif metadata_file[:-4] == ".txt" or metadata_file[:-4] == ".tsv":  # read tsv files
+        df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
+    elif metadata_file[-4:] == ".csv":  # read csv files
+        df = pd.read_csv(filepath, sep=",")  # read only the first 10 lines to save time
+
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
         raise ValueError(f"Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
@@ -28,7 +34,7 @@ def read_dataframe_header(filepath: str):
         raise ValueError(f"Dataframe columns contains NaN column names in metadata at position "
                          f"{df.columns[df.columns.isna()]}.")
     else:
-        return list(df.columns)
+        return df
 
 
 def check_for_existence(value, l: list, module: str, variable: str):
@@ -180,13 +186,22 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     current_operation = operation
 
     if current_operation == "sheet existence if xls(x)":
-        sheet_existence(metadata_file, value)
+        if metadata_file[:-5] == ".xlsx":
+            sheet_existence(metadata_file, value)
     if current_operation == "existence in metadata.columns":
-        df_cols = read_dataframe_header(metadata_file)
-        check_for_existence(value, l=df_cols, module=module, variable=variable)
+        metadata_df = read_dataframe_header(metadata_file)
+        check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable)
+        if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
+            multiple_files = metadata_df.loc[df[value].duplicated(), value].unique()  # check for uniqueness
+            if len(multiple_files) > 0:
+                raise ValueError(
+                    f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                    f"times.")
+            if metadata_df[value].isna().any():  # check for NaN column names
+                raise ValueError(f"File names contain NaN column names in metadata.")
     if current_operation == "existence in metadata.columns and value in metadata[column]":
-        df_cols = read_dataframe_header(metadata_file)
-        check_for_existence(value[0], l=df_cols, module=module, variable=variable)
+        metadata_df = read_dataframe_header(metadata_file)
+        check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable)
         # print(df_cols)
         # print(value[0])
         series = pd.read_excel(metadata_file, usecols=[value[0]])
@@ -194,22 +209,41 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
         # print(series)
         check_for_existence(value[1], l=series, module=module, variable=variable)
     if current_operation == "existence in metadata_df.columns (; separated)":
-        df_cols = read_dataframe_header(metadata_file)
+        metadata_df = read_dataframe_header(metadata_file)
         values = value.split(";")
         for val in values:
-            check_for_existence(val, l=df_cols, module=module, variable=variable)
+            check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
     if current_operation == "elements existence in metadata.columns":
-        df_cols = read_dataframe_header(metadata_file)
+        metadata_df = read_dataframe_header(metadata_file)
         for val in value:
-            check_for_existence(val, l=df_cols, module=module, variable=variable)
+            check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
     if current_operation == "existence in data_df.columns":
-        df_cols = read_dataframe_header(data_file)
-        check_for_existence(value, l=df_cols, module=module, variable=variable)
+        data_df = read_dataframe_header(data_file)
+        check_for_existence(value, l=list(data_df.columns), module=module, variable=variable)
+        if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
+            multiple_files = data_df.loc[df[value].duplicated(), value].unique()  # check for uniqueness
+            if len(multiple_files) > 0:
+                raise ValueError(
+                    f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
+                    f"times.")
+            if data_df[value].isna().any():  # check for NaN column names
+                raise ValueError(f"File names contain NaN column names in data.")
+            # if file names in metadata and data are unique and without nans, check that file names are same in
+            # both files
+            metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
+            data_set = set(data_df[user_dict["input_filename_column"]])
+            only_in_metadata = metadata_set - data_set
+            only_in_data = data_set - metadata_set
+            if only_in_metadata or only_in_data:
+                raise ValueError(f"Differences found:\n"
+                                 f"Only in metadata: {list(only_in_metadata)}\n"
+                                 f"Only in data: {list(only_in_data)}")
+
     if current_operation == "existence in data_df.columns (; separated)":
-        df_cols = read_dataframe_header(data_file)
+        data_df = read_dataframe_header(data_file)
         values = value.split(";")
         for val in values:
-            check_for_existence(val, l=df_cols, module=module, variable=variable)
+            check_for_existence(val, l=list(data_df.columns), module=module, variable=variable)
     if current_operation == "existence in input_ids_columns":
         # print(user_dict)
         input_ids_columns = user_dict["input_ids_columns"]
@@ -386,3 +420,4 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print("Works so far")
 
     return current_flag, current_flag_value
+
