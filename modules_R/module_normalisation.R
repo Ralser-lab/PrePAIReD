@@ -16,7 +16,23 @@ suppressPackageStartupMessages({
   library(vsn)
   library(data.table)
 })
-source("../modules_R/helper_functions_R.R")
+
+
+script_path <- (function() {
+    args <- commandArgs(trailingOnly = FALSE)
+    
+    # Rscript --file=path/to/script.R
+    file_arg <- grep("^--file=", args, value = TRUE)
+    if (length(file_arg)) return(normalizePath(sub("^--file=", "", file_arg)))
+    
+    if (!is.null(sys.frames()[[1]]$ofile)) return(normalizePath(sys.frames()[[1]]$ofile))
+    
+    stop("Can't determine script path. Run via: Rscript --vanilla path/to/script.R")
+})()
+
+script_dir <- dirname(script_path)
+
+source(file.path(script_dir, "helper_functions_R.R"))
 
 # For my testing internally
 #source("/home/alvaro/MyStuff/preprocessing/Old_just_in_case/Testing_Nooshin/Code/helper_functions_R.R")
