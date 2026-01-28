@@ -170,6 +170,46 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
             property_peptide = pd.Series(index=data.index, data=[-1*np.log10(el[1]) for el in stats])
     return property_peptide
 
+def set_aspect_equal(ax):
+    x_lim = ax.get_xlim()
+    y_lim = ax.get_ylim()
+    aspect = abs((x_lim[1]-x_lim[0])/(y_lim[1]-y_lim[0]))
+    ax.set_aspect(aspect)
+    return
+
+def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='none', linewidth=2, **kwargs):
+
+    # Covariance matrix
+    cov = np.cov(x, y)
+
+    # Eigen decomposition
+    eigvals, eigvecs = np.linalg.eigh(cov)
+
+    # Sort eigenvalues/vectors
+    order = eigvals.argsort()[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+
+    # Chi-square quantile
+    chi2_val = chi2.ppf(confidence, df=2)
+    #print(chi2_val)
+
+    # Ellipse radii
+    width = 2 * np.sqrt(eigvals[0] * chi2_val)
+    height = 2 * np.sqrt(eigvals[1] * chi2_val)
+
+    # Rotation angle in degrees
+    angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
+    
+    # Get axes extends
+    #max_x = np.mean(x)+np.sqrt(chi2_val*cov[0,0])
+    #min_x = np.mean(x)-np.sqrt(chi2_val*cov[0,0])
+
+    #max_y = np.mean(y)+np.sqrt(chi2_val*cov[1,1])
+    #min_y = np.mean(y)-np.sqrt(chi2_val*cov[1,1])
+
+    return angle, width, height, #min_x, max_x, min_y, max_y
+
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
     
@@ -451,46 +491,6 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
 
     plt.savefig(outfile, bbox_inches="tight")
     return
-
-def set_aspect_equal(ax):
-    x_lim = ax.get_xlim()
-    y_lim = ax.get_ylim()
-    aspect = abs((x_lim[1]-x_lim[0])/(y_lim[1]-y_lim[0]))
-    ax.set_aspect(aspect)
-    return
-
-def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='none', linewidth=2, **kwargs):
-
-    # Covariance matrix
-    cov = np.cov(x, y)
-
-    # Eigen decomposition
-    eigvals, eigvecs = np.linalg.eigh(cov)
-
-    # Sort eigenvalues/vectors
-    order = eigvals.argsort()[::-1]
-    eigvals = eigvals[order]
-    eigvecs = eigvecs[:, order]
-
-    # Chi-square quantile
-    chi2_val = chi2.ppf(confidence, df=2)
-    #print(chi2_val)
-
-    # Ellipse radii
-    width = 2 * np.sqrt(eigvals[0] * chi2_val)
-    height = 2 * np.sqrt(eigvals[1] * chi2_val)
-
-    # Rotation angle in degrees
-    angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
-    
-    # Get axes extends
-    #max_x = np.mean(x)+np.sqrt(chi2_val*cov[0,0])
-    #min_x = np.mean(x)-np.sqrt(chi2_val*cov[0,0])
-
-    #max_y = np.mean(y)+np.sqrt(chi2_val*cov[1,1])
-    #min_y = np.mean(y)-np.sqrt(chi2_val*cov[1,1])
-
-    return angle, width, height, #min_x, max_x, min_y, max_y
 
 # For Imputation, Normalization, Correction
 ### Coloring
@@ -1159,4 +1159,31 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
     ax.grid()
     
     plt.savefig(outfile, bbox_inches="tight")
+    return
+
+def plot_distribution_hist(data,outfile = "Normalisation_factors.png", size = (5,5), fontsize = 15, xlabel = "Normalisation factors", transform = False, base = 2, nbins = 20, use_log_axis = False, baseline = None):
+
+    if transform:
+        data = base**data
+    
+    fig,ax = plt.subplots()
+    fig.set_size_inches(size)
+    
+    data_hist = np.histogram(data,bins=nbins)
+    ax.bar((data_hist[1][:-1]+data_hist[1][1:])/2, data_hist[0],alpha=1, color="C0",width=data_hist[1][1]-data_hist[1][0])
+    
+    if baseline is not None:
+        ax.plot([baseline,baseline],[0,np.max(data_hist[0])+1],c="k",ls="--",lw=2)
+    
+    if use_log_axis:
+        ax.set_yscale('log')
+    
+    ax.tick_params(axis="both", labelsize=fontsize)
+    ax.set_ylabel("Occurence", fontsize=fontsize)
+    ax.set_xlabel(xlabel, fontsize=fontsize)
+    
+    ax.set_axisbelow(True)
+    ax.grid()
+    
+    plt.savefig(outfile,bbox_inches="tight")
     return
