@@ -79,7 +79,7 @@ def get_colors_by_metadata(metadata, column_color, indices_origin, indices_proce
 
 def get_colors_selection(column_values_origin, column_values_processed=None, cmap="viridis", continuous=False):
 
-    cmap_ = mpl.cm.get_cmap(cmap)
+    cmap_ = plt.get_cmap(cmap)
     
     if continuous:
         if column_values_processed is not None:
@@ -730,7 +730,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     xs = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),nbins)
     xs_fine = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),250)
     
-    cmap_ = mpl.cm.get_cmap(cmap)
+    cmap_ = plt.get_cmap(cmap)
     norm = mpl.colors.Normalize(vmin=0, vmax=1)
     color_values_origin = np.linspace(0,1,len(indices_origin))
     colors_origin = [cmap_(norm(el)) for el in color_values_origin] 
@@ -1122,7 +1122,7 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
         raise TypeError("Meta data column needs to be numeric.")
     
     # sample_type selection
-    indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column, sample_type)
+    indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column=sample_type_column, sample_type=sample_type)
     
     fig,ax = plt.subplots()
     fig.set_size_inches(size)
@@ -1161,7 +1161,7 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_distribution_hist(data,outfile = "Normalisation_factors.png", size = (5,5), fontsize = 15, xlabel = "Normalisation factors", transform = False, base = 2, nbins = 20, use_log_axis = False, baseline = None):
+def plot_distribution_hist(data, outfile = "Normalisation_factors.png", size = (5,5), fontsize = 15, xlabel = "Normalisation factors", transform = False, base = 2, nbins = 20, use_log_axis = False, baseline = None):
 
     if transform:
         data = base**data
@@ -1187,3 +1187,61 @@ def plot_distribution_hist(data,outfile = "Normalisation_factors.png", size = (5
     
     plt.savefig(outfile,bbox_inches="tight")
     return
+
+def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = None, sample_type_column = None, outfile = "Completness_vs_Abundance.png", size = (7.5,7.5), fontsize = 15, axis = 1, gridsize = 25, n_bins = 25, cmap = "inferno", bins_setup='log', x_label = "Mean(log2(Abundance))", y_label = "Completeness"):
+    # sample_type selection
+    indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column=sample_type_column, sample_type=sample_type)
+    
+    cmap_ = plt.get_cmap(cmap)
+    color_hist = cmap_(0.5)
+    
+    fig = plt.figure()
+    fig.set_size_inches(size)
+    gs = GridSpec(3,4,height_ratios=[11/6,1/6,10], width_ratios=[10,2/3,2/3,2/3], hspace=0.01, wspace=0.01)
+    
+    abundance = data_origin[indices_origin].mean(axis=axis)
+    completeness = 1-data_origin[indices_origin].isna().sum(axis=axis)/data_origin[indices_origin].shape[1]
+    
+    x_lim = (np.min(abundance),np.max(abundance))
+    y_lim = (np.min(completeness),np.max(completeness))
+    
+    ax_hex = fig.add_subplot(gs[2,0])
+    im = ax_hex.hexbin(abundance, completeness, gridsize=gridsize, cmap=cmap_, bins=bins_setup)
+    
+    ax_hex.tick_params(axis="both",labelsize=fontsize)
+    ax_hex.set_xlabel(x_label, fontsize=fontsize)
+    ax_hex.set_ylabel(y_label, fontsize=fontsize)
+    ax_hex.set_xlim(x_lim)
+    ax_hex.set_ylim(y_lim)
+    
+    ax_hex.set_axisbelow(True)
+    ax_hex.grid()
+    
+    ax_hist_x = fig.add_subplot(gs[:2,0])
+    ax_hist_x.axis("off")
+    
+    hist_abundance = np.histogram(abundance, range=x_lim, bins=n_bins, density=True)
+    
+    ax_hist_x.bar((hist_abundance[1][1:]+hist_abundance[1][:-1])/2, hist_abundance[0], color=color_hist, width=hist_abundance[1][1]-hist_abundance[1][0])
+    ax_hist_x.set_xlim(x_lim)
+    ax_hist_x.set_ylim(0,np.max(hist_abundance[0]))
+    
+    ax_hist_x.grid()
+    
+    ax_hist_y = fig.add_subplot(gs[2,1:])
+    ax_hist_y.axis("off")
+    
+    hist_completeness = np.histogram(completeness, range=y_lim, bins=n_bins, density=True)
+    
+    ax_hist_y.barh((hist_completeness[1][1:]+hist_completeness[1][:-1])/2, hist_completeness[0], color=color_hist, height=hist_completeness[1][1]-hist_completeness[1][0])
+    ax_hist_y.set_xlim(0,np.max(hist_completeness[0]))
+    ax_hist_y.set_ylim(y_lim)
+    
+    ax_cbar = fig.add_subplot(gs[0,2])
+    
+    plt.colorbar(im, orientation='vertical', cax=ax_cbar)
+    ax_cbar.tick_params(axis="y",labelsize=fontsize)
+    for tick in ax_cbar.yaxis.get_majorticklabels():
+        tick.set_verticalalignment("center")
+        
+    plt.savefig(outfile,bbox_inches="tight")
