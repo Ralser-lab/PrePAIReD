@@ -339,8 +339,6 @@ def write_final_parameter_file(outfile,dict_flags,dict_parameters):
     #%%
     # Save language per module
     language = []
-    # Save steps and programming language
-    steps = []
     # Add parameters for method to the blocks
     for ind,block in enumerate(blocks): 
         # Reset block
@@ -352,7 +350,6 @@ def write_final_parameter_file(outfile,dict_flags,dict_parameters):
             # Extract step
             if ind_line == 0:
                 setup = re.match("%%%%%%%%%%(.+?)%%%%%%%%%%",block[0]).group(1)[3:]   
-                steps.append(setup)
             # Add comment so that flags are not touched anymore
             if line.startswith("## Options"):
                 block_new.append("## FLAG DO NOT TOUCH ")
@@ -405,24 +402,24 @@ def write_final_parameter_file(outfile,dict_flags,dict_parameters):
     # Save to file
     write_parameter_file(outfile,blocks)   
     
-    return steps, language
+    return language
 
-def write_config(config_file_path, steps, language):
+def write_config(config_file_path, setup_order, language):
     with open(config_file_path,"w") as file:
         file.write("Run = new\n")
         file.write("order = ")
         c = 0
-        for step, language_step in zip(steps,language):
-            if step != "GENERAL":
+        for step, language_step in zip(setup_order,language):
+            if step != "00_GENERAL":
                 if language_step[0] == "Python":
-                    file.write("{:02.0f}_".format(int(c))+step+"_py")
+                    file.write(step+"_py")
                 elif language_step[0] == "R":
-                    file.write("{:02.0f}_".format(int(c))+step+"_R")
+                    file.write(step+"_R")
                 else:
                     raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
                     sys.exit(1)
             c+=1
-            if c<len(steps) and step != "GENERAL":
+            if c<len(setup_order) and step != "GENERAL":
                 file.write(", ")
 
 #%%
@@ -475,13 +472,14 @@ if __name__ == "__main__":
     input("Please set the imputation method and flags if necessary. If no imputation step is used, ignore this step. The parameters file is saved in "+outfile+".\n\tPress Enter after the methods are set.")
                   
     # Save to file
-    steps, language = write_final_parameter_file(outfile,dict_flags,dict_parameters)
+    blocks_flags = get_blocks(outfile)
+    language = write_final_parameter_file(outfile,dict_flags,dict_parameters)
     print("The parameters file is saved in "+outfile+".")
     
     # Check for internal error
     check_language(language)
     
     # Create config file
-    write_config(config_file_path, steps, language)
+    write_config(config_file_path, setup_order, language)
     print("The configuration file is saved in "+config_file_path+".")
     
