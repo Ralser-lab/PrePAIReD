@@ -738,6 +738,10 @@ def adjust_confounders_batchwise(
             for batch in batch_levels:
                 idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
                 fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                if correct_over_same_ids_per_batch:
+                    corr_df_batch = corr_df_covariate[list(filter(lambda x: "_batch"+str(batch) in x, corr_df_covariate.columns)) + ["pval_" + covariate]]
+                else:
+                    corr_df_batch = None
                 data_processed_batch_df, log_string_batch, corr_df_batch =  adjust_confounders(data_df = data_processed_df.loc[idx_batch_list],
                                                                                                metadata_df = metadata_df.loc[idx_batch_list],
                                                                                                model_string = model_string,
@@ -749,13 +753,21 @@ def adjust_confounders_batchwise(
                                                                                                alphas_models = np.logspace(*alphas_models),
                                                                                                corr_df = corr_df_covariate)
                 log_string += log_string_batch
-                corr_df_batch.columns = [x + "_batch"+str(batch) for x in corr_df_batch.columns]
-                corr_dfs_covariate_list.append(corr_df_batch)
+                if correct_over_same_ids_per_batch:
+                    corr_df_batch.rename(columns={"R2":"R2_batch"+str(batch)},inplace=True)
+                    corr_dfs_covariate_list.append(corr_df_batch.drop("pval_" + covariate,axis=1))
+                else:
+                    corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
                 processed_batch_df_list.append(data_processed_batch_df)
             #combine corrected data over batches
             data_processed_df = pd.concat(processed_batch_df_list,axis=0)
             #combine_corr_dfs
-            corr_dfs.append(pd.concat(corr_dfs_covariate_list,axis=1))
+            corr_df_covariate = pd.concat(corr_dfs_covariate_list,axis=1)
+            if correct_over_same_ids_per_batch:
+                #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
+                corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min(axis=1)
+            #combine_corr_dfs
+            corr_dfs.append(corr_df_covariate)
             
     else: #correct for all covariates at once
         #identify associated ids per batch
@@ -820,6 +832,7 @@ def adjust_confounders_batchwise(
     
     #concatenate all corr_dfs over batches
     corr_df = pd.concat(corr_dfs,axis=1)
+
     if correct_over_same_ids_per_batch:
         #add r2 values
         corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
