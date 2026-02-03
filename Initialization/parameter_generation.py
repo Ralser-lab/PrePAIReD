@@ -32,11 +32,11 @@ else:
 def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
-    parser.add_argument("-i","--input_dict", help="Path of the parameter dictionaries",required=False,default="./Initialization/")
+    parser.add_argument("-i","--input_dict", help="Path of the parameter dictionaries",required=False,default=".")
     parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
     parser.add_argument("-p","--output_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
-    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="./Initialization/Parameter_Overview.tsv")
+    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default=".Parameter_Overview.tsv")
     args = parser.parse_args()
     
     # Get input
