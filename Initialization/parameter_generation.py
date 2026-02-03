@@ -14,7 +14,7 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = False
+load_dictionaries = True
 
 if not load_dictionaries:
     import pandas as pd
@@ -32,11 +32,11 @@ else:
 def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
-    parser.add_argument("-i","--input_dict", help="Path of the parameter dictionaries",required=False,default=".")
+    parser.add_argument("-i","--input_dict", help="Path of the parameter dictionaries",required=False,default="./Initialization/")
     parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
     parser.add_argument("-p","--output_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
-    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="Parameter_Overview.tsv")
+    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="./Initialization/Parameter_Overview.tsv")
     args = parser.parse_args()
     
     # Get input
@@ -331,12 +331,12 @@ def write_parameter_file(outfile,blocks):
                     file.write(line)
                 else:
                     file.write(line+"\n")
-                    
+
+#%%                    
 def write_final_parameter_file(outfile,dict_flags,dict_parameters):
     # Read in and extract blocks
-    blocks = get_blocks(outfile)
-        
-    #%%
+    blocks = get_blocks(outfile) 
+    
     # Save language per module
     language = []
     # Add parameters for method to the blocks
