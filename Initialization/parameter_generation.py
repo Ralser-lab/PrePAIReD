@@ -14,7 +14,7 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = True
+load_dictionaries = False
 
 if not load_dictionaries:
     import pandas as pd
@@ -442,6 +442,7 @@ if __name__ == "__main__":
         if load_dictionaries:
             input_dict_path = askdirectory(title="Please select the dictionary path", initialdir=os.path.abspath(os.getcwd()))
         else:
+            output_dict_path = askdirectory(title="Please select the path for saving the dictionaries", initialdir=os.path.abspath(os.getcwd()))
             parameter_overview_table_file_path = askopenfilename(title="Please select the parameter overview file")
         
         setup_order = get_setup_order(setup_str, counter)
@@ -453,8 +454,8 @@ if __name__ == "__main__":
     if not load_dictionaries:
         dict_flags, dict_parameters = generate_dictionaries(parameter_overview_table_file_path)
         if write_to_disc:
-            pickle.dump(dict_flags,open(os.path.join(input_dict_path,"dict_flags.pkl"),"wb"))
-            pickle.dump(dict_parameters,open(os.path.join(input_dict_path,"dict_parameters.pkl"),"wb"))
+            pickle.dump(dict_flags,open(os.path.join(output_dict_path,"dict_flags.pkl"),"wb"))
+            pickle.dump(dict_parameters,open(os.path.join(output_dict_path,"dict_parameters.pkl"),"wb"))
     else:
         dict_flags = pickle.load(open(os.path.join(input_dict_path,"dict_flags.pkl"),"rb"))
         dict_parameters = pickle.load(open(os.path.join(input_dict_path,"dict_parameters.pkl"),"rb"))
