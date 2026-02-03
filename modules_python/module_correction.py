@@ -5,12 +5,14 @@ Output: Corrected wide-format data
 
 - batchcorrection_combat: applies combat batch correction
 - batchcorrection_harmony: applies harmony batch correction
-- get_ids_for_correction: calculates association and p-value of IDs with covariates to obtain relevant IDs for covariate correction.
+- get_min_samples: calculates the minimum number of samples needed to calculate covariate association and apply correction by a rule of thumb (10*n_covariates)
+- get_ids_for_correction: calculates association and p-value of IDs with covariates to obtain relevant IDs for covariate correction
 - adjust_confounders: drift correction per id for a given set of confounders which are statistically significant correlated to the id
 - adjust_confounders_batchwise: applies drift correction per batch for a set of covariates
 
 General comments:
 - No duplicated adjustment in Combat and via linear modeling
+- Other rules of thumb for setting minimum number of samples needed to apply correction can be implemented
 
 # TBD save of corr_dfs in adjust_confounders and adjust_confounders_batchwise missing
 # TBD Detailed Module Overview
@@ -214,6 +216,30 @@ def batchcorrect_combat(
         
 
 
+def get_min_samples(m):
+    """
+    define minimum number of samples needed for fitting 
+    rule of thumb: 10 times number of variables, 
+    E.g. if fitting a model with 2 variables (InjectionIndex and NumberOfPrecursors simultaneously) 
+    at least 20 samples are needed for fitting the model 
+    and calculating the association of precursors with these two variables.
+    
+    #see #https://stats.stackexchange.com/questions/116132/regression-with-very-small-sample-size
+
+    Parameters
+    ----------
+    m : int
+        number of variables in the model.
+
+    Returns
+    -------
+    int
+        minimal number of samples needed to calculate association, statistical test or fit a model.
+
+    """
+    return(m * 10)
+
+
 def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtypes_list,fitsamples_idx_list=None,alpha_significance=0.05):
     
     """
@@ -297,8 +323,10 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
 
             samples_idx_test_list= [list(metadata_df[metadata_df[metadata_var]==x].index) for x in metadata_df[metadata_var].unique()]
             samples_idx_test_list = [list(set(x) & set(common_samples)) for x in samples_idx_test_list]
-            # Check if at least 5 samples are defined per group
-
+            
+            #define minimum number of samples needed for fitting (rule of thumb)
+            min_samples = get_min_samples(len(metadata_vars))
+            
             # correlation coefficient to be calculated depending on datatype
             coef_type_str = ""
             if dt == "nominal":
@@ -315,16 +343,16 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
 
             # check how many samples are available per feature
             # do not check association if <5
-            if len(common_samples) < 5:
-                log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
-                        f"\t\t\t\tNo Correction will be applied on {idx}.\n"
+            if len(common_samples) < min_samples:
+                # log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
+                #         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
 
             # check if ordinal or nomonal variable groups have at 
             # do not check association if <5 samples per group
             elif (dt == "ordinal") or (dt=="nominal"):
-                if any([len(x) for x in samples_idx_test_list]) < 5:
+                if any([len(x) for x in samples_idx_test_list]) < min_samples:
                     log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
                         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
 
@@ -517,7 +545,10 @@ def adjust_confounders(
                 metadata_vars.append(metadata_var)
         if len(metadata_vars)==0:
             continue
-
+        
+        min_samples = get_min_samples(m=len(metadata_vars))
+        
+        
         #transfer categorical covariates for model fitting
         idx_catgorical_list = [
             i for i, d in enumerate(
@@ -542,16 +573,21 @@ def adjust_confounders(
         if len(common_samples) < len(C):
             log_string += "###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped.\n"
         '''
+            
         C=C.loc[common_samples]
         #data_df_sel=data_processed_df.loc[common_samples]
 
         # C_f -> independent variables for adjustment fit
         if fitsamples_idx_list is not None:
-            C_f=C.loc[common_samples]
+            C_f=C.loc[list(set(common_samples) & set(fitsamples_idx_list))]
         else:
             C_f=C
         #define indices for fit
         sample_index=C_f.index
+        
+        if len(sample_index) < min_samples:
+            log_string += f"\t\t\t\t\t###WARNING###: not enough measured values (less than 10 samples) for given ID. ID {idx} skipped.\n"
+            continue
         
         #create a linear model with significantly associated/correlated metadata variables
         
@@ -727,11 +763,11 @@ def adjust_confounders_batchwise(
                                                                     adjust_cols_dtypes_list = [covariate_dtype],
                                                                     fitsamples_idx_list = fitsamples_idx_batch_list,
                                                                     alpha_significance = alpha_significance)
-                    corr_df_batch.columns = [col + "_" + covariate + "_batch"+str(batch) for col in corr_df_batch.columns]
+                    corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
                     corr_dfs_association.append(corr_df_batch)
                 corr_df_covariate = pd.concat(corr_dfs_association,axis=1)
                 #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
-                corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min()
+                corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min(axis=1)
             else:
                 corr_df_covariate = None
             #batchwise correction
@@ -751,7 +787,7 @@ def adjust_confounders_batchwise(
                                                                                                fitsamples_idx_list = fitsamples_idx_batch_list,
                                                                                                alpha_significance = alpha_significance,
                                                                                                alphas_models = np.logspace(*alphas_models),
-                                                                                               corr_df = corr_df_covariate)
+                                                                                               corr_df = corr_df_batch)
                 log_string += log_string_batch
                 if correct_over_same_ids_per_batch:
                     corr_df_batch.rename(columns={"R2":"R2_batch"+str(batch)},inplace=True)
@@ -761,14 +797,14 @@ def adjust_confounders_batchwise(
                 processed_batch_df_list.append(data_processed_batch_df)
             #combine corrected data over batches
             data_processed_df = pd.concat(processed_batch_df_list,axis=0)
-            #combine_corr_dfs
+            
             corr_df_covariate = pd.concat(corr_dfs_covariate_list,axis=1)
             if correct_over_same_ids_per_batch:
                 #take min over corr_dfs to include all precursors significantly associated with covariates at any batch
                 corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min(axis=1)
             #combine_corr_dfs
             corr_dfs.append(corr_df_covariate)
-            
+                   
     else: #correct for all covariates at once
         #identify associated ids per batch
         if correct_over_same_ids_per_batch:
@@ -829,13 +865,13 @@ def adjust_confounders_batchwise(
     
         # #concatenate all corrected profiles
         data_processed_df=pd.concat(processed_df_list,axis=0)
-    
-    #concatenate all corr_dfs over batches
-    corr_df = pd.concat(corr_dfs,axis=1)
-
-    if correct_over_same_ids_per_batch:
-        #add r2 values
-        corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
+        
+        #concatenate all corr_dfs over batches
+        corr_df = pd.concat(corr_dfs,axis=1)
+        
+        if correct_over_same_ids_per_batch:
+            #add r2 values
+            corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
         
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tBatchwise Adjustment finished!\n"
     
