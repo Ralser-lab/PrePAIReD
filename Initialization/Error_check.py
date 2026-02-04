@@ -192,7 +192,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
         metadata_df = read_dataframe_header(metadata_file)
         check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable)
         if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
-            multiple_files = metadata_df.loc[df[value].duplicated(), value].unique()  # check for uniqueness
+            multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
             if len(multiple_files) > 0:
                 raise ValueError(
                     f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
@@ -221,7 +221,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
         data_df = read_dataframe_header(data_file)
         check_for_existence(value, l=list(data_df.columns), module=module, variable=variable)
         if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
-            multiple_files = data_df.loc[df[value].duplicated(), value].unique()  # check for uniqueness
+            multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
             if len(multiple_files) > 0:
                 raise ValueError(
                     f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
@@ -420,6 +420,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print("Works so far")
 
     return current_flag, current_flag_value
+
 
 
 
