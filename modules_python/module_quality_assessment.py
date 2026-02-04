@@ -1248,7 +1248,7 @@ def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = 
         
     plt.savefig(outfile,bbox_inches="tight")
 
-def plot_overall_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Order (File)", y_label = "Precursors present", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
+def plot_overall_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Samples", y_label = "Sorted precurssors", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
 
     if column_metadata:
         try:
@@ -1297,6 +1297,9 @@ def plot_overall_completeness(data, metadata=None, column_metadata=None, size = 
             ax.plot([0,data_.shape[1]],[limit,limit],c="k",ls="--")
     
     ax.set_xlim(0,data_.shape[1])
+    #if column_metadata:
+    #  ax.set_xlabel(column_metadata, fontsize=fontsize)
+    #else:
     ax.set_xlabel(x_label, fontsize=fontsize)
     ax.set_ylabel(y_label, fontsize=fontsize)
     ax.tick_params(axis="both", labelsize=fontsize)        
