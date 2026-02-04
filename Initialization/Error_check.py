@@ -19,9 +19,9 @@ def read_dataframe_header(filepath: str):
     """
     if not isinstance(filepath, str):  # check if filepath is str
         raise TypeError(f"{filepath} is not a string.")
-    if filepath[:-5] == ".xlsx":  # read excel
+    if filepath[-5:] == ".xlsx":  # read excel
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
-    elif filepath[:-4] == ".txt" or filepath[:-4] == ".tsv":  # read tsv files
+    elif filepath[-4:] == ".txt" or filepath[:-4] == ".tsv":  # read tsv files
         df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
     elif filepath[-4:] == ".csv":  # read csv files
         df = pd.read_csv(filepath, sep=",")  # read only the first 10 lines to save time
@@ -420,5 +420,6 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print("Works so far")
 
     return current_flag, current_flag_value
+
 
 
