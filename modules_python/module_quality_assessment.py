@@ -22,6 +22,8 @@ from scipy.optimize import curve_fit
 from sklearn.preprocessing import SplineTransformer
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 ### Generalize colors as an input_variable
 
@@ -1245,3 +1247,69 @@ def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = 
         tick.set_verticalalignment("center")
         
     plt.savefig(outfile,bbox_inches="tight")
+
+def plot_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Order (File)", y_label = "Precursors present", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
+
+    if column_metadata:
+        try:
+            order = pd.to_numeric(metadata[column_metadata])
+        except:
+            raise TypeError("Meta data column needs to be numeric.")
+    else: 
+        order = np.arange(0,data.shape[1])
+    
+
+    data_ = data.copy()
+    data_.fillna(0,inplace=True)
+    data_[data_!=0] = 1
+    
+    sums_ = data_.T.sum().sort_values()[::-1]
+    data_ = data_.loc[sums_.index]
+    
+    if plot_limits:
+        limits_indices = [np.where(data_.index==sums_[sums_>=data_.shape[1]*limit].index[-1])[0][0] for limit in limits]
+    
+    limit_label = "Limits : "
+    for limit in limits:
+        limit_label += "{:.2f}".format(limit)+", "
+    
+    cmap = mpl.colors.ListedColormap([color_abscent,color_present])
+    
+    fig, ax = plt.subplots()
+    fig.set_size_inches(size)
+    ax.matshow(data_.iloc[:,order],cmap=cmap)
+    
+    if plot_limits:
+        legend_elements = [Patch(facecolor=color_present, edgecolor=color_present, label="Present"),
+                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Abscent"),
+                           Line2D([0], [0], color='k', linestyle="--", label=limit_label)]
+    else:
+        legend_elements = [Patch(facecolor=color_present, edgecolor=color_present, label="Present"),
+                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Abscent")]
+    
+    ax.legend(loc = legend_loc, handles = legend_elements, fontsize=fontsize_legend)
+    
+    if plot_limits:
+        for limit in limits_indices:
+            ax.plot([0,data_.shape[1]],[limit,limit],c="k",ls="--")
+    
+    ax.set_xlim(0,data_.shape[1])
+    ax.set_xlabel(x_label, fontsize=fontsize)
+    ax.set_ylabel(y_label, fontsize=fontsize)
+    ax.tick_params(axis="both", labelsize=fontsize)        
+    ax.axes.get_xaxis().set_ticklabels([])
+    ax.set_title("Overall Completeness: {:.2f}".format(sum(sums_)/(data_.shape[0]*data_.shape[1])), fontsize=fontsize)
+    set_aspect_equal(ax)
+    
+    plt.savefig(outfile, bbox_inches="tight")
+    return
+
+
+if __name__ == "__main__":
+    pass
+
+# Parser (Data_origin (d), Data_processed (n), Metadata (m), Parameter File (p), Plotting_config (s), Workdir (w), ) -> can this be skipped?
+# Read in plotting config
+# Read in Parameter files
+# Extract counter of current step
+# Split config into blocks and keep only general and counter 
