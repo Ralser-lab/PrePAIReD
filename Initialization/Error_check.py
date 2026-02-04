@@ -17,9 +17,11 @@ def read_dataframe_header(filepath: str):
     :param filepath: str, path to dataframe
     :return: column names of the dataframe
     """
+    # print(filepath)
     if not isinstance(filepath, str):  # check if filepath is str
         raise TypeError(f"{filepath} is not a string.")
     if filepath[-5:] == ".xlsx":  # read excel
+        print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath[-4:] == ".txt" or filepath[:-4] == ".tsv":  # read tsv files
         df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
@@ -44,12 +46,11 @@ def check_for_existence(value, l: list, module: str, variable: str):
     :param l: list, contains the allowed values
     :param module: str, contains the current module
     :param variable: str, contains the current variable
-
     :return: Nothing if value is in list
     """
     if not isinstance(l, list):  # check if list is list
         raise TypeError(f"{l} is not a list.")
-    if value in l:
+    if str(value) in l:
         pass
     else:
         raise ValueError(f"Error in module: {module} for variable: {variable}: {value} is not in allowed list.")
@@ -184,147 +185,150 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     print(operation)
     print(value)
     current_operation = operation
+    if value is not None:  # skip operations if a value is nan
+        if current_operation == "sheet existence if xls(x)":
+            if metadata_file[:-5] == ".xlsx":
+                sheet_existence(metadata_file, value)
+        if current_operation == "existence in metadata.columns":
+            metadata_df = read_dataframe_header(metadata_file)
+            check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable)
+            if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
+                multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
+                if len(multiple_files) > 0:
+                    raise ValueError(
+                        f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                        f"times.")
+                if metadata_df[value].isna().any():  # check for NaN column names
+                    raise ValueError(f"File names contain NaN column names in metadata.")
+        if current_operation == "existence in metadata.columns and value in metadata[column]":
+            metadata_df = read_dataframe_header(metadata_file)
+            check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable)
+            # print(df_cols)
+            # print(value[0])
+            series = pd.read_excel(metadata_file, usecols=[value[0]])
+            series = series[value[0]].tolist()
+            # print(series)
+            check_for_existence(value[1], l=series, module=module, variable=variable)
+        if current_operation == "existence in metadata_df.columns (; separated)":
+            metadata_df = read_dataframe_header(metadata_file)
+            values = value.split(";")
+            for val in values:
+                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
+        if current_operation == "elements existence in metadata.columns":
+            metadata_df = read_dataframe_header(metadata_file)
+            for val in value:
+                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
+        if current_operation == "value in metadata[sample_type_column]":
+            metadata_df = read_dataframe_header(metadata_file)
+            check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable)
+        if current_operation == "existence in data_df.columns":
+            data_df = read_dataframe_header(data_file)
+            check_for_existence(value, l=list(data_df.columns), module=module, variable=variable)
+            if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
+                multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
+                if len(multiple_files) > 0:
+                    raise ValueError(
+                        f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
+                        f"times.")
+                if data_df[value].isna().any():  # check for NaN column names
+                    raise ValueError(f"File names contain NaN column names in data.")
+                # if file names in metadata and data are unique and without nans, check that file names are same in
+                # both files
+                metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
+                data_set = set(data_df[user_dict["input_filename_column"]])
+                only_in_metadata = metadata_set - data_set
+                only_in_data = data_set - metadata_set
+                if only_in_metadata or only_in_data:
+                    raise ValueError(f"Differences found:\n"
+                                     f"Only in metadata: {list(only_in_metadata)}\n"
+                                     f"Only in data: {list(only_in_data)}")
 
-    if current_operation == "sheet existence if xls(x)":
-        if metadata_file[:-5] == ".xlsx":
-            sheet_existence(metadata_file, value)
-    if current_operation == "existence in metadata.columns":
-        metadata_df = read_dataframe_header(metadata_file)
-        check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable)
-        if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
-            multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
-            if len(multiple_files) > 0:
+        if current_operation == "existence in data_df.columns (; separated)":
+            data_df = read_dataframe_header(data_file)
+            values = value.split(";")
+            for val in values:
+                check_for_existence(val, l=list(data_df.columns), module=module, variable=variable)
+        if current_operation == "existence in input_ids_columns":
+            # print(user_dict)
+            input_ids_columns = user_dict["input_ids_columns"]
+            print(input_ids_columns)
+            input_ids_columns = input_ids_columns.split(";")
+            print(input_ids_columns)
+            check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
+        if current_operation == "existence in input_ids_columns or Proteotypic":
+            # print(user_dict)
+            input_ids_columns = user_dict["input_ids_columns"]
+            print(input_ids_columns)
+            input_ids_columns = input_ids_columns.split(";")
+            input_ids_columns.append("Proteotypic")
+            check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
+        if current_operation == "existence of path":
+            check_for_path_existence(filepath=value)
+        if current_operation == "check":
+            check_for_existence(value, l=target_dict["Options"], module=module, variable=variable)
+        if current_operation == "check len(adjust_cols) and el in AllowedValues":
+            adjust_cols = user_dict["adjust_cols"]  # get the list with column names
+            allowed_values = operation_dictionary["correct_method"]["adjust_confounders"]["adjust_cols_dtypes"][
+                "Options"]  # dtypes
+            length_cols = check_for_length(adjust_cols, module=module, variable=variable)
+            length_dtypes = check_for_length(value, module=module, variable=variable)
+            if length_cols != length_dtypes:
+                raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                                 f"and adjusted columns ({length_cols}) is different")
+            for val in value:
+                check_for_existence(val, l=allowed_values, module=module, variable=variable)
+        if current_operation == "check elements":
+            values = value.split(";")
+            for val in values:
+                check_for_existence(val, l=target_dict["Options"], module=module, variable=variable)
+        if current_operation == "check range":
+            allowed_values = target_dict["Options"]
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            check_for_range(value=value, lower_limit=lower_limit, upper_limit=upper_limit,
+                            lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
+                            variable=variable)
+        if current_operation == "check len 2 and range":
+            allowed_values = target_dict["Options"]
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            if check_for_length(value, module=module, variable=variable) != 2:
                 raise ValueError(
-                    f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
-                    f"times.")
-            if metadata_df[value].isna().any():  # check for NaN column names
-                raise ValueError(f"File names contain NaN column names in metadata.")
-    if current_operation == "existence in metadata.columns and value in metadata[column]":
-        metadata_df = read_dataframe_header(metadata_file)
-        check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable)
-        # print(df_cols)
-        # print(value[0])
-        series = pd.read_excel(metadata_file, usecols=[value[0]])
-        series = series[value[0]].tolist()
-        # print(series)
-        check_for_existence(value[1], l=series, module=module, variable=variable)
-    if current_operation == "existence in metadata_df.columns (; separated)":
-        metadata_df = read_dataframe_header(metadata_file)
-        values = value.split(";")
-        for val in values:
-            check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
-    if current_operation == "elements existence in metadata.columns":
-        metadata_df = read_dataframe_header(metadata_file)
-        for val in value:
-            check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
-    if current_operation == "existence in data_df.columns":
-        data_df = read_dataframe_header(data_file)
-        check_for_existence(value, l=list(data_df.columns), module=module, variable=variable)
-        if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
-            multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
-            if len(multiple_files) > 0:
+                    f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
+            for val in value:
+                val = float(val)
+                check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
+                                lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
+                                variable=variable)
+        if current_operation == "check len 3 and range":
+            allowed_values = target_dict["Options"]
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            if check_for_length(value, module=module, variable=variable) != 3:
                 raise ValueError(
-                    f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
-                    f"times.")
-            if data_df[value].isna().any():  # check for NaN column names
-                raise ValueError(f"File names contain NaN column names in data.")
-            # if file names in metadata and data are unique and without nans, check that file names are same in
-            # both files
-            metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
-            data_set = set(data_df[user_dict["input_filename_column"]])
-            only_in_metadata = metadata_set - data_set
-            only_in_data = data_set - metadata_set
-            if only_in_metadata or only_in_data:
-                raise ValueError(f"Differences found:\n"
-                                 f"Only in metadata: {list(only_in_metadata)}\n"
-                                 f"Only in data: {list(only_in_data)}")
-
-    if current_operation == "existence in data_df.columns (; separated)":
-        data_df = read_dataframe_header(data_file)
-        values = value.split(";")
-        for val in values:
-            check_for_existence(val, l=list(data_df.columns), module=module, variable=variable)
-    if current_operation == "existence in input_ids_columns":
-        # print(user_dict)
-        input_ids_columns = user_dict["input_ids_columns"]
-        print(input_ids_columns)
-        input_ids_columns = input_ids_columns.split(";")
-        print(input_ids_columns)
-        check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
-    if current_operation == "existence in input_ids_columns or Proteotypic":
-        # print(user_dict)
-        input_ids_columns = user_dict["input_ids_columns"]
-        print(input_ids_columns)
-        input_ids_columns = input_ids_columns.split(";")
-        input_ids_columns.append("Proteotypic")
-        check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
-    if current_operation == "existence of path":
-        check_for_path_existence(filepath=value)
-    if current_operation == "check":
-        check_for_existence(value, l=target_dict["Options"], module=module, variable=variable)
-    if current_operation == "check len(adjust_cols) and el in AllowedValues":
-        adjust_cols = user_dict["adjust_cols"]  # get the list with column names
-        allowed_values = operation_dictionary["correct_method"]["adjust_confounders"]["adjust_cols_dtypes"][
-            "Options"]  # dtypes
-        length_cols = check_for_length(adjust_cols, module=module, variable=variable)
-        length_dtypes = check_for_length(value, module=module, variable=variable)
-        if length_cols != length_dtypes:
-            raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
-                             f"and adjusted columns ({length_cols}) is different")
-        for val in value:
-            check_for_existence(val, l=allowed_values, module=module, variable=variable)
-    if current_operation == "check elements":
-        values = value.split(";")
-        for val in values:
-            check_for_existence(val, l=target_dict["Options"], module=module, variable=variable)
-    if current_operation == "check range":
-        allowed_values = target_dict["Options"]
-        lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-        check_for_range(value=value, lower_limit=lower_limit, upper_limit=upper_limit,
-                        lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                        variable=variable)
-    if current_operation == "check len 2 and range":
-        allowed_values = target_dict["Options"]
-        lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-        if check_for_length(value, module=module, variable=variable) != 2:
-            raise ValueError(
-                f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
-        for val in value:
-            val = float(val)
-            check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
-                            lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                            variable=variable)
-    if current_operation == "check len 3 and range":
-        allowed_values = target_dict["Options"]
-        lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-        if check_for_length(value, module=module, variable=variable) != 3:
-            raise ValueError(
-                f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
-        for val in value:
-            val = float(val)
-            check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
-                            lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                            variable=variable)
-    if current_operation == "check elements (; or _ separated)":
-        values = value.split(";").split("_")
-        allowed_values = target_dict["Options"]
-        lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-        for val in values:
-            val = float(val)
-            check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
-                            lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                            variable=variable)
-    if current_operation == "check range element-wise":
-        allowed_values = target_dict["Options"]
-        allowed_values = allowed_values[0].split("in ")
-        allowed_values = allowed_values[-1]
-        allowed_values = [allowed_values.strip()]
-        lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-        for val in value:
-            val = float(val)
-            check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
-                            lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                            variable=variable)
+                    f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
+            for val in value:
+                val = float(val)
+                check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
+                                lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
+                                variable=variable)
+        if current_operation == "check elements (; or _ separated)":
+            values = value.split(";").split("_")
+            allowed_values = target_dict["Options"]
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            for val in values:
+                val = float(val)
+                check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
+                                lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
+                                variable=variable)
+        if current_operation == "check range element-wise":
+            allowed_values = target_dict["Options"]
+            allowed_values = allowed_values[0].split("in ")
+            allowed_values = allowed_values[-1]
+            allowed_values = [allowed_values.strip()]
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            for val in value:
+                val = float(val)
+                check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
+                                lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
+                                variable=variable)
 
 
 # main function #
@@ -420,7 +424,5 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print("Works so far")
 
     return current_flag, current_flag_value
-
-
 
 
