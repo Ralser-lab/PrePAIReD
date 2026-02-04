@@ -14,7 +14,7 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = True
+load_dictionaries = False ####
 
 if not load_dictionaries:
     import pandas as pd
@@ -32,11 +32,11 @@ else:
 def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
-    parser.add_argument("-i","--input_dict", help="Path of the parameter dictionaries",required=False,default=".")
+    parser.add_argument("-i","--dict_path", help="Path of the parameter dictionaries",required=False,default=os.path.split(os.path.abspath(__file__))[0])
     parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
     parser.add_argument("-p","--output_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
-    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default=".Parameter_Overview.tsv")
+    parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="Parameter_Overview.tsv")
     args = parser.parse_args()
     
     # Get input
@@ -54,7 +54,7 @@ def init_module():
         sys.exit(1)
     
     outfile = os.path.join(outpath,args.output_file)
-    input_dict_path = args.input_dict
+    dict_path = args.dict_path
     config_file_path = os.path.join(outpath,"Config.txt")
     parameter_overview_table_file_path = args.parameter_overview_table
     
@@ -65,7 +65,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path
+    return setup_order, outfile, config_file_path, dict_path, parameter_overview_table_file_path
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -430,6 +430,8 @@ if __name__ == "__main__":
     if len(sys.argv) <= 1:
         
         counter = int(input("Please define the counter value of the first step (int): "))
+        if counter <= 0:
+            raise ValueError("Only counters bigger than 0 are allowed.")
         
         input_order = askopenfilename(title="Please select the file containing the setup order")
         with open(input_order,"r") as file:
@@ -440,25 +442,25 @@ if __name__ == "__main__":
         config_file_path = config_file_path = os.path.join(outpath,"Config.txt")
         
         if load_dictionaries:
-            input_dict_path = askdirectory(title="Please select the dictionary path", initialdir=os.path.abspath(os.getcwd()))
+            dict_path = askdirectory(title="Please select the dictionary path", initialdir=os.path.abspath(os.getcwd()))
         else:
-            output_dict_path = askdirectory(title="Please select the path for saving the dictionaries", initialdir=os.path.abspath(os.getcwd()))
+            dict_path = askdirectory(title="Please select the path for saving the dictionaries", initialdir=os.path.abspath(os.getcwd()))
             parameter_overview_table_file_path = askopenfilename(title="Please select the parameter overview file")
         
         setup_order = get_setup_order(setup_str, counter)
     
     else:
-        setup_order, outfile, config_file_path, input_dict_path, parameter_overview_table_file_path = init_module()
+        setup_order, outfile, config_file_path, dict_path, parameter_overview_table_file_path = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
         dict_flags, dict_parameters = generate_dictionaries(parameter_overview_table_file_path)
         if write_to_disc:
-            pickle.dump(dict_flags,open(os.path.join(output_dict_path,"dict_flags.pkl"),"wb"))
-            pickle.dump(dict_parameters,open(os.path.join(output_dict_path,"dict_parameters.pkl"),"wb"))
+            pickle.dump(dict_flags,open(os.path.join(dict_path,"dict_flags.pkl"),"wb"))
+            pickle.dump(dict_parameters,open(os.path.join(dict_path,"dict_parameters.pkl"),"wb"))
     else:
-        dict_flags = pickle.load(open(os.path.join(input_dict_path,"dict_flags.pkl"),"rb"))
-        dict_parameters = pickle.load(open(os.path.join(input_dict_path,"dict_parameters.pkl"),"rb"))
+        dict_flags = pickle.load(open(os.path.join(dict_path,"dict_flags.pkl"),"rb"))
+        dict_parameters = pickle.load(open(os.path.join(dict_path,"dict_parameters.pkl"),"rb"))
     
     # Check for internal error
     check_steps(setup_order, dict_flags)
