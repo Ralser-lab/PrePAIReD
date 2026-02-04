@@ -1248,7 +1248,7 @@ def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = 
         
     plt.savefig(outfile,bbox_inches="tight")
 
-def plot_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Order (File)", y_label = "Precursors present", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
+def plot_overall_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Order (File)", y_label = "Precursors present", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
 
     if column_metadata:
         try:
@@ -1270,8 +1270,11 @@ def plot_completeness(data, metadata=None, column_metadata=None, size = (5,5), o
         limits_indices = [np.where(data_.index==sums_[sums_>=data_.shape[1]*limit].index[-1])[0][0] for limit in limits]
     
     limit_label = "Limits : "
-    for limit in limits:
-        limit_label += "{:.2f}".format(limit)+", "
+    for ind,limit in enumerate(limits):
+        if ind < len(limits)-1:
+            limit_label += "{:.2f}".format(limit)+", "
+        else:
+            limit_label += "{:.2f}".format(limit)
     
     cmap = mpl.colors.ListedColormap([color_abscent,color_present])
     
