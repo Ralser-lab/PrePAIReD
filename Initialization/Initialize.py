@@ -72,7 +72,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                                 description = 1
                             if description == "FALSE":
                                 description = 0
-                            if description == "nan" or description == "Nan" or description == "NaN" or description == "NULL":
+                            if description == "nan" or description == "Nan" or description == "NaN" or description == "NULL" or description == "None" or description == "none":
                                 description = None
                             description = ast.literal_eval(description)  # check for right dtype
                         except:
