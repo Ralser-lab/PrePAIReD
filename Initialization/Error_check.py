@@ -339,8 +339,11 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     else:  # check if NoneType is allowed
         allowed_types = target_dict["Type"]
         allowed_types = allowed_types.split(";")
-        if "None" not in allowed_types:
-            raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
+        if pd.isna(target_dict["Default"]):
+            pass
+        else:
+            if "None" not in allowed_types:
+                raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
 
 
 # main function #
@@ -434,5 +437,6 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print("Works so far")
 
     return current_flag, current_flag_value
+
 
 
