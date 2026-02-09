@@ -804,7 +804,7 @@ def adjust_confounders_batchwise(
                 corr_df_covariate["pval_" + covariate] = corr_df_covariate[list(filter(lambda x: "pval_" + covariate in x, corr_df_covariate.columns))].min(axis=1)
             #combine_corr_dfs
             corr_dfs.append(corr_df_covariate)
-                   
+        corr_df = pd.concat(corr_dfs,axis=1)
     else: #correct for all covariates at once
         #identify associated ids per batch
         if correct_over_same_ids_per_batch:
