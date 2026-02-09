@@ -289,6 +289,9 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                             variable=variable)
         if current_operation == "check len 2 and range":
             allowed_values = target_dict["Options"]
+            allowed_values = allowed_values[0].split("in ")
+            allowed_values = allowed_values[-1]
+            allowed_values = [allowed_values.strip()]
             lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
             if check_for_length(value, module=module, variable=variable) != 2:
                 raise ValueError(
@@ -300,6 +303,9 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                                 variable=variable)
         if current_operation == "check len 3 and range":
             allowed_values = target_dict["Options"]
+            allowed_values = allowed_values[0].split("in ")
+            allowed_values = allowed_values[-1]
+            allowed_values = [allowed_values.strip()]
             lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
             if check_for_length(value, module=module, variable=variable) != 3:
                 raise ValueError(
@@ -329,6 +335,12 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
                                 variable=variable)
+
+    else:  # check if NoneType is allowed
+        allowed_types = target_dict["Type"]
+        allowed_types = allowed_types.split(";")
+        if "None" not in allowed_types:
+            raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
 
 
 # main function #
@@ -409,9 +421,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     if str(value) == dict_to_use["Default"]:  # check for default
         print(f"{value} is default value.")
         pass
-    elif pd.isna(value and pd.isna(dict_to_use["Default"])):  # check for None entries
-        print(f"{value} is default value.")
-        pass
+
     else:
         print(f"{value} is not default")
         current_operation = dict_to_use["Check Operation"]  # get the current operation to do
