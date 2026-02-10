@@ -33,7 +33,7 @@ def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
     parser.add_argument("-i","--dict_path", help="Path of the parameter dictionaries",required=False,default=os.path.split(os.path.abspath(__file__))[0])
-    parser.add_argument("-o","--output_path", help="Path for the Output parameter file",required=False, default=".")
+    parser.add_argument("-w","--workdir", help="Path to working directory where results are saved",required=False, default=".")
     parser.add_argument("-p","--output_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
     parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="Parameter_Overview.tsv")
@@ -66,7 +66,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path
+    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -423,7 +423,7 @@ def write_config(config_file_path, setup_order, language):
             if c<len(setup_order) and step != "GENERAL":
                 file.write(", ")
 
-def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags):
+def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath):
     blocks_config_eval = []
     for ind,block in enumerate(blocks_flags):
         counter = int(re.search("\%\%([0-9]+?)\_",block[0]).group(1))
@@ -440,22 +440,23 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             #block_new = [block[0]]
             ##### Check if layout works
             if ind > 1:
-                block_new.append("data_origin = "+os.path.join("..",setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
-                block_new.append("mask_description_origin = "+os.path.join("..",setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
-                block_new.append("data_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
-                block_new.append("mask_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
-                block_new.append("mask_description_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+                block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
+                block_new.append("mask_description_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
+                block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
-                block_new.append("data_origin = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
                 block_new.append("mask_description_origin = None")
-                block_new.append("mask_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
-                block_new.append("mask_description_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+                block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+            block_new.append(("param_fp = "+os.path.join(outpath,"Parameter_Files",setup_order[ind]+"_Parameters.json")))
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_int_box = 1")
                 ### Use F notation for figure legend
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F01.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F01.png"))
                 if step == "FILTERING_LONG":
                     block_new.append("size = (5,10)")
                 else:
@@ -470,14 +471,14 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             #  
             if step in ["FILTERING_LONG","FILTERING_WIDE"]:
                 block_new.append("plot_filter_mask = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F02.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F02.png"))
             else:
                 block_new.append("plot_filter_mask = 0")
             block_new.append("%-%-%-%")
             #
             if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_cv = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F03.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F03.png"))
             else:
                 block_new.append("plot_cv = 0")
             block_new.append("%-%-%-%")
@@ -486,7 +487,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             ### for summarization -> sample_type
             if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_pca = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F04.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F04.png"))
                 if step == "NORMALISATION":
                     block_new.append("continuous = True")
                     block_new.append("coloring_property = Missingness")
@@ -513,7 +514,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             #    
             if step in ["NORMALISATION"]:
                 block_new.append("plot_distribution = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F05.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F05.png"))
             else:
                 block_new.append("plot_distribution = 0")
             block_new.append("%-%-%-%")
@@ -521,14 +522,14 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             if step in ["NORMALISATION","CORRECTION"]:
                 if step == "NORMALISATION":
                     block_new.append("plot_scatter_series = 1")
-                    block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F06.png"))
+                    block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
                     block_new.append("use_parameter_file = 0")
                 else:
                     c = False
                     for line in block:
                         if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                             block_new.append("plot_scatter_series = 1")
-                            block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F06.png"))
+                            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
                             block_new.append("use_parameter_file = 1")
                     if not c:
                         block_new.append("plot_scatter_series = 0")
@@ -542,7 +543,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if line == "eval_missingness_by_detection_threshold = 1":
                         block_new.append("plot_decision_boundary = 1")
-                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F07.png"))
+                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F07.png"))
                         block_new.append("use_parameter_file = 1")
                 if not c:
                     block_new.append("plot_decision_boundary = 0")
@@ -556,7 +557,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                         block_new.append("plot_correlation = 1")
-                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F08.png"))
+                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F08.png"))
                         block_new.append("use_parameter_file = 1")
                 if not c:
                     block_new.append("plot_correlation = 0")
@@ -569,8 +570,8 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if "normalization_method = median_scaling" in line:
                         block_new.append("plot_distribution_hist = 1")
-                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F09.png"))
-                        block_new.append("normalization_factors = "+os.path.join("..",setup_order[ind],"Normalization_factors.tsv"))
+                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F09.png"))
+                        block_new.append("normalization_factors = "+os.path.join(outpath,setup_order[ind],"Normalization_factors.tsv"))
                         c = True
                 if not c:
                     block_new.append("plot_distribution_hist = 0")
@@ -580,14 +581,14 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_abundance_vs_completeness = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F10.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F10.png"))
             else:
                 block_new.append("plot_abundance_vs_completeness = 0") 
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_overall_completeness = 1")
-                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F11.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F11.png"))
                 if step == "FILTERING_LONG":
                     block_new.append("gridsize = 50")
                     block_new.append("n_bins = 50")
@@ -620,7 +621,7 @@ if __name__ == "__main__":
         with open(input_order,"r") as file:
             setup_str = file.read()
         
-        outpath = askdirectory(title="Please select your output path", initialdir=os.path.abspath(os.getcwd()))
+        outpath = askdirectory(title="Please select your working directory", initialdir=os.path.abspath(os.getcwd()))
         outfile = os.path.join(outpath,"Parameters.txt")
         config_file_path = os.path.join(outpath,"Config.txt")
         config_evaluation_file_path = os.path.join(outpath,"Config_evaluation.txt")
@@ -637,7 +638,7 @@ if __name__ == "__main__":
         setup_order = get_setup_order(setup_str, counter)
     
     else:
-        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path = init_module()
+        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -674,5 +675,5 @@ if __name__ == "__main__":
     print("The configuration file is saved in "+config_file_path+".")
     
     # Create evaluation config file
-    write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags)
+    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath)
     print("The configuration file for evaluation is saved in "+config_file_path+".")
