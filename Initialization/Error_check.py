@@ -20,12 +20,12 @@ def read_dataframe_header(filepath: str):
     # print(filepath)
     if not isinstance(filepath, str):  # check if filepath is str
         raise TypeError(f"{filepath} is not a string.")
-    if filepath[-5:] == ".xlsx":  # read excel
+    if filepath.endswith(".xlsx"):  # read excel
         print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
-    elif filepath[-4:] == ".txt" or filepath[:-4] == ".tsv":  # read tsv files
+    elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
         df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
-    elif filepath[-4:] == ".csv":  # read csv files
+    elif filepath.endswith(".csv"):  # read csv files
         df = pd.read_csv(filepath, sep=",")  # read only the first 10 lines to save time
 
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
@@ -348,8 +348,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
 
 # main function #
 # read DIANN file header, metadata
-def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, current_flag: str,
-                current_flag_value: str, user_dict: dict, metadata_file: str, data_file: str):
+def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict, metadata_file: str, data_file: str,
+                current_flag=None, current_flag_value=None):
     """
     This function checks parameters and values from the user input for right datatype, default
     values and allowed ranges for the called modules.
@@ -382,6 +382,9 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     # try: store flag as flag_var and flag_value as flag_value_var for temporary variables, example input_origin = Flag,
     # diann = Flag_value, get operations from flag_dict
     # except: if no flag and flag_value is found, use temporary flag and value to check in parameter dict
+    print(variable)
+    print(module)
+    print(flag_dictionary[module].keys())
     if variable in flag_dictionary[module].keys():
         print(f"{variable} is in Flag dictionary")
         dict_to_use = flag_dictionary[module][variable]  # get the current flag information
@@ -391,6 +394,8 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
 
     else:
         print(f"{variable} is in Operation dictionary")
+        if current_flag_value is None:
+            raise ValueError("Flag values can not be None.")
         if ";" in current_flag_value:  # make exceptions if you have to loop over several flag values seperated by ;
             flag_values = current_flag_value.split(";")
             # dict_to_use = operation_dictionary[current_flag][flag_values[0]][variable]

@@ -56,17 +56,18 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
     for module in modules:  # loop over modules to generate the json files
         # print(module_folder)
         with open(f"{params_folder}/{module}_Parameters.txt", "r") as txt_to_json:# open the module parameter file
-            flag_var = None
-            flag_value_var = None
+            #flag_var = None
+            #flag_value_var = None
             if module == general_filename:  # create the general file as starting file for other modules
                 dict1 = {}
                 with open(f"{params_folder}/{module}_Parameters.json", "w") as out_file:
                     for line in txt_to_json:
                         # print(line)
-                        splits = line.split("#")  # get rid of comments
+                        #splits = line.split("#")  # get rid of comments
                         # print(splits)
-                        command, description = splits[0].strip().split("=", 1)  # split between parameter and value
+                        command, description = line.split("=", 1)  # split between parameter and value
                         description = description.strip()  # remove whitespaces
+                        command = command.strip()
                         try:  # make strings exceptions readable
                             if description == "TRUE":
                                 description = 1
@@ -78,12 +79,12 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         except:
                             pass
                         dict1[command.strip()] = description  # generate dictionary
-                        dict_all_parameters[command] = description
+                        dict_all_parameters[command.strip()] = description
                         ## ERROR CHECK HERE FOR GENERAL FILE HERE##
                         if run_error_check:
                             module_name = module[3:]
                             print(f"Start Error check for {module_name}.")
-                            flag_var, flag_value_var = error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file)
+                            flag_var, flag_value_var = error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file)
                     # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
 
@@ -93,10 +94,11 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                 with open(f"{params_folder}/{module}_Parameters.json", "w") as out_file:
                     for line in txt_to_json:
                         # print(line)
-                        splits = line.split("#")  # get rid of comments
+                        #splits = line.split("#")  # get rid of comments
                         # print(splits)
-                        command, description = splits[0].strip().split("=", 1)  # split between parameter and value
+                        command, description = line.split("=", 1)  # split between parameter and value
                         description = description.strip()  # remove whitespaces
+                        command = command.strip()
                         try:  # make strings exceptions readable
                             if description == "TRUE":
                                 description = 1
@@ -108,7 +110,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         except:
                             pass
                         dict1[command.strip()] = description  # generate dictionary
-                        dict_all_parameters[command] = description
+                        dict_all_parameters[command.strip()] = description
                         
                         ## ERROR CHECK HERE FOR MODULES HERE##
                         if run_error_check:
@@ -148,32 +150,23 @@ def create_logfile(project_folder, run_id, mass_spec_data_filename, metadata_fil
 def init_parser(): # build parser outside of the pipeline to read current data
     parser = argparse.ArgumentParser(description="Necessary files to run the pipeline modules")
     parser.add_argument("-w","--workdir", help="Path to working directory where results are saved and reloaded",required=True)
-    parser.add_argument("-m","--metadata", help="Name of the metadata file",required=True,default="metadata.xlsx")
-    parser.add_argument("-d","--data", help="Name of the data to be processed",required=True, default="data.tsv")
-    parser.add_argument("-p","--parameters_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
-    parser.add_argument("-s","--steporder", help="Name of the config file to get module order",required=False, default="Config.txt")
+    parser.add_argument("-m","--metadata", help="Name of the metadata file",required=True)
+    parser.add_argument("-d","--data", help="Name of the data to be processed",required=True)
     args = parser.parse_args()
     
-    # Get input
-    try:
-        with open(args.input_order,"r") as file:
-            setup_str = file.read()
-    except:
-        raise ValueError("###ERROR###: Input file not found")
-        sys.exit(1)
     # Set output
-    outpath = args.workdir
+    path_to_project_directory = args.workdir.replace("\\","/")
         
-    if not os.path.isdir(outpath):
+    if not os.path.isdir(path_to_project_directory):
         raise ValueError("###ERROR###: Output path not existing")  
         sys.exit(1)
     
-    parameterfile = os.path.join(outpath,args.parameters_file)
-    config_file_path = os.path.join(outpath, args.steporder)
-    metadata_file = os.path.join(outpath, args.metadata)
-    data_file = os.path.join(outpath, args.data)
+    module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
+    parameters_txt_file = os.path.join(path_to_project_directory, "Parameters.txt")
+    metadata_file = args.metadata.replace("\\","/")
+    data_file = args.data.replace("\\","/")
     
-    return parameterfile, outpath, config_file_path, data_file, metadata_file
+    return parameters_txt_file, path_to_project_directory, module_order_filename, data_file, metadata_file
 #%%
 if __name__ == "__main__":
    
@@ -190,11 +183,11 @@ if __name__ == "__main__":
         print(sys.argv)
         #if script called from terminal
         parameters_txt_file, path_to_project_directory, module_order_filename, mass_spec_data_filename, metadata_filename = init_parser()
-    username = os.getlogin()
-    preprocessed_filename = "data_XY.tsv"
+    username = os.getlogin() ####
+    preprocessed_filename = "data_XY.tsv" ####
 
-    flags_dict = flags_dict = pd.read_pickle("dict_flags.pkl") # dictionary with information about flags
-    operation_dict = pd.read_pickle("dict_parameters.pkl") # dictionary with information about non-flags
+    flags_dict = pd.read_pickle(os.path.join(os.path.split(os.path.abspath(__file__))[0],"dict_flags.pkl")) # dictionary with information about flags
+    operation_dict = pd.read_pickle(os.path.join(os.path.split(os.path.abspath(__file__))[0],"dict_parameters.pkl")) # dictionary with information about non-flags
     #create subdirectories, read parameters and split parameters by module
     read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, metadata_file=metadata_filename, data_file=mass_spec_data_filename)
     #error check #TODO
