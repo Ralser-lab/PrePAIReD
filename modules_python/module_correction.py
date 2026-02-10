@@ -1029,8 +1029,10 @@ if __name__ == "__main__":
                 if exit_module:
                     sys.exit(1)
     
-    #transpose data
+    # transpose data
     data_df = data_df.T
+    # reset list of fit samples
+    fitsamples_idx_list = None
     
     # -------------------------------------------------------------------------#
     # Perform Correction                                                 #
@@ -1068,7 +1070,6 @@ if __name__ == "__main__":
         combat_kwargs_dict = {
                 "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
                 if k.startswith("combat")}
-        fitsamples_idx_list = None
         if len(combat_kwargs_dict["fitsamples_meta"]) == 2:
             fit_col, fit_level = combat_kwargs_dict["fitsamples_meta"]
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
@@ -1095,7 +1096,7 @@ if __name__ == "__main__":
             metadata_df = metadata_df[
                 ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
                     list(levels_data-levels_fitsamples))]
-            data_df = data_df.loc[:, metadata_df.index]
+            data_df = data_df.loc[metadata_df.index]
 
 
         out = batchcorrect_combat(
