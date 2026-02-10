@@ -598,7 +598,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             else:
                 block_new.append("plot_overall_completeness = 0") 
             #"plot_imputation_vs_covariate = 0" ### Skip for now as this needs parameters from multiple steps
-            block_new.append("%-%-%-%")
+            #block_new.append("%-%-%-%")
             blocks_config_eval.append(block_new)   
     with open(config_evaluation_file_path,"w") as file:
         for block in blocks_config_eval:
