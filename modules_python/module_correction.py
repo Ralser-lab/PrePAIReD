@@ -1143,7 +1143,7 @@ if __name__ == "__main__":
         # Check for missing values in columns for adjustment
         for var in parameters_dict["adjust_cols"]:
             if metadata_df[var].isna().any():
-                n_na = metadata_df[metadata_df["MS.Batch"].isna()].shape[0]
+                n_na = metadata_df[metadata_df[var].isna()].shape[0]
                 log_string += f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
         if "###ERROR###" in log_string:
             helper.logger(log_file, log_string)
