@@ -15,11 +15,11 @@ from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
 load_dictionaries = False ####
+write_to_disc = False
 
 if not load_dictionaries:
     import pandas as pd
     #import numpy as np
-    write_to_disc = True
 else:
     write_to_disc = False
     
@@ -56,6 +56,7 @@ def init_module():
     outfile = os.path.join(outpath,args.output_file)
     dict_path = args.dict_path
     config_file_path = os.path.join(outpath,"Config.txt")
+    config_evaluation_file_path = os.path.join(outpath,"Config_evaluation.txt")
     parameter_overview_table_file_path = args.parameter_overview_table
     
     try:
@@ -65,7 +66,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, dict_path, parameter_overview_table_file_path
+    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -422,6 +423,188 @@ def write_config(config_file_path, setup_order, language):
             if c<len(setup_order) and step != "GENERAL":
                 file.write(", ")
 
+def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags):
+    blocks_config_eval = []
+    for ind,block in enumerate(blocks_flags):
+        counter = int(re.search("\%\%([0-9]+?)\_",block[0]).group(1))
+        step = re.search("\%\%[0-9][0-9]\_(.+?)\%",block[0]).group(1)
+        block_new = [block[0]]
+        block_new.append("%-%-%-%")
+        if counter == 0:
+            for line in block:
+                if line and not line.startswith("#") and not line.startswith("%"):
+                    block_new.append(line)
+            block_new.append("%-%-%-%")
+            blocks_config_eval.append(block_new)   
+        else:
+            #block_new = [block[0]]
+            ##### Check if layout works
+            if ind > 1:
+                block_new.append("data_origin = "+os.path.join("..",setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
+                block_new.append("mask_description_origin = "+os.path.join("..",setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
+                block_new.append("data_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("mask_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                block_new.append("mask_description_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+            else:
+                block_new.append("data_origin = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("mask_description_origin = None")
+                block_new.append("mask_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                block_new.append("mask_description_processed = "+os.path.join("..",setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+            block_new.append("%-%-%-%")
+            #
+            if step in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
+                block_new.append("plot_int_box = 1")
+                ### Use F notation for figure legend
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F01.png"))
+                if step == "FILTERING_LONG":
+                    block_new.append("size = (5,10)")
+                else:
+                    block_new.append("size = (10,10)")
+                ### Coloring column needed
+                if step == "CORRECTION":
+                    block_new.append("use_metadata_coloring = 1")
+                    block_new.append("use_parameter_file = 1")
+            else:
+                block_new.append("plot_int_box = 0")
+            block_new.append("%-%-%-%")
+            #  
+            if step in ["FILTERING_LONG","FILTERING_WIDE"]:
+                block_new.append("plot_filter_mask = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F02.png"))
+            else:
+                block_new.append("plot_filter_mask = 0")
+            block_new.append("%-%-%-%")
+            #
+            if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
+                block_new.append("plot_cv = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F03.png"))
+            else:
+                block_new.append("plot_cv = 0")
+            block_new.append("%-%-%-%")
+            ### column_color from parameter_file
+            ### for correction decide on property if it is continuous or not -> continuous = None
+            ### for summarization -> sample_type
+            if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
+                block_new.append("plot_pca = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F04.png"))
+                if step == "NORMALISATION":
+                    block_new.append("continuous = True")
+                    block_new.append("coloring_property = Missingness")
+                    block_new.append("use_metadata_coloring = False")
+                    block_new.append("use_parameter_file = 0")
+                elif step == "IMPUTATION":
+                    block_new.append("continuous = True")
+                    block_new.append("coloring_property = Mean_Intensities")
+                    block_new.append("use_metadata_coloring = False")
+                    block_new.append("use_parameter_file = 0")
+                elif step == "CORRECTION":
+                    block_new.append("continuous = None")
+                    block_new.append("coloring_property = None")
+                    block_new.append("use_metadata_coloring = True")
+                    block_new.append("use_parameter_file = 1")
+                elif step == "SUMMARISATION":
+                    block_new.append("continuous = False")
+                    block_new.append("coloring_property = Mean_Intensities")
+                    block_new.append("use_metadata_coloring = True")
+                    block_new.append("use_parameter_file = 1")  
+            else:
+                block_new.append("plot_pca = 0")  
+            block_new.append("%-%-%-%")
+            #    
+            if step in ["NORMALISATION"]:
+                block_new.append("plot_distribution = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F05.png"))
+            else:
+                block_new.append("plot_distribution = 0")
+            block_new.append("%-%-%-%")
+            ### Confounder (first entry), for batchwise color according to column and remove linreg (or adjust linreg)
+            if step in ["NORMALISATION","CORRECTION"]:
+                if step == "NORMALISATION":
+                    block_new.append("plot_scatter_series = 1")
+                    block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F06.png"))
+                    block_new.append("use_parameter_file = 0")
+                else:
+                    c = False
+                    for line in block:
+                        if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
+                            block_new.append("plot_scatter_series = 1")
+                            block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F06.png"))
+                            block_new.append("use_parameter_file = 1")
+                    if not c:
+                        block_new.append("plot_scatter_series = 0")
+            else:
+                block_new.append("plot_scatter_series = 0")     
+            block_new.append("%-%-%-%")
+            #### Method 
+            #### Cutoff (intensity_dependent_missingness_estimation) 
+            if step in ["IMPUTATION"]: 
+                c = False
+                for line in block:
+                    if line == "eval_missingness_by_detection_threshold = 1":
+                        block_new.append("plot_decision_boundary = 1")
+                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F07.png"))
+                        block_new.append("use_parameter_file = 1")
+                if not c:
+                    block_new.append("plot_decision_boundary = 0")
+            else:
+                block_new.append("plot_decision_boundary = 0")
+            block_new.append("%-%-%-%")
+            #### Correlation type
+            #### Confounder (first entry)
+            if step in ["CORRECTION"]:
+                c = False
+                for line in block:
+                    if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
+                        block_new.append("plot_correlation = 1")
+                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F08.png"))
+                        block_new.append("use_parameter_file = 1")
+                if not c:
+                    block_new.append("plot_correlation = 0")
+            else:
+                block_new.append("plot_correlation = 0")
+            block_new.append("%-%-%-%")
+            #
+            if step in ["NORMALISATION"]: 
+                c = False
+                for line in block:
+                    if "normalization_method = median_scaling" in line:
+                        block_new.append("plot_distribution_hist = 1")
+                        block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F09.png"))
+                        block_new.append("normalization_factors = "+os.path.join("..",setup_order[ind],"Normalization_factors.tsv"))
+                        c = True
+                if not c:
+                    block_new.append("plot_distribution_hist = 0")
+            else:
+                block_new.append("plot_distribution_hist = 0")
+            block_new.append("%-%-%-%")
+            #
+            if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
+                block_new.append("plot_abundance_vs_completeness = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F10.png"))
+            else:
+                block_new.append("plot_abundance_vs_completeness = 0") 
+            block_new.append("%-%-%-%")
+            #
+            if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
+                block_new.append("plot_overall_completeness = 1")
+                block_new.append("outfile = "+ os.path.join("..",setup_order[ind],"F11.png"))
+                if step == "FILTERING_LONG":
+                    block_new.append("gridsize = 50")
+                    block_new.append("n_bins = 50")
+                elif step == "FILTERING_WIDE":
+                    block_new.append("gridsize = 25")
+                    block_new.append("n_bins = 25")
+            else:
+                block_new.append("plot_overall_completeness = 0") 
+            #"plot_imputation_vs_covariate = 0" ### Skip for now as this needs parameters from multiple steps
+            block_new.append("%-%-%-%")
+            blocks_config_eval.append(block_new)   
+    with open(config_evaluation_file_path,"w") as file:
+        for block in blocks_config_eval:
+            for line in block:
+                file.write(line+"\n")
+    return
+        
 #%%
 
 if __name__ == "__main__":
@@ -439,18 +622,22 @@ if __name__ == "__main__":
         
         outpath = askdirectory(title="Please select your output path", initialdir=os.path.abspath(os.getcwd()))
         outfile = os.path.join(outpath,"Parameters.txt")
-        config_file_path = config_file_path = os.path.join(outpath,"Config.txt")
+        config_file_path = os.path.join(outpath,"Config.txt")
+        config_evaluation_file_path = os.path.join(outpath,"Config_evaluation.txt")
         
         if load_dictionaries:
             dict_path = askdirectory(title="Please select the dictionary path", initialdir=os.path.abspath(os.getcwd()))
         else:
-            dict_path = askdirectory(title="Please select the path for saving the dictionaries", initialdir=os.path.abspath(os.getcwd()))
             parameter_overview_table_file_path = askopenfilename(title="Please select the parameter overview file")
+            if write_to_disc:
+                dict_path = askdirectory(title="Please select the path for saving the dictionaries", initialdir=os.path.abspath(os.getcwd()))
+            else:
+                dict_path = None
         
         setup_order = get_setup_order(setup_str, counter)
     
     else:
-        setup_order, outfile, config_file_path, dict_path, parameter_overview_table_file_path = init_module()
+        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -486,3 +673,6 @@ if __name__ == "__main__":
     write_config(config_file_path, setup_order, language)
     print("The configuration file is saved in "+config_file_path+".")
     
+    # Create evaluation config file
+    write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags)
+    print("The configuration file for evaluation is saved in "+config_file_path+".")
