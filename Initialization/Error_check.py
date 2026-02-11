@@ -199,7 +199,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                         f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
                         f"times.")
                 if metadata_df[value].isna().any():  # check for NaN column names
-                    raise ValueError(f"File names contain NaN column names in metadata.")
+                    raise ValueError("File names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
             metadata_df = read_dataframe_header(metadata_file)
             check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable)
@@ -231,7 +231,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                         f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
                         f"times.")
                 if data_df[value].isna().any():  # check for NaN column names
-                    raise ValueError(f"File names contain NaN column names in data.")
+                    raise ValueError("File names contain NaN column names in data.")
                 # if file names in metadata and data are unique and without nans, check that file names are same in
                 # both files
                 metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
@@ -345,7 +345,6 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             if "None" not in allowed_types:
                 raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
 
-
 # main function #
 # read DIANN file header, metadata
 def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict, metadata_file: str, data_file: str,
@@ -368,14 +367,14 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     """
 
     # check all arguments for right type
-    if not isinstance(variable, str):  # check if variable is really a str
-        raise TypeError(f"{variable} is not a string.")
-    if not isinstance(module, str):  # check if module is really a str
-        raise TypeError(f"{module} is not a string.")
-    if not isinstance(flag_dictionary, dict):  # check if dict is really a dict
-        raise TypeError(f"{flag_dictionary} is not a dictionary.")
-    if not isinstance(operation_dictionary, dict):  # check if dict is really a dict
-        raise TypeError(f"{operation_dictionary} is not a dictionary.")
+    #if not isinstance(variable, str):  # check if variable is really a str
+    #    raise TypeError(f"{variable} is not a string.")
+    #if not isinstance(module, str):  # check if module is really a str
+    #    raise TypeError(f"{module} is not a string.")
+    #if not isinstance(flag_dictionary, dict):  # check if dict is really a dict
+    #    raise TypeError(f"{flag_dictionary} is not a dictionary.")
+    #if not isinstance(operation_dictionary, dict):  # check if dict is really a dict
+    #    raise TypeError(f"{operation_dictionary} is not a dictionary.")
 
     # identify value via module and parameter and compare to dict hit
     # make a try except statement:
@@ -426,9 +425,12 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     print(value, type(value))
     print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
-    if str(value) == dict_to_use["Default"]:  # check for default
-        print(f"{value} is default value.")
-        pass
+    if str(value) == str(dict_to_use["Default"]):  # check for default
+        if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
+            raise ValueError(f"{variable} can not be None.")
+        else:
+            print(f"{value} is default value.")
+            pass
 
     else:
         print(f"{value} is not default")
