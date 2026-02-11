@@ -136,9 +136,20 @@ def get_language(dict_parameters, data_flag):
                 dict_parameters[flag][flag_value].update({"Language":data_flag.loc[data_flag[(data_flag["Variable"]==flag)&(data_flag["AllowedValues"]==flag_value)].index[0],"Language"].strip()})
             except:
                 pass
+    # Check if entries are missing
+    for flag in dict_parameters:
+        values = [value for value in data_flag[data_flag["Variable"]==flag]["AllowedValues"].values if ";" not in value]
+        try:
+            for flag_value in values:
+                if not flag_value in dict_parameters[flag]:
+                    dict_parameters[flag][flag_value]={"Language":data_flag.loc[data_flag[(data_flag["Variable"]==flag)&(data_flag["AllowedValues"]==flag_value)].index[0],"Language"].strip()}
+        except:
+            print(flag_value)
+    
+    
     return dict_parameters
     
-def expand_dictionary_parameters(data_parameters):
+def expand_data_parameters(data_parameters):
     # Expand data_parameters to break down ";" in Flag_value/variable
     indices = data_parameters.index
     for index in indices:
@@ -169,7 +180,7 @@ def expand_dictionary_parameters(data_parameters):
     data_parameters.reset_index(drop=True,inplace=True)
     return data_parameters
     
-def expand_dictionary_flags(data_flag):
+def expand_data_flags(data_flag):
     indices = data_flag.index
     for index in indices:
         if re.search(";",str(data_flag.loc[index,"AllowedValues"])):
@@ -190,13 +201,13 @@ def generate_dictionaries(parameter_overview_table_file_path):
     dict_flags =  get_dictionary_flags(data_flag)
 
     # Expand data_parameters to break down ";" in Flag_value/variable
-    data_parameters = expand_dictionary_parameters(data_parameters)
+    data_parameters = expand_data_parameters(data_parameters)
 
     # Get dictionary parameters (flag:flag_value:parameter->options,default,comment)
     dict_parameters = get_dictionary_parameters(data_parameters, data_flag)
     
     # Expand data_flags with all allowed flag values (needed for language)
-    data_flag = expand_dictionary_flags(data_flag)
+    data_flag = expand_data_flags(data_flag)
 
     # Get programming language property
     dict_parameters = get_language(dict_parameters, data_flag)
@@ -274,27 +285,30 @@ def write_parameter_file_imputation(outfile, dict_flags):
             for line in block:
                 # check imputation type
                 if line.startswith("simple_imputation"):
-                    if line.split(" = ")[1]=="1":
+                    if line.split(" = ")[1].strip()=="1":
                         simple = True
                     else:
                         simple = False
+                    block_new.append("## FLAG DO NOT TOUCH ")
                     block_new.append(line)
             # extract imputation method and check for existence
             for line in block:
                 if line.startswith("imputation_method"):
-                    imputation_method = line.split(" = ")[1]
+                    imputation_method = line.split(" = ")[1].strip()
                     if not simple:
                         if imputation_method not in dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]:
                             raise ValueError("###ERROR###: Method not implemented for complex setup")
                             sys.exit(1) 
             setup = "IMPUTATION"
-            block_new.append("### IMPORTANT NOTE: Imputation methods set to default. Please adjust if necessary.")
+            block_new.append("## FLAG DO NOT TOUCH ")
+            block_new.append("imputation_method = "+imputation_method)
+            block_new.append("")
             for flag in dict_flags[setup]:
                 if simple:
                     if imputation_method in dict_flags["IMPUTATION"]["imputation_method"]["Options"]:
                         # Distinguish between R and Python: Python-specific flags
                         if imputation_method not in ["missforest","bpca_R","ppca","ppm","MNAR"]:
-                            if flag not in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation"]:
+                            if flag not in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation","imputation_method"]:
                                 if type(dict_flags[setup][flag]["Comment"]) is str: 
                                     block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))
                                 block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
@@ -308,7 +322,7 @@ def write_parameter_file_imputation(outfile, dict_flags):
                         sys.exit(1)             
                 else:
                     # Setup type specific flags (Python)
-                    if flag not in ["imputation_method"]:
+                    if flag not in ["imputation_method","simple_imputation"]:
                         if type(dict_flags[setup][flag]["Comment"]) is str: 
                             block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))    
                         if dict_flags[setup][flag]["Options"][0].startswith("(") or dict_flags[setup][flag]["Options"][0].startswith("["):
@@ -434,6 +448,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             for line in block:
                 if line and not line.startswith("#") and not line.startswith("%"):
                     block_new.append(line)
+            block_new.append("param_fp = "+os.path.join(outpath,"Parameter_Files","00_GENERAL_Parameters.json"))
             block_new.append("%-%-%-%")
             blocks_config_eval.append(block_new)   
         else:
@@ -441,15 +456,15 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             ##### Check if layout works
             if ind > 1:
                 block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
-                block_new.append("mask_description_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
+                #block_new.append("mask_description_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
                 block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
-                block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
-                block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+                #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
                 block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
-                block_new.append("mask_description_origin = None")
-                block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
-                block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
+                #block_new.append("mask_description_origin = None")
+                #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
+                #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             block_new.append(("param_fp = "+os.path.join(outpath,"Parameter_Files",setup_order[ind]+"_Parameters.json")))
             block_new.append("%-%-%-%")
             #
@@ -462,9 +477,9 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 else:
                     block_new.append("size = (10,10)")
                 ### Coloring column needed
-                if step == "CORRECTION":
-                    block_new.append("use_metadata_coloring = 1")
-                    block_new.append("use_parameter_file = 1")
+                #if step == "CORRECTION":
+                #    block_new.append("use_metadata_coloring = 1")
+                #    block_new.append("use_parameter_file = 1")
             else:
                 block_new.append("plot_int_box = 0")
             block_new.append("%-%-%-%")
@@ -492,22 +507,22 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     block_new.append("continuous = True")
                     block_new.append("coloring_property = Missingness")
                     block_new.append("use_metadata_coloring = False")
-                    block_new.append("use_parameter_file = 0")
+                    #block_new.append("use_parameter_file = 0")
                 elif step == "IMPUTATION":
                     block_new.append("continuous = True")
                     block_new.append("coloring_property = Mean_Intensities")
                     block_new.append("use_metadata_coloring = False")
-                    block_new.append("use_parameter_file = 0")
+                    #block_new.append("use_parameter_file = 0")
                 elif step == "CORRECTION":
                     block_new.append("continuous = None")
                     block_new.append("coloring_property = None")
                     block_new.append("use_metadata_coloring = True")
-                    block_new.append("use_parameter_file = 1")
+                    #block_new.append("use_parameter_file = 1")
                 elif step == "SUMMARISATION":
                     block_new.append("continuous = False")
                     block_new.append("coloring_property = Mean_Intensities")
                     block_new.append("use_metadata_coloring = True")
-                    block_new.append("use_parameter_file = 1")  
+                    #block_new.append("use_parameter_file = 1")  
             else:
                 block_new.append("plot_pca = 0")  
             block_new.append("%-%-%-%")
@@ -523,14 +538,15 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 if step == "NORMALISATION":
                     block_new.append("plot_scatter_series = 1")
                     block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
-                    block_new.append("use_parameter_file = 0")
+                    #block_new.append("use_parameter_file = 0")
                 else:
                     c = False
                     for line in block:
                         if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                             block_new.append("plot_scatter_series = 1")
                             block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
-                            block_new.append("use_parameter_file = 1")
+                            #block_new.append("use_parameter_file = 1")
+                            c = True
                     if not c:
                         block_new.append("plot_scatter_series = 0")
             else:
@@ -544,7 +560,8 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     if line == "eval_missingness_by_detection_threshold = 1":
                         block_new.append("plot_decision_boundary = 1")
                         block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F07.png"))
-                        block_new.append("use_parameter_file = 1")
+                        #block_new.append("use_parameter_file = 1")
+                        c = True
                 if not c:
                     block_new.append("plot_decision_boundary = 0")
             else:
@@ -559,6 +576,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                         block_new.append("plot_correlation = 1")
                         block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F08.png"))
                         block_new.append("use_parameter_file = 1")
+                        c = True
                 if not c:
                     block_new.append("plot_correlation = 0")
             else:
