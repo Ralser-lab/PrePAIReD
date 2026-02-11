@@ -25,6 +25,14 @@ from scipy.stats import chi2
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
+import sys
+import module_helper as helper
+from tkinter.filedialog import askopenfilename, askdirectory
+import argparse
+import os
+import re
+import ast
+
 ### Generalize colors as an input_variable
 
 ### Possible extensions
@@ -341,7 +349,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
         mask_values = list(set(pd.melt(mask)["value"].values)^set("0"))
         mask_values.sort()
     else:
-        description_dict = {mask_description.loc[index,"value"]:mask_description.loc[index,"filter"] for index in mask_description.index}
+        description_dict = {mask_description.loc[index,"value"]:index for index in mask_description.index}
         if mask_description_base is not None:
             mask_values = [value for value in list(description_dict.keys()) if value not in [0,1,99] and value not in list(mask_description_base["value"].values)]
         else:
@@ -697,7 +705,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15,xlabel = "log2(PQ)", cmap = "Spectral"):
+def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15, xlabel = "log2(PQ)", cmap = "Spectral"):
 
     fig = plt.figure(figsize=size)
     fig.set_size_inches(size)
@@ -782,9 +790,19 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
 
 ### Lin Reg per selection -> flag if continuous = False
 ### Title Before/After
+### TODO: Add LinReg per selection e.g. Batch
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step=""):
 
-    ### change to dummy conversion in future????
+    if column_metadata:
+        try:
+            metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
+        except:
+            raise TypeError("Meta data column needs to be numeric.")
+    else: 
+        metadata = metadata.copy()
+        column_metadata = "Order"
+        metadata[column_metadata] = np.arange(0,metadata.shape[0])
+    
     try:
         metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
     except:
@@ -1310,12 +1328,307 @@ def plot_overall_completeness(data, metadata=None, column_metadata=None, size = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
+#%%
 
+### Maybe move to another code to separate plotting functions and import plotting functions?
+
+def init_module():
+    parser = argparse.ArgumentParser(description="Automated evaluation")
+    parser.add_argument("-w","--workingdir", help="working directory where the preprocessing structure was build", required=True)
+    parser.add_argument("-m","--metapath", help="Filepath to metadata file", required=True) 
+    parser.add_argument("-s","--step", help="step that should be evaluated", required=False, default="All") 
+    parser.add_argument("-e","--config_eval", help="Filepath to evaluation configuration file", required=True) 
+    args = parser.parse_args()
+    
+    workdir = args.workingdir.replace("\\","/")
+    step = args.step
+    meta_df_fp = args.metapath.replace("\\","/")
+    config_eval_fp = args.config_eval.replace("\\","/")
+    
+    return workdir, step, meta_df_fp, config_eval_fp
+
+def get_config_dict(config_fp, keys, step):
+    dict_config_setup = {}
+    steps = []
+    with open(config_fp,"r") as file:
+        for line in file.read().splitlines():
+            if line:
+                if line.startswith("%%%%%%%%%%"):
+                    key = re.search(("%%%%%%%%%%(.+?)%%%%%%%%%%"),line).group(1)
+                    dict_config_setup.update({key:{}})
+                    counter = -1
+                    if step == "All" and key != "00_GENERAL":
+                        steps.append(key)
+                    elif step == key:
+                        steps.append(key)
+                elif line == "%-%-%-%":
+                    counter += 1
+                    if key == "00_GENERAL":
+                        key_2 = "Setup"
+                    else:
+                        key_2 = keys[counter]
+                    dict_config_setup[key].update({key_2:{}})
+                elif line != "%-%-%-%":
+                    dict_config_setup[key][key_2].update({line.split("=")[0].strip():line.split("=")[1].strip()})
+    return dict_config_setup, steps
+    
+#%%
 if __name__ == "__main__":
-    pass
+    if len(sys.argv) <= 1:
+        
+        step = input("Please define the step (All is also an option): ")
+        if step[3:] not in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"] and not step == "All":
+            print("Step not found. No step is evaluated evaluated")
+            sys.exit(0)
 
-# Parser (Data_origin (d), Data_processed (n), Metadata (m), Parameter File (p), Plotting_config (s), Workdir (w), ) -> can this be skipped?
-# Read in plotting config
-# Read in Parameter files
-# Extract counter of current step
-# Split config into blocks and keep only general and counter 
+        workdir = askdirectory(title="Please select your working directory", initialdir=os.path.abspath(os.getcwd()))
+        meta_df_fp = askopenfilename(title="Please select the metadata file")       
+        config_fp = askopenfilename(title="Please select the evaluation config file")
+    
+    else:
+        workdir, step, meta_df_fp, config_fp = init_module()
+    
+    keys = ["Data","F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11"]    
+    dict_config_setup, steps = get_config_dict(config_fp, keys, step)
+                
+    parameters_dict_general = helper.load_parameters(dict_config_setup["00_GENERAL"]["Setup"]["param_fp"])
+    try:
+        metadata_df, _ = helper.load_metadata(metadata_fp=meta_df_fp,
+                                              metadata_sheet=parameters_dict_general["metadata_sheet"], 
+                                              filename_col=parameters_dict_general["metadata_filename_column"], 
+                                              encoding=parameters_dict_general["metadata_encoding"])
+        metadata_df.set_index(parameters_dict_general["metadata_sample_column"], inplace=True, drop=False)
+
+    except:
+        raise ValueError("Metadata "+meta_df_fp+" could not be loaded. Skip evaluation.")
+        sys.exit(1)
+        
+    if not steps:
+        raise ValueError("Step could not be found")
+
+#%%
+    for step in steps:
+    #step = "01_FILTERING_LONG"
+    #step = "05_CORRECTION"
+        data_processed = helper.load_data(dict_config_setup[step]["Data"]["data_processed"])
+        parameters_dict = helper.load_parameters(dict_config_setup[step]["Data"]["param_fp"])
+        if step == "01_FILTERING_LONG":
+            data_origin = data_processed
+        else:
+            data_origin = helper.load_data(dict_config_setup[step]["Data"]["data_origin"])
+        mask_processed = helper.load_mask(dict_config_setup[step]["Data"]["data_processed"])
+        mask_description_processed = helper.load_mask_description(dict_config_setup[step]["Data"]["data_processed"])
+        
+        #%%   
+        key_figure = "F01"
+        if dict_config_setup[step][key_figure]["plot_int_box"] == "1":
+            if "CORRECTION" in step and "batch_cols_meta" in parameters_dict:
+                use_metadata_coloring = True
+                column_color = parameters_dict["batch_cols_meta"][0]
+            else:
+                use_metadata_coloring = False
+                column_color = None
+            if "FILTERING_LONG" in step:
+                data_processed_ = None
+            else:
+                data_processed_ = data_processed
+            if "SUMMARISATION" in step:
+                ylabel_int = "Unique IDs"
+            else:
+                ylabel_int = "# Precursors"
+                
+            plot_qa_box_int_and_number(data_origin, 
+                                       metadata_df, 
+                                       data_processed_, 
+                                       sample_type = parameters_dict_general["sample_type"], 
+                                       sample_type_column = parameters_dict_general["sample_type_column"],
+                                       size = ast.literal_eval(dict_config_setup[step][key_figure]["size"]), 
+                                       step = step, 
+                                       outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                       use_metadata_coloring = use_metadata_coloring, 
+                                       column_color = column_color,
+                                       ylabel_int = ylabel_int
+                                       )
+            
+            ### Legend as f-string with column_color if defined
+        #%%
+        key_figure = "F02"
+        if dict_config_setup[step][key_figure]["plot_filter_mask"] == "1":  
+            
+            plot_filter_mask(mask_processed,
+                             mask_description_processed, 
+                             outfile = dict_config_setup[step][key_figure]["outfile"]
+                             )
+    
+        #%%
+        key_figure = "F03"
+        if dict_config_setup[step][key_figure]["plot_cv"] == "1":
+            
+            plot_CV_violin(data_origin, 
+                           metadata_df, 
+                           data_processed=data_processed, 
+                           group_columns = [parameters_dict_general["sample_type_column"]], 
+                           outfile = dict_config_setup[step][key_figure]["outfile"]
+                           )
+            
+        #%%
+        key_figure = "F04"
+        if dict_config_setup[step][key_figure]["plot_pca"] == "1":
+            if "CORRECTION" in step:
+                if parameters_dict["correct_method"] in ["LIMMA_R","COMBAT_R","HARMONY_R","harmony","combat"]:
+                    try:
+                        dict_config_setup[step][key_figure]["column_color"] = parameters_dict["batch_cols_meta"][0]
+                    except:
+                        print("batch_cols_meta not defined.")
+                    dict_config_setup[step][key_figure]["continuous"] = "False"
+                elif parameters_dict["correct_method"] in ["adjust_confounders","adjust_confounders_batchwise"]:
+                    try:
+                        dict_config_setup[step][key_figure]["column_color"] = parameters_dict["adjust_cols"][0]
+                        col_type = parameters_dict["adjust_cols_dtypes"][0]
+                        if col_type in "continuous":
+                            dict_config_setup[step][key_figure]["continuous"] = "True"
+                        else:
+                            dict_config_setup[step][key_figure]["continuous"] = "False"
+                    except:
+                        print("adjust_cols not defined.")
+                dict_config_setup[step][key_figure]["coloring_property"] = None
+            elif "SUMMARISATION" in step:
+                dict_config_setup[step][key_figure]["column_color"] = parameters_dict_general["sample_type_column"]
+                dict_config_setup[step][key_figure]["coloring_property"] = None
+            else:
+                dict_config_setup[step][key_figure]["column_color"] = None
+                
+            try:
+                plot_PCA(data_origin, 
+                         metadata_df, 
+                         data_processed = data_processed, 
+                         outfile = dict_config_setup[step][key_figure]["outfile"], 
+                         continuous = ast.literal_eval(dict_config_setup[step][key_figure]["continuous"]),
+                         column_color = dict_config_setup[step][key_figure]["column_color"], 
+                         use_metadata_coloring = ast.literal_eval(dict_config_setup[step][key_figure]["use_metadata_coloring"]),
+                         coloring_property = dict_config_setup[step][key_figure]["coloring_property"]
+                         )
+            except:
+                print("Error in PCA plotting. Skipped.")
+    
+        #%%
+        key_figure = "F05"
+        if dict_config_setup[step][key_figure]["plot_distribution"] == "1":
+            
+            plot_distribution(data_origin, 
+                              metadata_df, 
+                              data_processed = data_processed, 
+                              outfile = dict_config_setup[step][key_figure]["outfile"],
+                              step = step
+                              )
+            
+        #%%
+        key_figure = "F06"
+        if dict_config_setup[step][key_figure]["plot_scatter_series"] == "1":
+            if "NORMALISATION" in step:
+                dict_config_setup[step][key_figure]["column_metadata"] = None
+                dict_config_setup[step][key_figure]["data_type"] = "continuous"
+                dict_config_setup[step][key_figure]["continuous"] = True
+                dict_config_setup[step][key_figure]["use_metadata_coloring"] = False
+                dict_config_setup[step][key_figure]["column_color"] = None
+                dict_config_setup[step][key_figure]["plot_linreg"] = True
+            elif "CORRECTION" in step:
+                try:
+                    dict_config_setup[step][key_figure]["column_metadata"] = parameters_dict["adjust_cols"][0]
+                    dict_config_setup[step][key_figure]["data_type"] = parameters_dict["adjust_cols_dtypes"][0]
+                    if parameters_dict["correct_method"] in ["adjust_confounders_batchwise"]:
+                        dict_config_setup[step][key_figure]["use_metadata_coloring"] = True
+                        dict_config_setup[step][key_figure]["column_color"] = parameters_dict["batch_cols_meta"][0]
+                        dict_config_setup[step][key_figure]["plot_linreg"] = False
+                    else:
+                        dict_config_setup[step][key_figure]["use_metadata_coloring"] = False
+                        dict_config_setup[step][key_figure]["column_color"] = None
+                        dict_config_setup[step][key_figure]["plot_linreg"] = True
+    
+                    if dict_config_setup[step][key_figure]["data_type"] in "continuous":
+                        dict_config_setup[step][key_figure]["continuous"] = True
+                    else:
+                        dict_config_setup[step][key_figure]["continuous"] = False
+                except:
+                    print("adjust_cols not defined.")
+            
+            try:
+                plot_scatter_series(data_origin, 
+                                    metadata_df, 
+                                    column_metadata = dict_config_setup[step][key_figure]["column_metadata"], 
+                                    data_processed = data_processed, 
+                                    data_type = dict_config_setup[step][key_figure]["data_type"], 
+                                    use_metadata_coloring = dict_config_setup[step][key_figure]["use_metadata_coloring"], 
+                                    continuous = dict_config_setup[step][key_figure]["continuous"], 
+                                    column_color = dict_config_setup[step][key_figure]["column_color"],
+                                    plot_linreg = dict_config_setup[step][key_figure]["plot_linreg"], 
+                                    outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                    step = step
+                                    )
+            except:
+                print("Error in scatter series plotting. Skipped.")
+        
+        #%%
+        key_figure = "F07"
+        if dict_config_setup[step][key_figure]["plot_decision_boundary"] == "1":
+            
+            plot_decision_boundary_estimation_curve(data_origin, 
+                                                    metadata_df, 
+                                                    outfile= dict_config_setup[step][key_figure]["outfile"],
+                                                    method = parameters_dict["intensity_dependent_missingness_fit_method"],
+                                                    boundary = float(parameters_dict["intensity_dependent_missingness_decision_boundary"])
+                                                    )
+            
+        #%%
+        key_figure = "F08"   
+        if dict_config_setup[step][key_figure]["plot_correlation"] == "1":
+            
+            try:
+                plot_correlation_distribution(data_origin, 
+                                              metadata_df, 
+                                              data_processed = data_processed, 
+                                              column_metadata = parameters_dict["adjust_cols"][0], 
+                                              data_type = parameters_dict["adjust_cols_dtypes"][0],  
+                                              outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                              use_same_random = True, 
+                                              step = step
+                                              )
+            except:
+                print("Error in correlation plotting. Skipped.")
+                
+        #%%
+        key_figure = "F09"   
+        if dict_config_setup[step][key_figure]["plot_distribution_hist"] == "1":
+            normalisation_factors = pd.read_csv(dict_config_setup[step][key_figure]["normalization_factors"], sep="\t", index_col=0)
+            
+            plot_distribution_hist(normalisation_factors, 
+                                   outfile = dict_config_setup[step][key_figure]["outfile"],
+                                   baseline = 0
+                                   )
+    
+        ### Legend: log2-transformed normalization factors
+        
+        #%%
+        key_figure = "F10" 
+        if dict_config_setup[step][key_figure]["plot_abundance_vs_completeness"] == "1":
+                
+            plot_completeness_vs_abundance_scatter(data_processed, 
+                                                   metadata_df, 
+                                                   outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                                   gridsize = int(dict_config_setup[step][key_figure]["gridsize"]), 
+                                                   n_bins = int(dict_config_setup[step][key_figure]["n_bins"])
+                                                   )
+            
+        #%%
+        key_figure = "F11"
+        if dict_config_setup[step][key_figure]["plot_overall_completeness"] == "1":
+                
+            plot_overall_completeness(data_processed, 
+                                      outfile = dict_config_setup[step][key_figure]["outfile"]
+                                      )
+    
+    #%%        
+
+    # Read in figure legend (get filedir and read in relative to this)
+    ### Test ###
+    ### Figure Legend ### In try/except if try/except is used
