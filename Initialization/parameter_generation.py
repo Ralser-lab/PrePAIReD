@@ -15,11 +15,11 @@ from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
 load_dictionaries = False ####
-write_to_disc = False
+write_to_disc = True
 
 if not load_dictionaries:
     import pandas as pd
-    #import numpy as np
+    import numpy as np
 else:
     write_to_disc = False
     
@@ -102,7 +102,16 @@ def get_dictionary_flags(data_flag):
                                          "Comment":data_flag.loc[index,"Comment in parameters.txt"],
                                          "Type":data_flag.loc[index,"Type"],
                                          "Check Operation":data_flag.loc[index,"Operations"]
-                                         }
+                                         } if not data_flag.loc[index,"PrimaryDefault"] is np.nan else {
+                                            "Options":[el if re.search(";",str(item)) else item
+                                                       for item in data_flag[(data_flag["Variable"]==data_flag.loc[index,"Variable"]) & (data_flag.loc[index,"Step"]==step)]["AllowedValues"].values 
+                                                           for el in str(item).replace(" ","").split(";")],
+                                            "Default":None,
+                                            "Comment":data_flag.loc[index,"Comment in parameters.txt"],
+                                            "Type":data_flag.loc[index,"Type"],
+                                            "Check Operation":data_flag.loc[index,"Operations"]
+                                            }  
+                                         
         for index in data_flag[(data_flag["Step"]==step)].index} 
         for step in data_flag["Step"]}
     
@@ -123,7 +132,16 @@ def get_dictionary_parameters(data_parameters, data_flag):
                                                     "Default":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"], ########
                                                     "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"],
                                                     "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
-                                                    "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]}
+                                                    "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]
+                                                    } if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"] is np.nan else {
+                                                        "Options":[el if re.search(";",str(item)) else item
+                                                    for item in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)]["AllowedValues"].values 
+                                                        for el in str(item).replace(" ","").split(";")],
+                                                        "Default":None, ########
+                                                        "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"],
+                                                        "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
+                                                        "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]
+                                                        }
                                 for parameter in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)]["Variable"].values}
                             for flag_value in set(data_parameters[data_parameters["Flag_variable"]==flag]["Flag_value"].values)}
                        for flag in data_flag["Variable"].values}
@@ -461,7 +479,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
-                block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
                 #block_new.append("mask_description_origin = None")
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
@@ -600,6 +618,12 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_abundance_vs_completeness = 1")
                 block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F10.png"))
+                if step == "FILTERING_LONG":
+                    block_new.append("gridsize = 50")
+                    block_new.append("n_bins = 50")
+                elif step == "FILTERING_WIDE":
+                    block_new.append("gridsize = 25")
+                    block_new.append("n_bins = 25")
             else:
                 block_new.append("plot_abundance_vs_completeness = 0") 
             block_new.append("%-%-%-%")
@@ -607,12 +631,6 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_overall_completeness = 1")
                 block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F11.png"))
-                if step == "FILTERING_LONG":
-                    block_new.append("gridsize = 50")
-                    block_new.append("n_bins = 50")
-                elif step == "FILTERING_WIDE":
-                    block_new.append("gridsize = 25")
-                    block_new.append("n_bins = 25")
             else:
                 block_new.append("plot_overall_completeness = 0") 
             #"plot_imputation_vs_covariate = 0" ### Skip for now as this needs parameters from multiple steps
