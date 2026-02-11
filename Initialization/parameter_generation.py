@@ -14,8 +14,8 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = False ####
-write_to_disc = True
+load_dictionaries = True ####
+write_to_disc = False
 
 if not load_dictionaries:
     import pandas as pd
@@ -467,7 +467,6 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 if line and not line.startswith("#") and not line.startswith("%"):
                     block_new.append(line)
             block_new.append("param_fp = "+os.path.join(outpath,"Parameter_Files","00_GENERAL_Parameters.json"))
-            block_new.append("%-%-%-%")
             blocks_config_eval.append(block_new)   
         else:
             #block_new = [block[0]]
@@ -538,7 +537,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     #block_new.append("use_parameter_file = 1")
                 elif step == "SUMMARISATION":
                     block_new.append("continuous = False")
-                    block_new.append("coloring_property = Mean_Intensities")
+                    block_new.append("coloring_property = None")
                     block_new.append("use_metadata_coloring = True")
                     #block_new.append("use_parameter_file = 1")  
             else:
@@ -593,7 +592,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                         block_new.append("plot_correlation = 1")
                         block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F08.png"))
-                        block_new.append("use_parameter_file = 1")
+                        #block_new.append("use_parameter_file = 1")
                         c = True
                 if not c:
                     block_new.append("plot_correlation = 0")
