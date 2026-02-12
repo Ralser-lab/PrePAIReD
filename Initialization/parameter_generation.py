@@ -47,7 +47,7 @@ def init_module():
         raise ValueError("###ERROR###: Input file not found")
         sys.exit(1)
     # Set output
-    outpath = args.output_path
+    outpath = args.workdir
         
     if not os.path.isdir(outpath):
         raise ValueError("###ERROR###: Output path not existing")  
@@ -444,13 +444,22 @@ def write_config(config_file_path, setup_order, language):
         c = 0
         for step, language_step in zip(setup_order,language):
             if step != "00_GENERAL":
-                if language_step[0] == "Python":
-                    file.write(step+"_py")
-                elif language_step[0] == "R":
-                    file.write(step+"_R")
+                if "IMPUTATION" in step:
+                    if language_step[1] == "Python":
+                        file.write(step+"_py")
+                    elif language_step[1] == "R":
+                        file.write(step+"_R")
+                    else:
+                        raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
+                        sys.exit(1)
                 else:
-                    raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
-                    sys.exit(1)
+                    if language_step[0] == "Python":
+                        file.write(step+"_py")
+                    elif language_step[0] == "R":
+                        file.write(step+"_R")
+                    else:
+                        raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
+                        sys.exit(1)
             c+=1
             if c<len(setup_order) and step != "GENERAL":
                 file.write(", ")
@@ -474,11 +483,12 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             if ind > 1:
                 block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
                 #block_new.append("mask_description_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
-                block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                #block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
-                block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+                block_new.append("data_origin = None")
+            block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
                 #block_new.append("mask_description_origin = None")
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
@@ -488,7 +498,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             if step in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_int_box = 1")
                 ### Use F notation for figure legend
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F01.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F01.png"))
                 if step == "FILTERING_LONG":
                     block_new.append("size = (5,10)")
                 else:
@@ -499,27 +509,28 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 #    block_new.append("use_parameter_file = 1")
             else:
                 block_new.append("plot_int_box = 0")
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F01.png"))
             block_new.append("%-%-%-%")
             #  
             if step in ["FILTERING_LONG","FILTERING_WIDE"]:
                 block_new.append("plot_filter_mask = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F02.png"))
             else:
                 block_new.append("plot_filter_mask = 0")
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F02.png"))
             block_new.append("%-%-%-%")
             #
             if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_cv = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F03.png"))
             else:
                 block_new.append("plot_cv = 0")
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F03.png"))
             block_new.append("%-%-%-%")
             ### column_color from parameter_file
             ### for correction decide on property if it is continuous or not -> continuous = None
             ### for summarization -> sample_type
             if step in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 block_new.append("plot_pca = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F04.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F04.png"))
                 if step == "NORMALISATION":
                     block_new.append("continuous = True")
                     block_new.append("coloring_property = Missingness")
@@ -541,33 +552,41 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     block_new.append("use_metadata_coloring = True")
                     #block_new.append("use_parameter_file = 1")  
             else:
-                block_new.append("plot_pca = 0")  
+                block_new.append("plot_pca = 0")
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F04.png"))
+                block_new.append("continuous = True")
+                block_new.append("coloring_property = Missingness")
+                block_new.append("use_metadata_coloring = False")
             block_new.append("%-%-%-%")
             #    
             if step in ["NORMALISATION"]:
                 block_new.append("plot_distribution = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F05.png"))
             else:
                 block_new.append("plot_distribution = 0")
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F05.png"))
             block_new.append("%-%-%-%")
             ### Confounder (first entry), for batchwise color according to column and remove linreg (or adjust linreg)
             if step in ["NORMALISATION","CORRECTION"]:
                 if step == "NORMALISATION":
                     block_new.append("plot_scatter_series = 1")
-                    block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
+                    #block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F06.png"))
+                    #block_new.append("plot_by = Correlation")
                     #block_new.append("use_parameter_file = 0")
                 else:
                     c = False
                     for line in block:
                         if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                             block_new.append("plot_scatter_series = 1")
-                            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F06.png"))
+                            #block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F06.png"))
+                            #block_new.append("plot_by = Correlation")
                             #block_new.append("use_parameter_file = 1")
                             c = True
                     if not c:
                         block_new.append("plot_scatter_series = 0")
             else:
                 block_new.append("plot_scatter_series = 0")     
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F06.png"))
+            block_new.append("plot_by = Correlation")
             block_new.append("%-%-%-%")
             #### Method 
             #### Cutoff (intensity_dependent_missingness_estimation) 
@@ -576,13 +595,13 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if line == "eval_missingness_by_detection_threshold = 1":
                         block_new.append("plot_decision_boundary = 1")
-                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F07.png"))
                         #block_new.append("use_parameter_file = 1")
                         c = True
                 if not c:
                     block_new.append("plot_decision_boundary = 0")
             else:
                 block_new.append("plot_decision_boundary = 0")
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F07.png"))
             block_new.append("%-%-%-%")
             #### Correlation type
             #### Confounder (first entry)
@@ -591,13 +610,14 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if "correct_method = adjust_confounders" in line or "correct_method = adjust_confounders_batchwise" in line:
                         block_new.append("plot_correlation = 1")
-                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F08.png"))
+                        #block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F08.png"))
                         #block_new.append("use_parameter_file = 1")
                         c = True
                 if not c:
                     block_new.append("plot_correlation = 0")
             else:
                 block_new.append("plot_correlation = 0")
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F08.png"))
             block_new.append("%-%-%-%")
             #
             if step in ["NORMALISATION"]: 
@@ -605,18 +625,20 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 for line in block:
                     if "normalization_method = median_scaling" in line:
                         block_new.append("plot_distribution_hist = 1")
-                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F09.png"))
+                        block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F09.png"))
                         block_new.append("normalization_factors = "+os.path.join(outpath,setup_order[ind],"Normalization_factors.tsv"))
                         c = True
                 if not c:
                     block_new.append("plot_distribution_hist = 0")
+                    block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F09.png"))
             else:
                 block_new.append("plot_distribution_hist = 0")
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","report_folder","F09.png"))
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_abundance_vs_completeness = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F10.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F10.png"))
                 if step == "FILTERING_LONG":
                     block_new.append("gridsize = 50")
                     block_new.append("n_bins = 50")
@@ -625,16 +647,19 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     block_new.append("n_bins = 25")
             else:
                 block_new.append("plot_abundance_vs_completeness = 0") 
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F10.png"))
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 block_new.append("plot_overall_completeness = 1")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"F11.png"))
+                #block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F11.png"))
             else:
                 block_new.append("plot_overall_completeness = 0") 
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F11.png"))
             #"plot_imputation_vs_covariate = 0" ### Skip for now as this needs parameters from multiple steps
             #block_new.append("%-%-%-%")
             blocks_config_eval.append(block_new)   
+            
     with open(config_evaluation_file_path,"w") as file:
         for block in blocks_config_eval:
             for line in block:
@@ -703,7 +728,7 @@ if __name__ == "__main__":
     print("The parameters file is saved in "+outfile+".")
     
     # Check for internal error
-    check_language(language)
+    #check_language(language)
     
     # Create config file
     write_config(config_file_path, setup_order, language)
