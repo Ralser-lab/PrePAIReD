@@ -22,9 +22,6 @@ if not load_dictionaries:
     import numpy as np
 else:
     write_to_disc = False
-    
-### TODO
-### Add evaluation config later
 
 #%%
 
@@ -66,7 +63,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath
+    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -461,17 +458,17 @@ def write_config(config_file_path, setup_order, language):
                         raise ValueError("###Internal Error###: Please report and fix Config.txt manually according to documentation")
                         sys.exit(1)
             c+=1
-            if c<len(setup_order) and step != "GENERAL":
+            if c<len(setup_order) and step != "00_GENERAL":
                 file.write(", ")
 
-def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath):
+def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath, counter):
     blocks_config_eval = []
     for ind,block in enumerate(blocks_flags):
-        counter = int(re.search("\%\%([0-9]+?)\_",block[0]).group(1))
+        counter_ = int(re.search("\%\%([0-9]+?)\_",block[0]).group(1))
         step = re.search("\%\%[0-9][0-9]\_(.+?)\%",block[0]).group(1)
         block_new = [block[0]]
         block_new.append("%-%-%-%")
-        if counter == 0:
+        if counter_ == 0:
             for line in block:
                 if line and not line.startswith("#") and not line.startswith("%"):
                     block_new.append(line)
@@ -481,14 +478,14 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             #block_new = [block[0]]
             ##### Check if layout works
             if ind > 1:
-                block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+".tsv"))
+                block_new.append("data_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1+counter-1)+".tsv"))
                 #block_new.append("mask_description_origin = "+os.path.join(outpath,setup_order[ind-1],"data_"+"{:02d}".format(ind-1)+"_mask_desription.tsv"))
                 #block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
                 block_new.append("data_origin = None")
-            block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+".tsv"))
+            block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind+counter-1)+".tsv"))
                 #block_new.append("mask_description_origin = None")
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
@@ -563,7 +560,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 block_new.append("plot_distribution = 1")
             else:
                 block_new.append("plot_distribution = 0")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F05.png"))
+            block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F05.png"))
             block_new.append("%-%-%-%")
             ### Confounder (first entry), for batchwise color according to column and remove linreg (or adjust linreg)
             if step in ["NORMALISATION","CORRECTION"]:
@@ -698,7 +695,7 @@ if __name__ == "__main__":
         setup_order = get_setup_order(setup_str, counter)
     
     else:
-        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath = init_module()
+        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -735,5 +732,5 @@ if __name__ == "__main__":
     print("The configuration file is saved in "+config_file_path+".")
     
     # Create evaluation config file
-    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath)
+    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter)
     print("The configuration file for evaluation is saved in "+config_file_path+".")

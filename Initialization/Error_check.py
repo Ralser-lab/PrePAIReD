@@ -10,18 +10,25 @@ import pandas as pd
 # metadata_file = "Test_data/Metadata.xlsx"
 # data_file = "Test_data/data_00.tsv"
 
+def update_log(logfile, message):
+    log = open(logfile, "a")
+    log.write(message+"\n")
+    log.close()
+
 # support functions
-def read_dataframe_header(filepath: str):
+def read_dataframe_header(filepath: str, log: str):
     """
     Check if filepath exists and read the dataframe header
     :param filepath: str, path to dataframe
+    :param log: str, logfile
     :return: column names of the dataframe
     """
     # print(filepath)
     if not isinstance(filepath, str):  # check if filepath is str
+        update_log(log,f"###ERROR###: {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
     if filepath.endswith(".xlsx"):  # read excel
-        print(filepath)
+        #print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
         df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
@@ -30,33 +37,40 @@ def read_dataframe_header(filepath: str):
 
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
+        update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
+                         f"times.") 
         raise ValueError(f"Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
                          f"times.")
     if df.columns.isna().any():  # check for NaN column names
+        update_log(log,f"###ERROR###: Dataframe columns contains NaN column names in metadata at position "
+                         f"{df.columns[df.columns.isna()]}.") 
         raise ValueError(f"Dataframe columns contains NaN column names in metadata at position "
                          f"{df.columns[df.columns.isna()]}.")
     else:
         return df
 
 
-def check_for_existence(value, l: list, module: str, variable: str):
+def check_for_existence(value, l: list, module: str, variable: str, log: str):
     """
     Check if value exists in list
     :param value: str, int or float
     :param l: list, contains the allowed values
     :param module: str, contains the current module
     :param variable: str, contains the current variable
+    :param log: str, logfile
     :return: Nothing if value is in list
     """
     if not isinstance(l, list):  # check if list is list
+        update_log(log,f"###ERROR###: {l} is not a list.") 
         raise TypeError(f"{l} is not a list.")
     if str(value) in l:
         pass
     else:
+        update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed list.") 
         raise ValueError(f"Error in module: {module} for variable: {variable}: {value} is not in allowed list.")
 
 
-def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_inclusive, module: str, variable: str):
+def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_inclusive, module: str, variable: str, log: str):
     """
     check if a value is in the range of allowed values
     :param value: float, needs to be between lower_inclusive and upper_inclusive
@@ -66,23 +80,28 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
     :param upper_inclusive: str, will be ) (not included) or ] (included)
     :param module: str, contains the current module
     :param variable: str, contains the current variable
-
+    :param log: str, logfile
     :return: Nothing if all is fine
     """
     try:  # check if value is not a number
         float(value)
         pass
     except:
+        update_log(log,f"###ERROR###: {value} is not a number.") 
         raise ValueError(f"{value} is not a number.")
     if not isinstance(lower_inclusive, str):  # check if lower_limit is str
+        update_log(log,f"###ERROR###: {lower_inclusive} is not a string.") 
         raise TypeError(f"{lower_inclusive} is not a string.")
     if not isinstance(upper_inclusive, str):  # check if upper_limit is str
+        update_log(log,f"###ERROR###: {upper_inclusive} is not a string.") 
         raise TypeError(f"{upper_inclusive} is not a string.")
 
     if lower_inclusive == "(":  # check if value is out of lower range
         if value > lower_limit:
             pass
         else:
+            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be > "
+            f"{lower_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be > "
                 f"{lower_limit}.")
@@ -90,6 +109,8 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value >= lower_limit:
             pass
         else:
+            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be >= "
+            f"{lower_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be >= "
                 f"{lower_limit}.")
@@ -97,6 +118,8 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value < upper_limit:
             pass
         else:
+            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be < "
+            f"{upper_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be < "
                 f"{upper_limit}.")
@@ -104,58 +127,70 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value <= upper_limit:
             pass
         else:
+            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, "
+                             f"must be <= {upper_limit}.") 
             raise ValueError(f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, "
                              f"must be <= {upper_limit}.")
 
 
-def check_for_path_existence(filepath: str):
+def check_for_path_existence(filepath: str, log: str):
     """
     Check if filepath exists
     :param filepath: str, path to dataframe
+    :param log: str, logfile
     :return: Nothing if filepath exists
     """
     if not isinstance(filepath, str):  # check if filepath is str
+        update_log(log,f"###ERROR###: {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
     if os.path.exists(filepath):
         pass
     else:
+        update_log(log,f"###ERROR###: {filepath} does not exist.") 
         raise ValueError(f"{filepath} does not exist.")
 
 
-def check_for_length(l: list, module: str, variable: str):
+def check_for_length(l: list, module: str, variable: str, log: str):
     """
     Check if l is a list and return its length
     :param l: list, contains the allowed values
     :param module: str, contains the current module
     :param variable: str, contains the current variable
+    :param log: str, logfile
     :return: length of l
     """
     if not isinstance(l, list):  # check if list is a list
+        update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {l} is not a list.") 
         raise TypeError(f"Error in module: {module} for variable: {variable}: {l} is not a list.")
     return len(l)
 
 
-def sheet_existence(excel_file: str, sheet_name: str):
+def sheet_existence(excel_file: str, sheet_name: str, log: str):
     """
     Find the metadata sheet in an Excel file
     :param excel_file: str, Excel file to check
     :param sheet_name: str, sheet to find in Excel
+    :param log: str, logfile
     :return: Nothing if sheet name exists
     """
     if not isinstance(excel_file, str):  # check if excel_file is str
+        update_log(log,f"###ERROR###: {excel_file} is not a string.") 
         raise TypeError(f"{excel_file} is not a string.")
     if not isinstance(sheet_name, str):  # check if sheet_name is str
+        update_log(log,f"###ERROR###: {sheet_name} is not a string.") 
         raise TypeError(f"{sheet_name} is not a string.")
     try:
         xl = pd.read_excel(excel_file, sheet_name=sheet_name)  # read excel
     except:
+        update_log(log,f"###ERROR###: {sheet_name} not found in excel file.") 
         raise ValueError(f"{sheet_name} not found in excel file.")
 
 
-def allowed_values_conversion(range_options: list):
+def allowed_values_conversion(range_options: list, log: str):
     """
     Convert allowed values string for comparison to user input
     :param range_options: allowed range including the boundaries and values
+    :param log: str, logfile
     :return: lower_inclusive, upper_inclusive, lower_limit, upper_limit
     """
     allowed_values = range_options[0]
@@ -169,7 +204,7 @@ def allowed_values_conversion(range_options: list):
 
 
 def operation_selection(value, target_dict: dict, operation_dictionary: dict, user_dict: dict, operation: str,
-                        module: str, variable: str, metadata_file: str, data_file: str):
+                        module: str, variable: str, metadata_file: str, data_file: str, log: str):
     """
     run the correct operation for every value
     :param value: user input
@@ -181,52 +216,58 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     :param variable: str, contains the current variable
     :param metadata_file: str, metadata filename
     :param data_file: str, proteomics filename, f.e. DIA-NN output
+    :param log: str, logfile
     """
-    print(operation)
-    print(value)
+    #print(operation)
+    #print(value)
     current_operation = operation
     if value is not None:  # skip operations if a value is nan
         if current_operation == "sheet existence if xls(x)":
             if metadata_file[:-5] == ".xlsx":
-                sheet_existence(metadata_file, value)
+                sheet_existence(metadata_file, value, log=log)
         if current_operation == "existence in metadata.columns":
-            metadata_df = read_dataframe_header(metadata_file)
-            check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
+            check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable, log=log)
             if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
                 multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
                 if len(multiple_files) > 0:
+                    update_log(log, f"###ERROR###: File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                     f"times.") 
                     raise ValueError(
                         f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
                         f"times.")
                 if metadata_df[value].isna().any():  # check for NaN column names
+                    update_log(log, "###ERROR###: File names contain NaN column names in metadata.") 
                     raise ValueError("File names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
-            metadata_df = read_dataframe_header(metadata_file)
-            check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
+            check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
             # print(df_cols)
             # print(value[0])
             series = pd.read_excel(metadata_file, usecols=[value[0]])
             series = series[value[0]].tolist()
             # print(series)
-            check_for_existence(value[1], l=series, module=module, variable=variable)
+            check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
         if current_operation == "existence in metadata_df.columns (; separated)":
-            metadata_df = read_dataframe_header(metadata_file)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
             values = value.split(";")
             for val in values:
-                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
+                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "elements existence in metadata.columns":
-            metadata_df = read_dataframe_header(metadata_file)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
             for val in value:
-                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable)
+                check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "value in metadata[sample_type_column]":
-            metadata_df = read_dataframe_header(metadata_file)
-            check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
+            check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
-            data_df = read_dataframe_header(data_file)
-            check_for_existence(value, l=list(data_df.columns), module=module, variable=variable)
+            data_df = read_dataframe_header(data_file, log=log)
+            check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
                 multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
                 if len(multiple_files) > 0:
+                    update_log(log, f"###ERROR###: File names are not unique in data, {list(multiple_files)} exist(s) multiple "
+                    f"times.") 
                     raise ValueError(
                         f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
                         f"times.")
@@ -239,6 +280,9 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 only_in_metadata = metadata_set - data_set
                 only_in_data = data_set - metadata_set
                 if only_in_metadata or only_in_data:
+                    update_log(log, f"###ERROR###: Differences found:\n"
+                                     f"Only in metadata: {list(only_in_metadata)}\n"
+                                     f"Only in data: {list(only_in_data)}")
                     raise ValueError(f"Differences found:\n"
                                      f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
@@ -247,94 +291,98 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             data_df = read_dataframe_header(data_file)
             values = value.split(";")
             for val in values:
-                check_for_existence(val, l=list(data_df.columns), module=module, variable=variable)
+                check_for_existence(val, l=list(data_df.columns), module=module, variable=variable, log=log)
         if current_operation == "existence in input_ids_columns":
             # print(user_dict)
             input_ids_columns = user_dict["input_ids_columns"]
-            print(input_ids_columns)
+            #print(input_ids_columns)
             input_ids_columns = input_ids_columns.split(";")
-            print(input_ids_columns)
-            check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
+            #print(input_ids_columns)
+            check_for_existence(value, l=input_ids_columns, module=module, variable=variable, log=log)
         if current_operation == "existence in input_ids_columns or Proteotypic":
             # print(user_dict)
             input_ids_columns = user_dict["input_ids_columns"]
-            print(input_ids_columns)
+            #print(input_ids_columns)
             input_ids_columns = input_ids_columns.split(";")
             input_ids_columns.append("Proteotypic")
-            check_for_existence(value, l=input_ids_columns, module=module, variable=variable)
+            check_for_existence(value, l=input_ids_columns, module=module, variable=variable, log=log)
         if current_operation == "existence of path":
-            check_for_path_existence(filepath=value)
+            check_for_path_existence(filepath=value, log=log)
         if current_operation == "check":
-            check_for_existence(value, l=target_dict["Options"], module=module, variable=variable)
+            check_for_existence(value, l=target_dict["Options"], module=module, variable=variable, log=log)
         if current_operation == "check len(adjust_cols) and el in AllowedValues":
             adjust_cols = user_dict["adjust_cols"]  # get the list with column names
             allowed_values = operation_dictionary["correct_method"]["adjust_confounders"]["adjust_cols_dtypes"][
                 "Options"]  # dtypes
-            length_cols = check_for_length(adjust_cols, module=module, variable=variable)
-            length_dtypes = check_for_length(value, module=module, variable=variable)
+            length_cols = check_for_length(adjust_cols, module=module, variable=variable, log=log)
+            length_dtypes = check_for_length(value, module=module, variable=variable, log=log)
             if length_cols != length_dtypes:
+                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                                 f"and adjusted columns ({length_cols}) is different")
                 raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
                                  f"and adjusted columns ({length_cols}) is different")
             for val in value:
-                check_for_existence(val, l=allowed_values, module=module, variable=variable)
+                check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)
         if current_operation == "check elements":
             values = value.split(";")
             for val in values:
-                check_for_existence(val, l=target_dict["Options"], module=module, variable=variable)
+                check_for_existence(val, l=target_dict["Options"], module=module, variable=variable, log=log)
         if current_operation == "check range":
             allowed_values = target_dict["Options"]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             check_for_range(value=value, lower_limit=lower_limit, upper_limit=upper_limit,
                             lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                            variable=variable)
+                            variable=variable, log=log)
         if current_operation == "check len 2 and range":
             allowed_values = target_dict["Options"]
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-            if check_for_length(value, module=module, variable=variable) != 2:
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            if check_for_length(value, module=module, variable=variable, log=log) != 2:
+                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
                 raise ValueError(
                     f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
             for val in value:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                                variable=variable)
+                                variable=variable, log=log)
         if current_operation == "check len 3 and range":
             allowed_values = target_dict["Options"]
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
-            if check_for_length(value, module=module, variable=variable) != 3:
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            if check_for_length(value, module=module, variable=variable, log=log) != 3:
+                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
                 raise ValueError(
                     f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
             for val in value:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                                variable=variable)
+                                variable=variable, log=log)
         if current_operation == "check elements (; or _ separated)":
             values = value.split(";").split("_")
             allowed_values = target_dict["Options"]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             for val in values:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                                variable=variable)
+                                variable=variable, log=log)
         if current_operation == "check range element-wise":
             allowed_values = target_dict["Options"]
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             for val in value:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
-                                variable=variable)
+                                variable=variable, log=log)
 
     else:  # check if NoneType is allowed
         allowed_types = target_dict["Type"]
@@ -343,11 +391,12 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             pass
         else:
             if "None" not in allowed_types:
+                update_log(log, f"###ERROR### in module {module} for variable {variable}: NoneType is not allowed.")
                 raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
 
 # main function #
 # read DIANN file header, metadata
-def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict, metadata_file: str, data_file: str,
+def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict, metadata_file: str, data_file: str, log: str,
                 current_flag=None, current_flag_value=None):
     """
     This function checks parameters and values from the user input for right datatype, default
@@ -363,6 +412,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     :param user_dict: dictionary with current accepted user parameters
     :param metadata_file: str, metadata filename
     :param data_file: str, proteomics filename, f.e. DIA-NN output
+    :param log: str, logfile
     :return current_flag, current_flag_value, str, both is needed to identify certain variables in operation dict
     """
 
@@ -381,67 +431,70 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     # try: store flag as flag_var and flag_value as flag_value_var for temporary variables, example input_origin = Flag,
     # diann = Flag_value, get operations from flag_dict
     # except: if no flag and flag_value is found, use temporary flag and value to check in parameter dict
-    print(variable)
-    print(module)
-    print(flag_dictionary[module].keys())
+    #print(variable)
+    #print(module)
+    #print(flag_dictionary[module].keys())
     if variable in flag_dictionary[module].keys():
-        print(f"{variable} is in Flag dictionary")
+        #print(f"{variable} is in Flag dictionary")
         dict_to_use = flag_dictionary[module][variable]  # get the current flag information
-        print(dict_to_use)
+        #print(dict_to_use)
         current_flag = variable
         current_flag_value = str(value)
 
     else:
-        print(f"{variable} is in Operation dictionary")
+        #print(f"{variable} is in Operation dictionary")
         if current_flag_value is None:
+            update_log(log,"###ERROR###: Flag values can not be None.") 
             raise ValueError("Flag values can not be None.")
         if ";" in current_flag_value:  # make exceptions if you have to loop over several flag values seperated by ;
             flag_values = current_flag_value.split(";")
             # dict_to_use = operation_dictionary[current_flag][flag_values[0]][variable]
             for flag_value in flag_values:
                 if variable in operation_dictionary[current_flag][flag_value]:
-                    print(flag_value, variable)
+                    #print(flag_value, variable)
                     dict_to_use = operation_dictionary[current_flag][flag_value][variable]
-                    print(value, type(value))
-                    print(dict_to_use["Default"], type(dict_to_use["Default"]))
+                    #print(value, type(value))
+                    #print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
                     if str(value).strip() == dict_to_use["Default"]:  # check for default
-                        print(f"{value} is default value.")
+                        #print(f"{value} is default value.")
                         pass
                     else:
-                        print(f"{value} is not default")
+                        #print(f"{value} is not default")
                         current_operation = dict_to_use["Check Operation"]  # get the current operation to do
                         # print(current_operation)
                         operation_selection(value=value, target_dict=dict_to_use,
                                             operation_dictionary=operation_dictionary,
                                             operation=current_operation, module=module, variable=variable,
-                                            user_dict=user_dict, metadata_file=metadata_file, data_file=data_file)
+                                            user_dict=user_dict, metadata_file=metadata_file, data_file=data_file,
+                                            log=log)
                 else:
                     pass
         else:
             dict_to_use = operation_dictionary[current_flag][current_flag_value][variable]
-            print(dict_to_use)
+            #print(dict_to_use)
 
-    print(value, type(value))
-    print(dict_to_use["Default"], type(dict_to_use["Default"]))
+   #print(value, type(value))
+   #print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
     if str(value) == str(dict_to_use["Default"]):  # check for default
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
+            update_log(log,f"###ERROR###: {variable} can not be None.") 
             raise ValueError(f"{variable} can not be None.")
         else:
-            print(f"{value} is default value.")
+            #print(f"{value} is default value.")
             pass
 
     else:
-        print(f"{value} is not default")
+        #print(f"{value} is not default")
         current_operation = dict_to_use["Check Operation"]  # get the current operation to do
         # print(current_operation)
         operation_selection(value=value, target_dict=dict_to_use, operation_dictionary=operation_dictionary,
                             operation=current_operation, module=module, variable=variable, user_dict=user_dict,
-                            metadata_file=metadata_file, data_file=data_file)
+                            metadata_file=metadata_file, data_file=data_file, log=log)
 
-    print(current_flag, current_flag_value)
-    print("Works so far")
+    #print(current_flag, current_flag_value)
+    #print("Works so far")
 
     return current_flag, current_flag_value
 
