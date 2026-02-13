@@ -66,7 +66,7 @@ def check_for_existence(value, l: list, module: str, variable: str, log: str):
     if str(value) in l:
         pass
     else:
-        update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed list.") 
+        update_log(log,f"###ERROR###: for variable {variable}: {value} is not in allowed list.") 
         raise ValueError(f"Error in module: {module} for variable: {variable}: {value} is not in allowed list.")
 
 
@@ -87,7 +87,7 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         float(value)
         pass
     except:
-        update_log(log,f"###ERROR###: {value} is not a number.") 
+        update_log(log,f"###ERROR###: for variable {variable}: {value} is not a number.") 
         raise ValueError(f"{value} is not a number.")
     if not isinstance(lower_inclusive, str):  # check if lower_limit is str
         update_log(log,f"###ERROR###: {lower_inclusive} is not a string.") 
@@ -100,7 +100,7 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value > lower_limit:
             pass
         else:
-            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be > "
+            update_log(log,f"###ERROR###: for variable {variable}: {value} is not in allowed range, must be > "
             f"{lower_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be > "
@@ -109,7 +109,7 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value >= lower_limit:
             pass
         else:
-            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be >= "
+            update_log(log,f"###ERROR###: for variable {variable}: {value} is not in allowed range, must be >= "
             f"{lower_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be >= "
@@ -118,7 +118,7 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value < upper_limit:
             pass
         else:
-            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, must be < "
+            update_log(log,f"###ERROR###: for variable {variable}: {value} is not in allowed range, must be < "
             f"{upper_limit}.") 
             raise ValueError(
                 f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, must be < "
@@ -127,7 +127,7 @@ def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_incl
         if value <= upper_limit:
             pass
         else:
-            update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {value} is not in allowed range, "
+            update_log(log,f"###ERROR###: for variable {variable}: {value} is not in allowed range, "
                              f"must be <= {upper_limit}.") 
             raise ValueError(f"Error in module: {module} for variable: {variable}: {value} is not in allowed range, "
                              f"must be <= {upper_limit}.")
@@ -141,12 +141,12 @@ def check_for_path_existence(filepath: str, log: str):
     :return: Nothing if filepath exists
     """
     if not isinstance(filepath, str):  # check if filepath is str
-        update_log(log,f"###ERROR###: {filepath} is not a string.") 
+        update_log(log,f"###ERROR###: File path {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
     if os.path.exists(filepath):
         pass
     else:
-        update_log(log,f"###ERROR###: {filepath} does not exist.") 
+        update_log(log,f"###ERROR###: File path {filepath} does not exist.") 
         raise ValueError(f"{filepath} does not exist.")
 
 
@@ -160,7 +160,7 @@ def check_for_length(l: list, module: str, variable: str, log: str):
     :return: length of l
     """
     if not isinstance(l, list):  # check if list is a list
-        update_log(log,f"###ERROR### in module: {module} for variable: {variable}: {l} is not a list.") 
+        update_log(log,f"###ERROR###: for variable {variable}: {l} is not a list.") 
         raise TypeError(f"Error in module: {module} for variable: {variable}: {l} is not a list.")
     return len(l)
 
@@ -174,15 +174,15 @@ def sheet_existence(excel_file: str, sheet_name: str, log: str):
     :return: Nothing if sheet name exists
     """
     if not isinstance(excel_file, str):  # check if excel_file is str
-        update_log(log,f"###ERROR###: {excel_file} is not a string.") 
+        update_log(log,f"###ERROR###: Excel file {excel_file} is not a string.") 
         raise TypeError(f"{excel_file} is not a string.")
     if not isinstance(sheet_name, str):  # check if sheet_name is str
-        update_log(log,f"###ERROR###: {sheet_name} is not a string.") 
+        update_log(log,f"###ERROR###: Sheet {sheet_name} is not a string.") 
         raise TypeError(f"{sheet_name} is not a string.")
     try:
         xl = pd.read_excel(excel_file, sheet_name=sheet_name)  # read excel
     except:
-        update_log(log,f"###ERROR###: {sheet_name} not found in excel file.") 
+        update_log(log,f"###ERROR###: Sheet {sheet_name} not found in excel file.") 
         raise ValueError(f"{sheet_name} not found in excel file.")
 
 
@@ -317,7 +317,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             length_cols = check_for_length(adjust_cols, module=module, variable=variable, log=log)
             length_dtypes = check_for_length(value, module=module, variable=variable, log=log)
             if length_cols != length_dtypes:
-                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                update_log(log, f"###ERROR###: for variable {variable}: Length of dtypes ({length_dtypes}) "
                                  f"and adjusted columns ({length_cols}) is different")
                 raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
                                  f"and adjusted columns ({length_cols}) is different")
@@ -340,7 +340,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             allowed_values = [allowed_values.strip()]
             lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             if check_for_length(value, module=module, variable=variable, log=log) != 2:
-                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
+                update_log(log, f"###ERROR###: for variable {variable}: {value} is supposed to have only 2 elements!")
                 raise ValueError(
                     f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 2 elements!")
             for val in value:
@@ -355,7 +355,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             allowed_values = [allowed_values.strip()]
             lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             if check_for_length(value, module=module, variable=variable, log=log) != 3:
-                update_log(log, f"###ERROR### in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
+                update_log(log, f"###ERROR###: for variable {variable}: {value} is supposed to have only 3 elements!")
                 raise ValueError(
                     f"Error in module: {module} for variable: {variable}: {value} is supposed to have only 3 elements!")
             for val in value:
@@ -391,7 +391,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             pass
         else:
             if "None" not in allowed_types:
-                update_log(log, f"###ERROR### in module {module} for variable {variable}: NoneType is not allowed.")
+                update_log(log, f"###ERROR###: for variable {variable}: NoneType is not allowed.")
                 raise TypeError(f"Error in module {module} for variable {variable}: NoneType is not allowed.")
 
 # main function #
