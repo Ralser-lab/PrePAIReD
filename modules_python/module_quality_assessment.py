@@ -43,6 +43,12 @@ import ast
 ## Clustermap with groups (before and after), multi layer (QC vs. biological)
 ## PCA with explained confounders (MPCA?)
 
+def log_legend(captions, key_figure, figure_path, addition=""):
+    log = open(os.path.join(re.search(f"(.+?){key_figure}",figure_path).group(1),"Figure_log.txt"),"a")
+    log.write("###FIGURE###: "+figure_path+"\n")
+    log.write("###CAPTION###: "+captions.loc[key_figure]["Description"]+addition+"\n")
+    log.close()
+
 def get_CV_log(values, base=2):
     cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
     return cv
@@ -393,7 +399,9 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
                 group_dict.update({key+"___"+key_2:list(set(group_dict_comp[key])&set(group_dict_comp[key_2]))})
     if not group_dict:
         group_dict = group_dict_comp
-                    
+    if not group_dict:
+        group_dict = {"All":list(data_origin.columns)}  
+        
     #cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
     cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index]] for group in group_dict.keys()]
 
@@ -1405,19 +1413,24 @@ if __name__ == "__main__":
         
     if not steps:
         raise ValueError("Step could not be found")
-
+        
+    captions = pd.read_csv("Figures_Captions.tsv", sep = "\t", index_col = 0)
+    
 #%%
     for step in steps:
     #step = "01_FILTERING_LONG"
     #step = "05_CORRECTION"
         data_processed = helper.load_data(dict_config_setup[step]["Data"]["data_processed"])
         parameters_dict = helper.load_parameters(dict_config_setup[step]["Data"]["param_fp"])
-        if step == "01_FILTERING_LONG":
+        #if step == "01_FILTERING_LONG":
+        if dict_config_setup[step]["Data"]["data_origin"] == "None":
             data_origin = data_processed
         else:
             data_origin = helper.load_data(dict_config_setup[step]["Data"]["data_origin"])
         mask_processed = helper.load_mask(dict_config_setup[step]["Data"]["data_processed"])
         mask_description_processed = helper.load_mask_description(dict_config_setup[step]["Data"]["data_processed"])
+        
+        log = open(os.path.join(re.search("(.+?)F01",dict_config_setup[step]["F01"]["outfile"]).group(1),"Figure_log.txt"),"w")
         
         #%%   
         key_figure = "F01"
@@ -1437,6 +1450,11 @@ if __name__ == "__main__":
             else:
                 ylabel_int = "# Precursors"
                 
+            if parameters_dict_general["sample_type"] is not None:
+                addition = " "+parameters_dict_general["sample_type_column"]+":"+parameters_dict_general["sample_type"]+"."
+            else:
+                addition = " All."
+                
             plot_qa_box_int_and_number(data_origin, 
                                        metadata_df, 
                                        data_processed_, 
@@ -1449,6 +1467,7 @@ if __name__ == "__main__":
                                        column_color = column_color,
                                        ylabel_int = ylabel_int
                                        )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             
             ### Legend as f-string with column_color if defined
         #%%
@@ -1459,17 +1478,26 @@ if __name__ == "__main__":
                              mask_description_processed, 
                              outfile = dict_config_setup[step][key_figure]["outfile"]
                              )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
     
         #%%
         key_figure = "F03"
         if dict_config_setup[step][key_figure]["plot_cv"] == "1":
             
+            if parameters_dict_general["sample_type_column"] is None:
+                groups_ = []
+                addition = " None."           
+            else:
+                addition = " "+parameters_dict_general["sample_type_column"]+"."
+                groups_ = parameters_dict_general["sample_type_column"]
+
             plot_CV_violin(data_origin, 
                            metadata_df, 
                            data_processed=data_processed, 
-                           group_columns = [parameters_dict_general["sample_type_column"]], 
+                           group_columns = [groups_], 
                            outfile = dict_config_setup[step][key_figure]["outfile"]
                            )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             
         #%%
         key_figure = "F04"
@@ -1478,12 +1506,14 @@ if __name__ == "__main__":
                 if parameters_dict["correct_method"] in ["LIMMA_R","COMBAT_R","HARMONY_R","harmony","combat"]:
                     try:
                         dict_config_setup[step][key_figure]["column_color"] = parameters_dict["batch_cols_meta"][0]
+                        addition = " "+parameters_dict["batch_cols_meta"][0]+"."
                     except:
                         print("batch_cols_meta not defined.")
                     dict_config_setup[step][key_figure]["continuous"] = "False"
                 elif parameters_dict["correct_method"] in ["adjust_confounders","adjust_confounders_batchwise"]:
                     try:
                         dict_config_setup[step][key_figure]["column_color"] = parameters_dict["adjust_cols"][0]
+                        addition = " "+parameters_dict["adjust_cols"][0]+"."
                         col_type = parameters_dict["adjust_cols_dtypes"][0]
                         if col_type in "continuous":
                             dict_config_setup[step][key_figure]["continuous"] = "True"
@@ -1494,9 +1524,11 @@ if __name__ == "__main__":
                 dict_config_setup[step][key_figure]["coloring_property"] = None
             elif "SUMMARISATION" in step:
                 dict_config_setup[step][key_figure]["column_color"] = parameters_dict_general["sample_type_column"]
+                addition = " "+str(parameters_dict["sample_type_column"])+"."
                 dict_config_setup[step][key_figure]["coloring_property"] = None
             else:
                 dict_config_setup[step][key_figure]["column_color"] = None
+                addition = " "+dict_config_setup[step][key_figure]["coloring_property"]+"."
                 
             try:
                 plot_PCA(data_origin, 
@@ -1508,6 +1540,7 @@ if __name__ == "__main__":
                          use_metadata_coloring = ast.literal_eval(dict_config_setup[step][key_figure]["use_metadata_coloring"]),
                          coloring_property = dict_config_setup[step][key_figure]["coloring_property"]
                          )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             except:
                 print("Error in PCA plotting. Skipped.")
     
@@ -1521,6 +1554,7 @@ if __name__ == "__main__":
                               outfile = dict_config_setup[step][key_figure]["outfile"],
                               step = step
                               )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
             
         #%%
         key_figure = "F06"
@@ -1532,6 +1566,8 @@ if __name__ == "__main__":
                 dict_config_setup[step][key_figure]["use_metadata_coloring"] = False
                 dict_config_setup[step][key_figure]["column_color"] = None
                 dict_config_setup[step][key_figure]["plot_linreg"] = True
+                addition_1 = "Inferred Order (continuous)."
+                addition_2 = ""
             elif "CORRECTION" in step:
                 try:
                     dict_config_setup[step][key_figure]["column_metadata"] = parameters_dict["adjust_cols"][0]
@@ -1540,15 +1576,19 @@ if __name__ == "__main__":
                         dict_config_setup[step][key_figure]["use_metadata_coloring"] = True
                         dict_config_setup[step][key_figure]["column_color"] = parameters_dict["batch_cols_meta"][0]
                         dict_config_setup[step][key_figure]["plot_linreg"] = False
+                        dict_config_setup[step][key_figure]["continuous"] = False
+                        addition_2 = "Colored according to: "+parameters_dict["batch_cols_meta"][0]+"."
                     else:
                         dict_config_setup[step][key_figure]["use_metadata_coloring"] = False
                         dict_config_setup[step][key_figure]["column_color"] = None
                         dict_config_setup[step][key_figure]["plot_linreg"] = True
-    
-                    if dict_config_setup[step][key_figure]["data_type"] in "continuous":
-                        dict_config_setup[step][key_figure]["continuous"] = True
-                    else:
                         dict_config_setup[step][key_figure]["continuous"] = False
+                        addition_2 = ""
+                    addition_1 = " "+parameters_dict["adjust_cols"][0]+" ("+parameters_dict["adjust_cols_dtypes"][0]+")"+". "
+                    #if dict_config_setup[step][key_figure]["data_type"] in "continuous":
+                    #    dict_config_setup[step][key_figure]["continuous"] = True
+                    #else:
+                    #    dict_config_setup[step][key_figure]["continuous"] = False
                 except:
                     print("adjust_cols not defined.")
             
@@ -1563,8 +1603,10 @@ if __name__ == "__main__":
                                     column_color = dict_config_setup[step][key_figure]["column_color"],
                                     plot_linreg = dict_config_setup[step][key_figure]["plot_linreg"], 
                                     outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                    plot_by = dict_config_setup[step][key_figure]["plot_by"], 
                                     step = step
                                     )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition_1+addition_2)
             except:
                 print("Error in scatter series plotting. Skipped.")
         
@@ -1578,6 +1620,8 @@ if __name__ == "__main__":
                                                     method = parameters_dict["intensity_dependent_missingness_fit_method"],
                                                     boundary = float(parameters_dict["intensity_dependent_missingness_decision_boundary"])
                                                     )
+            addition = " "+parameters_dict["intensity_dependent_missingness_fit_method"]+"."
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             
         #%%
         key_figure = "F08"   
@@ -1593,6 +1637,8 @@ if __name__ == "__main__":
                                               use_same_random = True, 
                                               step = step
                                               )
+                addition = " "+parameters_dict["adjust_cols"][0]+" ("+parameters_dict["adjust_cols_dtypes"][0]+")."
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             except:
                 print("Error in correlation plotting. Skipped.")
                 
@@ -1605,6 +1651,7 @@ if __name__ == "__main__":
                                    outfile = dict_config_setup[step][key_figure]["outfile"],
                                    baseline = 0
                                    )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
     
         ### Legend: log2-transformed normalization factors
         
@@ -1618,6 +1665,7 @@ if __name__ == "__main__":
                                                    gridsize = int(dict_config_setup[step][key_figure]["gridsize"]), 
                                                    n_bins = int(dict_config_setup[step][key_figure]["n_bins"])
                                                    )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
             
         #%%
         key_figure = "F11"
@@ -1626,9 +1674,9 @@ if __name__ == "__main__":
             plot_overall_completeness(data_processed, 
                                       outfile = dict_config_setup[step][key_figure]["outfile"]
                                       )
+            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
     
     #%%        
 
     # Read in figure legend (get filedir and read in relative to this)
-    ### Test ###
     ### Figure Legend ### In try/except if try/except is used

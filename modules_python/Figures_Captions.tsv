@@ -1,0 +1,12 @@
+Figure ID	Short Name	Description	Optional text
+F01	Quantity_distribution	Number of unique IDs (top) and log2(quantity) distribution (bottom) per sample. Median, first and third quartile are shown. Whiskers extend to maximal 1.5-times inter-quartile distance. Outliers are highlighted. Selected set:	1
+F02	Filter_mask	Number of Unique IDs dropped by selected filters up to this step.	0
+F03	CV	Distribution of the coefficient of variation calculated on a log-normal scale for base 2. Selected sets according to:	1
+F04	PCA	Principal component analysis highlighting the 4 components with highest variance. Colored according to:	1
+F05	Distribution	Smoothed normalized intensity distributions per sample.	0
+F06	Scatter series	log2(Quantity) versus covariate of the top 3 IDs with highest correlation. Correlation Type: Continuous - Pearson, Ordinal - Spearman, Nominal - Point Biserial. Covariate:	1
+F07	Decision boundary	Completeness versus Mean(log2(Quantity)) with different logistic fits. The chosen fit is highlighted solid. Chosen fit:	1
+F08	Correlation	Distribution of the correlations of the covariate and the log2(Quantities) per ID (blue). As a reference (orange) the covariate values were shuffled. Correlation Type: Continuous - Pearson, Ordinal - Spearman, Nominal - Point Biserial. Covariate:	1
+F09	Distribution_hist	Histogram of log2(Normalization factors).	0
+F10	Abundance_vs_Completeness	Hexagonal binned plot of completeness versus Mean(log2(Quantity)). Additionally, the distributions per axis are shown.	0
+F11	Overall_completeness	Overall completeness per sample. IDs ordered by missingness. Limits: 0.33, 0.50, 0.75 and 1.00 completeness are highlighted.	0
