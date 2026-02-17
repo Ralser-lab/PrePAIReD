@@ -44,16 +44,70 @@ import ast
 ## PCA with explained confounders (MPCA?)
 
 def log_legend(captions, key_figure, figure_path, addition=""):
+    """
+    Automatic logging of the captions for each figre
+
+    Parameters
+    ----------
+    captions : str
+        Default caption for figure with name key_figure.
+    key_figure : str
+        Descriptor for the figure. Used to automatically call the corresponding caption.
+    figure_path : str
+        Path were the figure key_figure will be saved.
+    addition : str, optional
+        Additional description like selected columns or coloring. The default is "".
+    """
+    
     log = open(os.path.join(re.search(f"(.+?){key_figure}",figure_path).group(1),"Figure_log.txt"),"a")
     log.write("###FIGURE###: "+figure_path+"\n")
     log.write("###CAPTION###: "+captions.loc[key_figure]["Description"]+addition+"\n")
     log.close()
 
 def get_CV_log(values, base=2):
+    """
+    Calculate the coefficient of variation (CV) assuming a log-normal distribution and logged data.
+
+    Parameters
+    ----------
+    values : np.ndarray 
+        Array of values for which the CV should be calculated.
+    base : float, optional
+        Base of the logarithmic transformation. The default is 2.
+
+    Returns
+    -------
+    cv : float
+        Coefficient of variation for provided values.
+    """
+    
     cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
     return cv
 
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
+    """
+    Get indices of selected samples according to a sample type e.g. MS.QC-Samples.
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+        Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+    metadata : pd.DataFrame
+        Metadata for each sample with the same indices as the columns of data_origin.
+    data_processed : pd.DataFrame, optional
+        Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    sample_type_column : str, optional
+        Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    sample_type : str, optional
+        Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+
+    Returns
+    -------
+    indices_origin : list of str
+        Indices of selected sample in the data before the preprocessing step.
+    indices_processed: list of str, optional
+        Indices of selected sample in the data after the  preprocessing step.
+    """
 
     if sample_type_column:
         if not sample_type:
@@ -78,6 +132,39 @@ def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_
         return indices_origin
 
 def get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, column_values_origin=None, column_values_processed=None, cmap="viridis", continuous=False):
+    """
+    
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample with the same indices as the columns of data_origin.
+    column_color : str
+        Column in Metadata that is used for coloring the data.
+    indices_origin : list of str
+        Indices of selected sample in the data before the preprocessing step.
+    indices_processed: list of str, optional
+        Indices of selected sample in the data after the preprocessing step.
+    column_values_origin : pd.Series, optional
+        Color values per sample for indices_origin. If set to None column values are selected according to metadata.loc[indices_origin,column_color]. The default is None.
+    column_values_processed : pd.Series, optional
+        Color values per sample for indices_processed. If set to None column values are selected according to metadata.loc[indices_processed,column_color]. The default is None.
+    cmap : str, optional
+        Colormap used for coloring. The default is "viridis".
+    continuous : bool, optional
+        If True continuous data are assumed for coloring e.g. Completeness. If False discrete data are assumed e.g. Batch. The default is False.
+
+    Returns
+    -------
+    colors_origin : list of tuple of float
+        Color values RGBA per sample before preprocessing step.
+    colors_processed : list of tuple of float, optional
+        Color values RGBA per sample before preprocessing step.
+    norm : matplotlib.colors.Normalize
+        Norm for the color scale
+    values_dict : dict
+        Dictionary for mapping values to color. Only filled if discrete values are used for coloring.
+    """
     
     if column_values_origin is None:
         if column_color not in metadata.columns:
@@ -94,6 +181,29 @@ def get_colors_by_metadata(metadata, column_color, indices_origin, indices_proce
         return colors_origin, norm, values_dict
 
 def get_colors_selection(column_values_origin, column_values_processed=None, cmap="viridis", continuous=False):
+    """
+    Get color values based for a continuous or discrete pd.Series of entries.
+
+    column_values_origin : pd.Series, optional
+        Property value per sample before the preprocsessing step.
+    column_values_processed : pd.Series, optional
+        Property value per sample after the preprocsessing step.    
+    cmap : str, optional
+        Colormap used for coloring. The default is "viridis".
+    continuous : bool, optional
+        If True continuous data are assumed for coloring e.g. Completeness. If False discrete data are assumed e.g. Batch. The default is False.
+
+    Returns
+    -------
+    colors_origin : list of tuple of float
+        Color values RGBA per sample before preprocessing step.
+    colors_processed : list of tuple of float, optional
+        Color values RGBA per sample before preprocessing step.
+    norm : matplotlib.colors.Normalize
+        Norm for the color scale
+    values_dict : dict
+        Dictionary for mapping values to color. Only filled if discrete values are used for coloring.
+    """
 
     cmap_ = plt.get_cmap(cmap)
     
@@ -126,6 +236,28 @@ def get_colors_selection(column_values_origin, column_values_processed=None, cma
     return colors_origin, norm, values_dict
 
 def get_color_values_by_property(data_origin, coloring_property, data_processed=None, base=2):
+    """
+    Calculates the selected property per sample.
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+    coloring_property : str
+        Property used for coloring. Options: "Missingness", Mean_Intensities", "Median_Intensities", Sum_Intensities"
+    data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    base : float, optional
+        Base of the logarithmic transformation. The default is 2.
+
+    Returns
+    -------
+    column_values_origin : np.ndarray
+        Calculated property before the preprocessing step
+    column_values_processed : np.ndarray
+        Calculated property after the preprocessing step
+    """
+    
     if coloring_property == "Missingness":
         column_values_origin = np.sum(~np.isnan(data_origin.values),axis=0)
     elif coloring_property=="Mean_Intensities":
@@ -149,6 +281,36 @@ def get_color_values_by_property(data_origin, coloring_property, data_processed=
     return column_values_origin
 
 def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous", shuffle=False, seed=42, take_abs = False):
+    """
+    Calculate property for each sample.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples).
+    indices : list
+        Indices of data to consider for calculation.
+    metadata : pd.DataFrame, optional
+	    Metadata for each sample with the same indices as the columns of data_origin. The default is None.
+    column_metadata : str, optional
+        Column in Metadata containing the covariate for correlation (plot_by == "Correlation" or plot_by == "Corr_pvalue"). The default is None.
+    plot_by : str, optional
+        Property for which data should be calculated. Options: "Missingness", "Mean", "Median", "CV", "norm_MAE", "norm_MSE", "Correlation", "Corr_pvalue". The default is "Correlation".
+    data_type : str, optional
+        If plot_by == "Correlation" or plot_by == "Corr_pvalue", type of data that is correlated. Options: "continuous", "ordinal", "nominal". The default is "continuous".
+    shuffle : bool, optional
+        If True, the metadata are shuffled before correlation. The default is False.
+    seed : int, optional
+        Seed for shuffeling the data. The default is 42.
+    take_abs : bool, optional
+        If True, take the absolute value for correlation. The default is False.
+
+    Returns
+    -------
+    property_peptide : pd. Series
+        Calculated property per sample.
+    """
+    
     if plot_by == "Missingness":
         property_peptide = data[indices].isna().T.sum()
     elif plot_by == "Mean":
@@ -187,13 +349,43 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     return property_peptide
 
 def set_aspect_equal(ax):
+    """
+    Set the aspect of the axis equal.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes._axes.Axes
+        Axes for which the action should be performed.
+    """
+    
     x_lim = ax.get_xlim()
     y_lim = ax.get_ylim()
     aspect = abs((x_lim[1]-x_lim[0])/(y_lim[1]-y_lim[0]))
     ax.set_aspect(aspect)
     return
 
-def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='none', linewidth=2, **kwargs):
+def get_confidence_ellipse(x, y, confidence=0.95, **kwargs):
+    """
+    Calculation of confidence ellipses.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        x-coordinate for the ellipse estimation.
+    y : np.ndarray
+        y-coordinate for the ellipse estimation.
+    confidence : str, optional
+        Confidence intervall used. The default is 0.95.
+
+    Returns
+    -------
+    angle : float
+        Angle of the ellipse.
+    width : float
+        Width of the ellipse.
+    height : float
+        Height of the ellipse.
+    """
 
     # Covariance matrix
     cov = np.cov(x, y)
@@ -228,6 +420,44 @@ def get_confidence_ellipse(x, y, confidence=0.95, edgecolor='black', facecolor='
 
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
+    """
+    Plotting of top: Number of measured IDs per sample and bottom: Boxplot of the intensities (25, 50, 75%) with whiskers extending max 1.5*IQR (IQR: 25-75%).
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+	data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    size : tuple of float, optional
+        Size of the plot. The default is (10, 10).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    ylabel_int : str, optional
+        y-axis label (top). The default is "# Precursors".
+    y_label_box : str, optional
+        y-axis label (bottom). The default is "log2(Precursor quantity)".
+    x_label : str, optional
+        x-axis label. The default is "Samples".
+    step : str, optional
+        Preprocessing step (used for the title). The default is "".
+    outfile : str, optional
+        File path for the figure. The default is "Intensity_distribution_boxplot.png".
+    column_color : str, optional
+        If use_metadata_coloring == True, Metadata column used for coloring. The default is None.
+    use_metadata_coloring : bool, optional
+        If True, Metadata are used for coloring. The default is False.
+    cmap : str, optional
+        Colormap used for coloring. The default is "viridis".
+    continuous : bool, optional
+        If True continuous data are assumed for coloring e.g. Order. If False discrete data are assumed e.g. Batch. The default is False.
+    """
     
     # Setup
     if not cmap:
@@ -349,7 +579,29 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
 
 ### For Filtering_long and Filtering_wide
 def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mask_values=False, size=(5,5), fontsize = 15, fontsize_filters=10, outfile="Mask_description_barplot.png"):
-        
+    """
+    Plotting of the filter mask
+
+    Parameters
+    ----------
+    mask : pd.DataFrame
+        Filter mask.
+    mask_description : pd.DataFrame
+        Unique identifier for each filter.
+    mask_description_base : pd.DataFrame, optional
+        Unique identifiers for each filter of previous steps. The default is None.
+    use_mask_values : bool, optional
+        If True mask values extractred from the mask instead of the mask description and used for plotting. The default is False.
+    size : tuple of float, optional
+        Size of the plot. The default is (5,5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_filters : int, optional
+        Font size of the x-tick labels. The default is 10.
+    outfile : str, optional
+        File path for the figure. The default is "Mask_description_barplot.png".
+    """    
+    
     if use_mask_values:
         mask.fillna("0",inplace=True)
         mask_values = list(set(pd.melt(mask)["value"].values)^set("0"))
@@ -385,6 +637,40 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
 
 # For Imputation, Normalization, Correction, Summarization
 def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
+    """
+    Plotting of the coefficient of variation (CV) as a violin plot for different sample types.
+
+    Parameters
+    ----------
+	data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+	data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    group_columns : list of str, optional
+        Columns in Matedata that distinguish different sample types. This information can also contain other information e.g. "Batch". The default is ["Sample.Type"].
+    size : tuple of float, optional
+        Size of the plot. The default is (1,5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_title : int, optional
+        Fontsize of the title. The default is 15.
+    calc_widths : bool, optional
+        If True scales violins by maximal width. The default is True.
+    step : str, optional
+        Preprocessing step (used for the title). The default is "".
+    outfile : str, optional
+        File path for the figure. The default is "CV_violinplot.png".
+    base : float, optional
+        Base of the logarithmic transformation. The default is 2.
+    scale_max : float, optional
+        Maximal width for violin plot. The default is 0.95.
+    y_lim : tuple of float, optional
+        y-limit for which the CVs should be evaluated (to mask outliers for better visuals ONLY). If None, no filter is applied. The default is None.
+    write_to_disk : bool, optional
+        If true saves CV to disk as outfile[:-4]+"_CVs_origin.tsv". The default is False.
+    """
     
     if data_processed is not None:
         group_dict_comp = {str(group_column)+"__"+str(group):[index for index in metadata[metadata[group_column]==group].index if index in data_origin.columns and index in data_processed.columns] for group_column in group_columns for group in np.unique(metadata[group_column].values)}
@@ -516,7 +802,53 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
 def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1):
+    """
+    Plotting of the first n_components principal components with different coloring options.
 
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+	data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components are plotted. The default is 4.
+    size : tuple of float, optional
+        Size of the plot. The default is (10,10).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_title : int, optional
+        Fontsize of the title. The default is 15.
+    line_offset : float, optional
+        Offset of diagonal line (needs to adjusted if a lot of components are plotted. The default is 0.025.
+    fontsize_label : int, optional
+        Font size of the colorbar label. The default is 15.
+    outfile : str, optional
+        File path for the figure. The default is "PCA.png".
+    continuous : bool, optional
+        If True continuous data are assumed for coloring e.g. Missingness. If False discrete data are assumed e.g. Batch. The default is True.
+    column_color : str, optional
+        If use_metadata_coloring == True, Metadata column used for coloring. The default is None.
+    use_metadata_coloring : bool, optional
+        If True, Metadata are used for coloring. The default is False.
+    coloring_property : str, optional
+        Property used for coloring. Options: "Missingness", Mean_Intensities", "Median_Intensities", Sum_Intensities" The default is "Missingness".
+    base : float, optional
+        Base of the logarithmic transformation. The default is 2.
+    cmap : str, optional
+        Colormap used for coloring. If None is selected, viridis is used as a default for continuous data and spectral for discrete data. The default is None.
+    plot_confidence_ellipse : bool, optional
+        If True, confidence ellipses are plotted. The default is False.
+    confidence : float, optional
+        Confidence interval for the ellipses. The default is 0.95.
+    set_axis_lim : bool, optional
+        Set axis-limits automatically (sometimes needed if plot_confidence_ellipse == True). The default is False.
+    axis_offset : TYPE, optional
+        Axis offset for automatic axis-limits. The default is 0.1.
+    """
+    
     ### Examples:
     ### Drift correction
     #continuous = True,
@@ -714,7 +1046,39 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
     return
 
 def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15, xlabel = "log2(PQ)", cmap = "Spectral"):
+    """
+    Plotting of the intensity distribution per sample-
 
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+	data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    step : str, optional
+        Preprocessing step (used for the title). The default is "".
+    outfile : str, optional
+        File path for the figure. The default is "Distribution.png".
+    size : tuple of float, optional
+        Size of the plot. The default is (10,5).
+    nbins : int, optional
+        Number of bins for estimating the distribution. The default is 50.
+    smoothing_factor : str, optional
+        Smoothing factor for interpolating the distribution based on a histogram. The default is 1e-2.
+    fontsize : fontsize : int, optional
+        Font size of the labels. The default is 15.
+    xlabel : str, optional
+        x-axis label. The default is "log2(PQ)".
+    cmap : str, optional
+        Colormap used for coloring. The default is "Spectral".
+    """
+    
     fig = plt.figure(figsize=size)
     fig.set_size_inches(size)
     
@@ -796,11 +1160,56 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-### Lin Reg per selection -> flag if continuous = False
-### Title Before/After
 ### TODO: Add LinReg per selection e.g. Batch
+### TODO: Add that also a list of peptides can be provided instead of plot_by
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step=""):
+    """
+    Plotting of Intensity versus covariate for top_n precursors of plot_by property.
 
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+    column_metadata : str
+        Column in Metadata containing the covariate.
+    data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    plot_by : str, optional
+	       Property for which data should be calculated. Options: "Missingness", "Mean", "Median", "CV", "norm_MAE", "norm_MSE", "Correlation", "Corr_pvalue". The default is "Correlation".
+    outfile : str, optional
+        File path for the figure. The default is "Scatter_series.png".
+    data_type : str, optional
+	    If plot_by == "Correlation" or plot_by == "Corr_pvalue", type of data that is correlated. Options: "continuous", "ordinal", "nominal". The default is "continuous".
+    top_n : int, optional
+        top_n IDs of plot_by to be plotted. The default is 3.
+    size : tuple of float, optional
+        Size of the plot. The default is (5,3).
+    ylabel : str, optional
+        y-acis label. The default is "log2(Prec. Abundance)".
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    use_metadata_coloring : bool, optional
+        If True, Metadata are used for coloring. The default is False.
+    cmap : str, optional
+        Colormap used for coloring. The default is None.
+    continuous : bool, optional
+        If True continuous data are assumed for coloring e.g. Order. If False discrete data are assumed e.g. Batch. The default is False.
+    column_color : str, optional
+        If use_metadata_coloring == True, Metadata column used for coloring. The default is None.
+    plot_linreg : bool, optional
+        If True linear regression over all intensities of selected peptides is plotted. The default is False.
+    base : float, optional
+	    Base of the logarithmic transformation. The default is 2.
+    step : str, optional
+        Preprocessing step (used for the title). The default is "".
+    """
+    
     if column_metadata:
         try:
             metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
@@ -916,6 +1325,40 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     return
 
 def plot_decision_boundary_estimation_curve(data_origin, metadata, method="response-binned-splines", outfile="Decision_boundary_estimation.png", sample_type_column=None, sample_type=None, size=(5,5), n_knots=3, boundary=0.5, detection_proportion_cap=1, x_lim=None, x_label="Mean(log2(Abundance))", plot_all_fits=True, fontsize=15):
+    """
+    Plotting of the decision boundary detection curve for missingness type estimation.
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+    method : str, optional
+        method used for fitting. Options: "logit-linear", "logit-linear-fit", "logit-linear-splines", "logit-linear-capped", "logit-linear-biascorrected", "response-binned-splines". The default is "response-binned-splines".
+    outfile : str, optional
+        File path for the figure. The default is "Decision_boundary_estimation.png".
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    size : tuple of float, optional
+        Size of the plot. The default is (5,5).
+    n_knots : int, optional
+        Number of knots for spline calculation. The default is 3.
+    boundary : float, optional
+        Completeness boundary for decision making. The default is 0.5.
+    detection_proportion_cap : float, optional
+        Scaling for logit-linear-capped. The default is 1.
+    x_lim : tuple of float, optional
+        x-axis limit. The default is None.
+    x_label : str, optional
+        x-axis label. The default is "Mean(log2(Abundance))".
+    plot_all_fits : bool, optional
+        If True all fits are plotted. If False only the fit for the selected method is plotted. The default is True.
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    """
     
     def func1_logitlinear(x,b0,b1):
             return b0 + b1 * x
@@ -1037,6 +1480,45 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
     plt.savefig(outfile,bbox_inches="tight")
     
 def plot_correlation_distribution(data_origin, metadata, data_processed = None, sample_type = None, sample_type_column = None, column_metadata = "Order", data_type = "continuous", seed = 42, nbins = 50, size = (10,5), fontsize = 15, fontsize_legend = 15, outfile = "Correlation_distribution.png", use_same_random = True, legend_loc = "upper right", step = ""):
+    """
+    Plotting of correlation distribution of covariate versus intensities compared to a random distribution (randomized covariate)
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+	data_processed : pd.DataFrame, optional
+	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    column_metadata : str, optional
+	    Column in Metadata containing the covariate for correlation. The default is "Order".
+    data_type : data_type : str, optional
+	    If plot_by == "Correlation" or plot_by == "Corr_pvalue", type of data that is correlated. Options: "continuous", "ordinal", "nominal". The default is "continuous".
+    seed : int, optional
+	    Seed for shuffeling the data. The default is 42.
+    nbins : int, optional
+        Number of bins for the histogram. The default is 50.
+    size : tuple of float, optional
+        Size of the plot. The default is (10,5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_legend : int, optional
+        Font size of the legend. The default is 15.
+    outfile : str, optional
+        File path for the figure. The default is "Correlation_distribution.png".
+    use_same_random : bool, optional
+        If True the same randomized covariate is used for comparison before and after preprocessing step. The default is True.
+    legend_loc : str, optional
+        Location of the legend. The default is "upper right".
+    step : str, optional
+        Preprocessing step (used for the title).. The default is "".
+    """
+    
     ### change to dummy conversion in future????
     try:
         metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
@@ -1144,6 +1626,37 @@ def plot_correlation_distribution(data_origin, metadata, data_processed = None, 
     return
 
 def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = "Order", sample_type = None, sample_type_column = None, size = (5,5), fontsize = 15, fontsize_legend = 15, outfile = "Imputation.png", detailed = True, imputation_value = 99):
+    """
+    Plotting of imputation versus covariate
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+    mask : pd.DataFrame
+        Imputation mask (detailed = True)/Filter mask (detailed = False).
+    column_metadata : str, optional
+	    Column in Metadata containing the covariate. The default is "Order".
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    size : tuple of float, optional
+        Size of the plot. The default is (5,5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_legend : int, optional
+        Font size of the legend. The default is 15.
+    outfile : str, optional
+        File path for the figure. The default is "Imputation.png".
+    detailed : bool, optional
+        If True plot each missingness type separately. The default is True.
+    imputation_value : int, optional
+        Identifier in filter mask for imputet values. The default is 99.
+    """
+    
     try:
         metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
     except:
@@ -1190,7 +1703,33 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
     return
 
 def plot_distribution_hist(data, outfile = "Normalisation_factors.png", size = (5,5), fontsize = 15, xlabel = "Normalisation factors", transform = False, base = 2, nbins = 20, use_log_axis = False, baseline = None):
+    """
+    Plotting of distribution histogram for e.g. Normalization factors.
 
+    Parameters
+    ----------
+    data : pd.Series
+        Data to be plotted e.g. Normalization factors.
+    outfile : str, optional
+        File path for the figure. The default is "Normalisation_factors.png".
+    size : tuple of float, optional
+        Size of the plot. The default is (5,5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    xlabel : str, optional
+        x-axis label. The default is "Normalisation factors".
+    transform : bool, optional
+        If True, data are delogarithmize. The default is False.
+    base : float, optional
+	    Base of the logarithmic transformation. The default is 2.
+    nbins : int, optional
+        Number of bins for the histogram calculation. The default is 20.
+    use_log_axis : bool, optional
+        If True, y-axis scale is set to logarithmic. The default is False.
+    baseline : int, optional
+        Baseline of the distribution. The default is None.
+    """
+    
     if transform:
         data = base**data
     
@@ -1217,6 +1756,41 @@ def plot_distribution_hist(data, outfile = "Normalisation_factors.png", size = (
     return
 
 def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = None, sample_type_column = None, outfile = "Completness_vs_Abundance.png", size = (7.5,7.5), fontsize = 15, axis = 1, gridsize = 25, n_bins = 25, cmap = "inferno", bins_setup='log', x_label = "Mean(log2(Abundance))", y_label = "Completeness"):
+    """
+    Plotting of completeness versus abundance grouped as a hexagonal binned plot.
+
+    Parameters
+    ----------
+    data_origin : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame
+	    Metadata for each sample with the same indices as the columns of data_origin.
+    sample_type : str, optional
+	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
+    sample_type_column : str, optional
+	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+    outfile : str, optional
+        File path for the figure. The default is "Completness_vs_Abundance.png".
+    size : tuple of float, optional
+        Size of the plot. The default is (7.5,7.5).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    axis : int, optional
+        Axis for mean value calculations. The default is 1.
+    gridsize : int, optional
+        Number of the grid points per dimension. The default is 25.
+    n_bins : int, optional
+        Number of bins for histogram calculation. The default is 25.
+    cmap : str, optional
+        Colormap used for coloring. The default is "inferno".
+    bins_setup : str or int, optional
+        Discretization of binned values. Check matplotlib.axes.Axes.hexbin for detailed description. The default is 'log'.
+    x_label : str, optional
+        x-axis label. The default is "Mean(log2(Abundance))".
+    y_label : str, optional
+        y-axis label. The default is "Completeness".
+    """
+    
     # sample_type selection
     indices_origin = get_indices_by_type(data_origin, metadata, sample_type_column=sample_type_column, sample_type=sample_type)
     
@@ -1275,7 +1849,41 @@ def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = 
     plt.savefig(outfile,bbox_inches="tight")
 
 def plot_overall_completeness(data, metadata=None, column_metadata=None, size = (5,5), outfile = "Overall_Completeness.png", fontsize = 15, fontsize_legend = 11, x_label = "Samples", y_label = "Sorted precurssors", color_present = "#6F15BD", color_abscent = "#BD9915", legend_loc = "upper left", plot_limits = True, limits = [1,0.75,0.5,0.33]):
+    """
+    Plotting of completeness per sample. IDs are sorted according to completeness.
 
+    Parameters
+    ----------
+    data : pd.DataFrame
+	    Data (Indices: Precursors, Columns: Samples) before the preprocessing step.
+	metadata : pd.DataFrame, optional
+	    Metadata for each sample with the same indices as the columns of data_origin. The default is None.
+    column_metadata : str, optional
+	    Column in Metadata containing the order. If set to None, sample order according to data is used. The default is None.
+    size : tuple of float, optional
+        Size of the plot. The default is (5,5).
+    outfile : str, optional
+        File path for the figure. The default is "Overall_Completeness.png".
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_legend : int, optional
+        Font size of the legend. The default is 11.
+    x_label : str, optional
+        x-axis label. The default is "Samples".
+    y_label : str, optional
+        y-axis label. The default is "Sorted precurssors".
+    color_present : str, optional
+        Color either default names or Hex color code for present IDs. The default is "#6F15BD".
+    color_abscent : TYPE, optional
+        Color either default names or Hex color code for abscent IDs. The default is "#BD9915".
+    legend_loc : str, optional
+        Location of the legend. The default is "upper left".
+    plot_limits : bool, optional
+        If True plot horizontal lines for the set limits. The default is True.
+    limits : list of floats, optional
+        Completeness limits to be highlighted. The default is [1,0.75,0.5,0.33].
+    """
+    
     if column_metadata:
         try:
             order = pd.to_numeric(metadata[column_metadata])
@@ -1341,6 +1949,21 @@ def plot_overall_completeness(data, metadata=None, column_metadata=None, size = 
 ### Maybe move to another code to separate plotting functions and import plotting functions?
 
 def init_module():
+    """
+    Module initialization.
+
+    Returns
+    -------
+    workdir : str
+        path of the working directory.
+    step : str
+        Name of the step evaluated.
+    meta_df_fp : str
+        File path of the Metadata.
+    config_eval_fp : str
+        File path of the evaluation configuration file.
+    """
+    
     parser = argparse.ArgumentParser(description="Automated evaluation")
     parser.add_argument("-w","--workingdir", help="working directory where the preprocessing structure was build", required=True)
     parser.add_argument("-m","--metapath", help="Filepath to metadata file", required=True) 
@@ -1356,6 +1979,26 @@ def init_module():
     return workdir, step, meta_df_fp, config_eval_fp
 
 def get_config_dict(config_fp, keys, step):
+    """
+    Tranform evaluation configuration file to disctionary
+
+    Parameters
+    ----------
+    config_fp : str
+        File path of the evaluation configuration file..
+    keys : list of str
+        Figure keys.
+    step : str
+        Step to be evaluated. If all steps should be evaluated at once set to "All".
+
+    Returns
+    -------
+    dict_config_setup : dict
+        Dictionary containing the configuration setup for every step and figure.
+    steps : list of str
+        Steps to be evaluated later.
+    """
+    
     dict_config_setup = {}
     steps = []
     with open(config_fp,"r") as file:
@@ -1675,8 +2318,3 @@ if __name__ == "__main__":
                                       outfile = dict_config_setup[step][key_figure]["outfile"]
                                       )
             log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
-    
-    #%%        
-
-    # Read in figure legend (get filedir and read in relative to this)
-    ### Figure Legend ### In try/except if try/except is used
