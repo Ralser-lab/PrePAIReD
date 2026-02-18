@@ -14,8 +14,8 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = True ####
-write_to_disc = False
+load_dictionaries = False ####
+write_to_disc = True
 
 if not load_dictionaries:
     import pandas as pd
@@ -30,10 +30,11 @@ def init_module():
     parser = argparse.ArgumentParser(description="Step- and Method-dependent parameter setup")
     parser.add_argument("-f","--input_order", help="File containing order of steps seperated by (, or ; or space or tab or newline)",required=True)
     parser.add_argument("-i","--dict_path", help="Path of the parameter dictionaries",required=False,default=os.path.split(os.path.abspath(__file__))[0])
-    parser.add_argument("-w","--workdir", help="Path to working directory where results are saved",required=False, default=".")
+    parser.add_argument("-w","--workdir", help="Path to working directory where results are saved",required=False, default=os.getcwd())
     parser.add_argument("-p","--output_file", help="Name of the Output parameter file",required=False, default="Parameters.txt")
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
     parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="Parameter_Overview.tsv")
+    parser.add_argument("-s","--start", help="For a rerun denotes the starting point e.g. 03_NORMALISATION", required=False, default="new")
     args = parser.parse_args()
     
     # Get input
@@ -55,6 +56,7 @@ def init_module():
     config_file_path = os.path.join(outpath,"Config.txt")
     config_evaluation_file_path = os.path.join(outpath,"Config_evaluation.txt")
     parameter_overview_table_file_path = args.parameter_overview_table
+    start = args.start
     
     try:
         counter = int(args.counter)
@@ -63,7 +65,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter
+    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -434,9 +436,11 @@ def write_final_parameter_file(outfile,dict_flags,dict_parameters):
     
     return language
 
-def write_config(config_file_path, setup_order, language):
+def write_config(config_file_path, setup_order, language, start):
     with open(config_file_path,"w") as file:
-        file.write("Run = new\n")
+        file.write("Run = ")
+        file.write(start)
+        file.write("\n")
         file.write("order = ")
         c = 0
         for step, language_step in zip(setup_order,language):
@@ -461,7 +465,14 @@ def write_config(config_file_path, setup_order, language):
             if c<len(setup_order) and step != "00_GENERAL":
                 file.write(", ")
 
-def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath, counter):
+def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath, counter, start):
+    
+    if start != "new":
+        if start.split("_",maxsplit=1)[1] in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
+            c_start = start.split("_")[0]
+        else:
+            raise ValueError("Start point is not valid.")
+    
     blocks_config_eval = []
     for ind,block in enumerate(blocks_flags):
         counter_ = int(re.search("\%\%([0-9]+?)\_",block[0]).group(1))
@@ -469,9 +480,9 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
         block_new = [block[0]]
         block_new.append("%-%-%-%")
         if counter_ == 0:
-            for line in block:
-                if line and not line.startswith("#") and not line.startswith("%"):
-                    block_new.append(line)
+            #for line in block:
+            #    if line and not line.startswith("#") and not line.startswith("%"):
+            #        block_new.append(line)
             block_new.append("param_fp = "+os.path.join(outpath,"Parameter_Files","00_GENERAL_Parameters.json"))
             blocks_config_eval.append(block_new)   
         else:
@@ -484,7 +495,10 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
             else:
-                block_new.append("data_origin = None")
+                if start == "new":
+                    block_new.append("data_origin = None")
+                else:
+                    block_new.append("data_origin = "+os.path.join(outpath,start,"data_"+c_start+".tsv"))
             block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind+counter-1)+".tsv"))
                 #block_new.append("mask_description_origin = None")
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
@@ -693,9 +707,10 @@ if __name__ == "__main__":
                 dict_path = None
         
         setup_order = get_setup_order(setup_str, counter)
+        start = "new"
     
     else:
-        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter = init_module()
+        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -728,9 +743,9 @@ if __name__ == "__main__":
     #check_language(language)
     
     # Create config file
-    write_config(config_file_path, setup_order, language)
+    write_config(config_file_path, setup_order, language, start)
     print("The configuration file is saved in "+config_file_path+".")
     
     # Create evaluation config file
-    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter)
+    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter, start)
     print("The configuration file for evaluation is saved in "+config_file_path+".")
