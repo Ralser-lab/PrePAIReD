@@ -280,7 +280,7 @@ def get_color_values_by_property(data_origin, coloring_property, data_processed=
         return column_values_origin, column_values_processed
     return column_values_origin
 
-def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous", shuffle=False, seed=42, take_abs = False):
+def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Correlation", data_type="continuous", shuffle=False, seed=42, take_abs = False, min_samples=2):
     """
     Calculate property for each sample.
 
@@ -289,7 +289,7 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     data : pd.DataFrame
 	    Data (Indices: Precursors, Columns: Samples).
     indices : list
-        Indices of data to consider for calculation.
+        Indices of samples to consider for calculation.
     metadata : pd.DataFrame, optional
 	    Metadata for each sample with the same indices as the columns of data_origin. The default is None.
     column_metadata : str, optional
@@ -304,12 +304,17 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
         Seed for shuffeling the data. The default is 42.
     take_abs : bool, optional
         If True, take the absolute value for correlation. The default is False.
+    min_samples : int, optional
+        Minimal number of samples with defined value. The default is 2.
 
     Returns
     -------
     property_peptide : pd. Series
         Calculated property per sample.
     """
+    
+    # Avoid errors if subset chosen is too small -> test
+    data_index = [index for index in data.index if sum(~data.loc[index,indices].isna()) >= min_samples]
     
     if plot_by == "Missingness":
         property_peptide = data[indices].isna().T.sum()
@@ -318,34 +323,34 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     elif plot_by == "Median":
         property_peptide = data[indices].T.median()
     elif plot_by == "CV":
-        property_peptide = pd.Series(index=data.index, data=[get_CV_log(data.loc[index,indices]) for index in data.index])
+        property_peptide = pd.Series(index=data_index, data=[get_CV_log(data.loc[index,indices]) for index in data_index])
     elif plot_by == "norm_MAE":
-        property_peptide = pd.Series(index=data.index, data = [mean_absolute_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data.index])
+        property_peptide = pd.Series(index=data_index, data = [mean_absolute_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data_index])
     elif plot_by == "norm_MSE":
-        property_peptide = pd.Series(index=data.index, data = [mean_squared_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data.index])
+        property_peptide = pd.Series(index=data_index, data = [mean_squared_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data_index])
     elif plot_by in ["Correlation","Corr_pvalue"]:
         if metadata is None or not column_metadata:
             raise ValueError("Metadata or Metadata column or not defined.")
-        metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data.index]
+        metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data_index]
         if shuffle:
             np.random.seed(seed)
             for item in metadata_values_:
                 np.random.shuffle(item)
         if data_type == "continuous":
-            stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
+            stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
         elif data_type == "ordinal":
-            stats = [spearmanr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
+            stats = [spearmanr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
         elif data_type == "nominal":
-            stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data.index)]
+            stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
         else:
             raise ValueError("data_type not defined.")
         if plot_by == "Correlation":
             if take_abs:
-                property_peptide = pd.Series(index=data.index, data=[abs(el[0]) for el in stats])
+                property_peptide = pd.Series(index=data_index, data=[abs(el[0]) for el in stats])
             else:
-                property_peptide = pd.Series(index=data.index, data=[el[0] for el in stats])
+                property_peptide = pd.Series(index=data_index, data=[el[0] for el in stats])
         elif plot_by == "Corr_pvalue":
-            property_peptide = pd.Series(index=data.index, data=[-1*np.log10(el[1]) for el in stats])
+            property_peptide = pd.Series(index=data_index, data=[-1*np.log10(el[1]) for el in stats])
     return property_peptide
 
 def set_aspect_equal(ax):
@@ -1235,7 +1240,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type, take_abs=True)
     # Get n top hits
     selection = property_peptide.sort_values(ascending=False).index[:top_n]
-    
+        
     if data_processed is not None:
         size = (size[0]*2,(size[1]*top_n)+1)
     else:
