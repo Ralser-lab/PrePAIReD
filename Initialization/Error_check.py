@@ -262,29 +262,30 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
             data_df = read_dataframe_header(data_file, log=log)
+            metadata_df = read_dataframe_header(metadata_file, log=log)
             check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
-                multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
-                if len(multiple_files) > 0:
-                    update_log(log, f"###ERROR###: File names are not unique in data, {list(multiple_files)} exist(s) multiple "
-                    f"times.") 
-                    raise ValueError(
-                        f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
-                        f"times.")
+                #multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
+                #if len(multiple_files) > 0:
+                #    update_log(log, f"###ERROR###: File names are not unique in data, {list(multiple_files)} exist(s) multiple "
+                #    f"times.") 
+                #    raise ValueError(
+                #        f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
+                #        f"times.")
                 if data_df[value].isna().any():  # check for NaN column names
                     raise ValueError("File names contain NaN column names in data.")
                 # if file names in metadata and data are unique and without nans, check that file names are same in
                 # both files
                 metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
                 data_set = set(data_df[user_dict["input_filename_column"]])
-                only_in_metadata = metadata_set - data_set
+                #only_in_metadata = metadata_set - data_set
                 only_in_data = data_set - metadata_set
-                if only_in_metadata or only_in_data:
+                if only_in_data:
                     update_log(log, f"###ERROR###: Differences found:\n"
-                                     f"Only in metadata: {list(only_in_metadata)}\n"
+                                     #f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
                     raise ValueError(f"Differences found:\n"
-                                     f"Only in metadata: {list(only_in_metadata)}\n"
+                                     #f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
 
         if current_operation == "existence in data_df.columns (; separated)":
