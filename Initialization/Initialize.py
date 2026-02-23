@@ -174,6 +174,8 @@ def init_parser(): # build parser outside of the pipeline to read current data
     
     # Set output
     path_to_project_directory = args.workdir.replace("\\","/")
+    if path_to_project_directory == ".":
+        path_to_project_directory = os.getcwd()
         
     if not os.path.isdir(path_to_project_directory):
         raise ValueError("###ERROR###: Output path not existing")  
@@ -188,7 +190,8 @@ def init_parser(): # build parser outside of the pipeline to read current data
 #%%
 if __name__ == "__main__":
    
-   #set parameters
+    #set parameters
+    run_error_check = True
     if len(sys.argv) <= 1:
         #if script called within python
         path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)", initialdir=os.path.abspath(os.getcwd()))
@@ -211,5 +214,5 @@ if __name__ == "__main__":
     log = os.path.join(f"{path_to_project_directory}","logfile_setup.txt")
     create_logfile(log, path_to_project_directory, mass_spec_data_filename=mass_spec_data_filename, metadata_filename=metadata_filename, preprocessed_filename=preprocessed_filename, username=username, parameter_directory=parameter_directory)
     
-    read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, metadata_file=metadata_filename, data_file=mass_spec_data_filename, log=log, parameter_directory=parameter_directory)
+    read_parameters_file(txt_file=parameters_txt_file, path_to_project_directory=path_to_project_directory, metadata_file=metadata_filename, data_file=mass_spec_data_filename, log=log, parameter_directory=parameter_directory, run_error_check=run_error_check)
     

@@ -16,14 +16,21 @@ def update_log(logfile, message):
     log.close()
 
 # support functions
-def read_dataframe_header(filepath: str, log: str):
+def read_dataframe_header(filepath: str, log: str, header_only = False):
     """
     Check if filepath exists and read the dataframe header
     :param filepath: str, path to dataframe
     :param log: str, logfile
+    :param header_only: bool
     :return: column names of the dataframe
     """
     # print(filepath)
+    
+    if header_only:
+        nrows = 0
+    else:
+        nrows = None
+    
     if not isinstance(filepath, str):  # check if filepath is str
         update_log(log,f"###ERROR###: {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
@@ -31,9 +38,9 @@ def read_dataframe_header(filepath: str, log: str):
         #print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
-        df = pd.read_csv(filepath, sep="\t")  # read only the first 10 lines to save time
+        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first 10 lines to save time
     elif filepath.endswith(".csv"):  # read csv files
-        df = pd.read_csv(filepath, sep=",")  # read only the first 10 lines to save time
+        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first 10 lines to save time
 
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
@@ -240,14 +247,15 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                     update_log(log, "###ERROR###: File names contain NaN column names in metadata.") 
                     raise ValueError("File names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
-            metadata_df = read_dataframe_header(metadata_file, log=log)
-            check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
-            # print(df_cols)
-            # print(value[0])
-            series = pd.read_excel(metadata_file, usecols=[value[0]])
-            series = series[value[0]].tolist()
-            # print(series)
-            check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
+            if value and len(value) >= 2:
+                metadata_df = read_dataframe_header(metadata_file, log=log)
+                check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
+                # print(df_cols)
+                # print(value[0])
+                series = pd.read_excel(metadata_file, usecols=[value[0]])
+                series = series[value[0]].tolist()
+                # print(series)
+                check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
         if current_operation == "existence in metadata_df.columns (; separated)":
             metadata_df = read_dataframe_header(metadata_file, log=log)
             values = value.split(";")
@@ -261,10 +269,9 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             metadata_df = read_dataframe_header(metadata_file, log=log)
             check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
-            data_df = read_dataframe_header(data_file, log=log)
-            metadata_df = read_dataframe_header(metadata_file, log=log)
-            check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
+                data_df = read_dataframe_header(data_file, log=log)
+                check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
                 #multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
                 #if len(multiple_files) > 0:
                 #    update_log(log, f"###ERROR###: File names are not unique in data, {list(multiple_files)} exist(s) multiple "
@@ -276,6 +283,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                     raise ValueError("File names contain NaN column names in data.")
                 # if file names in metadata and data are unique and without nans, check that file names are same in
                 # both files
+                metadata_df = read_dataframe_header(metadata_file, log=log)
                 metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
                 data_set = set(data_df[user_dict["input_filename_column"]])
                 #only_in_metadata = metadata_set - data_set
@@ -287,9 +295,12 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                     raise ValueError(f"Differences found:\n"
                                      #f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
+            else:
+                data_df = read_dataframe_header(data_file, log=log, header_only=True)
+                check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
 
         if current_operation == "existence in data_df.columns (; separated)":
-            data_df = read_dataframe_header(data_file)
+            data_df = read_dataframe_header(data_file, log=log, header_only=True)
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=list(data_df.columns), module=module, variable=variable, log=log)
@@ -457,12 +468,13 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                     #print(value, type(value))
                     #print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
-                    if str(value).strip() == dict_to_use["Default"]:  # check for default
+                    current_operation = dict_to_use["Check Operation"]  # get the current operation to do
+                    if str(value).strip() == dict_to_use["Default"] and "existence" not in current_operation:  # check for default
                         #print(f"{value} is default value.")
                         pass
                     else:
                         #print(f"{value} is not default")
-                        current_operation = dict_to_use["Check Operation"]  # get the current operation to do
+                        #current_operation = dict_to_use["Check Operation"]  # get the current operation to do
                         # print(current_operation)
                         operation_selection(value=value, target_dict=dict_to_use,
                                             operation_dictionary=operation_dictionary,
@@ -478,7 +490,8 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
    #print(value, type(value))
    #print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
-    if str(value) == str(dict_to_use["Default"]):  # check for default
+    current_operation = dict_to_use["Check Operation"]
+    if str(value) == str(dict_to_use["Default"]) and "existence" not in current_operation:  # check for default
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
             update_log(log,f"###ERROR###: {variable} can not be None.") 
             raise ValueError(f"{variable} can not be None.")
@@ -487,8 +500,11 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
             pass
 
     else:
+        if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
+            update_log(log,f"###ERROR###: {variable} can not be None.") 
+            raise ValueError(f"{variable} can not be None.")
         #print(f"{value} is not default")
-        current_operation = dict_to_use["Check Operation"]  # get the current operation to do
+        #current_operation = dict_to_use["Check Operation"]  # get the current operation to do
         # print(current_operation)
         operation_selection(value=value, target_dict=dict_to_use, operation_dictionary=operation_dictionary,
                             operation=current_operation, module=module, variable=variable, user_dict=user_dict,
