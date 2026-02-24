@@ -325,7 +325,14 @@ def write_parameter_file_imputation(outfile, dict_flags):
                     if imputation_method in dict_flags["IMPUTATION"]["imputation_method"]["Options"]:
                         # Distinguish between R and Python: Python-specific flags
                         if imputation_method not in ["missforest","bpca_R","ppca","ppm","MNAR"]:
-                            if flag not in ["imputation_method_MAR","imputation_method_MNAR","imputation_method_ProtAbsence","imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR","simple_imputation","imputation_method"]:
+                            if flag not in ["imputation_method_MAR","imputation_method_MNAR",
+                                            "imputation_method_ProtAbsence",
+                                            "imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR",
+                                            "simple_imputation","imputation_method",
+                                            "eval_missingness_on_protein_presence", "eval_missingness_by_detection_threshold", 
+                                            "hierarchical_imputation", "remember_missingness_type_in_mask", 
+                                            "level_for_intensity_dependent_missingness_estimation", "save_intermediate_output_for_QA", 
+                                            "impute_over_whole_dataset"]:
                                 if type(dict_flags[setup][flag]["Comment"]) is str: 
                                     block_new.append("# "+str(dict_flags[setup][flag]["Comment"]))
                                 block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
