@@ -38,10 +38,11 @@ def read_dataframe_header(filepath: str, log: str, header_only = False):
         #print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
-        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first 10 lines to save time
+        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first line to save time
     elif filepath.endswith(".csv"):  # read csv files
-        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first 10 lines to save time
-
+        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first line to save time
+    elif filepath.endswith(".parquet"):  # read parquet files
+        df = pd.read_parquet(filepath)  
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
         update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
@@ -515,6 +516,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     #print("Works so far")
 
     return current_flag, current_flag_value
+
 
 
 
