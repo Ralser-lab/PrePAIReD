@@ -641,7 +641,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     return
 
 # For Imputation, Normalization, Correction, Summarization
-def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=True, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
+def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=False, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
     """
     Plotting of the coefficient of variation (CV) as a violin plot for different sample types.
 
@@ -2117,7 +2117,6 @@ if __name__ == "__main__":
                                        )
             log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             
-            ### Legend as f-string with column_color if defined
         #%%
         key_figure = "F02"
         if dict_config_setup[step][key_figure]["plot_filter_mask"] == "1":  
