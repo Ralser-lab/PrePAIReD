@@ -87,7 +87,6 @@ def batchcorrect_harmony(
 
     return data_processed_df, log_string
 
-
 def batchcorrect_combat(
     data_df:pd.DataFrame, 
     metadata_df:pd.DataFrame, 
@@ -141,6 +140,8 @@ def batchcorrect_combat(
         # effects to preserve during batch correction
         if cov_preserve_list != None:
             x_df = metadata_df[cov_preserve_list]
+        else:
+            x_df = None
 
         # covariates to adjust for during batch correction
         if cov_adjust_list != None:
@@ -156,8 +157,12 @@ def batchcorrect_combat(
 
             Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
-            X_fit = x_df.loc[fitsamples_idx_list]
+            if x_df != None:
+                X_fit = x_df.loc[fitsamples_idx_list]
+            else:
+                X_fit = None
             C_fit = c_df.loc[fitsamples_idx_list]
+
 
             c_fit = combat_model.fit(
                 Y=Y_fit,
@@ -165,30 +170,38 @@ def batchcorrect_combat(
                 X=X_fit,
                 C=C_fit
             )
-
         else:
-            
             log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S"+"\tFit COMBAT Class on all samples.\n")
 
             c_fit = combat_model.fit(
-                Y=data_df.T.to_numpy(),
+                Y=data_df.to_numpy(),
                 b=metadata_df[batch_key].to_numpy(),
                 X=x_df, 
                 C=c_df
             )
-
 
         log_string += time.strftime(
                     "%Y-%m-%d%t%H:%M:%S"+"\tTransform data.\n")
 
         samples_all = data_df.index
         Y_all = data_df.to_numpy()
-        b_all = metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
-        X_all = x_df.loc[samples_all]
+
+        
+        if fitsamples_idx_list != None:
+            b_all =  metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
+        else:
+            b_all = metadata_df[batch_key].to_numpy()
+        
+        X_all = x_df.loc[samples_all] if x_df != None else None
         C_all = c_df.loc[samples_all]
 
-        assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+        # Check if all samples have the same number of observations
+        if X_all != None:
+            assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+        else:
+            assert Y_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+
 
         data_processed_arr = c_fit.transform(
             Y=Y_all,
@@ -196,6 +209,7 @@ def batchcorrect_combat(
             X=X_all,
             C=C_all
         )
+
         data_processed_df = pd.DataFrame(
             data_processed_arr,
             index=data_df.index,
@@ -214,8 +228,6 @@ def batchcorrect_combat(
 
             return data_processed_df, log_string
         
-
-
 def get_min_samples(m):
     """
     define minimum number of samples needed for fitting 
@@ -238,7 +250,6 @@ def get_min_samples(m):
 
     """
     return(m * 10)
-
 
 def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtypes_list,fitsamples_idx_list=None,alpha_significance=0.05):
     
@@ -419,7 +430,6 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                 corr_df.loc[idx, "pval_"+ metadata_var] = pval
 
     return corr_df, log_string
-
 
 def adjust_confounders(
                 data_df, metadata_df, model_string, adjust_cols_list,
@@ -647,7 +657,6 @@ def adjust_confounders(
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
     
     return data_processed_df, log_string, corr_df
-
 
 def adjust_confounders_batchwise(
     data_df,
@@ -877,8 +886,6 @@ def adjust_confounders_batchwise(
     
     return data_processed_df, log_string, corr_df    
 
-
-
 #%%
 
 if __name__ == "__main__":
@@ -951,6 +958,7 @@ if __name__ == "__main__":
     # check if batchcolumns in metafile
     if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
         log_string_batchcol = ""
+
         for batch_col in parameters_dict["batch_cols_meta"]:
             if batch_col not in metadata_df.columns:
                 log_string_batchcol += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
