@@ -69,7 +69,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     main_impute <- switch(
         tolower(parameter_list[["imputation_method"]]),
         "missforest" = function() impute_missForest(quant_df, parameter_list),
-        "bpca" = function() impute_pca(quant_df, parameter_list),
+        "bpca_R" = function() impute_pca(quant_df, parameter_list),
         "ppca" = function() impute_pca(quant_df, parameter_list),
         "ppm" = function() impute_ppm(quant_df, parameter_list),
         "mnar" = function() impute_MNAR(quant_df, parameter_list)
