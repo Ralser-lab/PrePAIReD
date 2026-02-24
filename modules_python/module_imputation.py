@@ -854,6 +854,15 @@ if __name__ == "__main__":
     #log += "\n------------\n"  
     #helper.logger(log_file, module_output=log)
     #log = ""
+    parameters_dict["axis"] = 1
+    if parameters_dict["simple_imputation"]:
+        parameters_dict["eval_missingness_on_protein_presence"]=0
+        parameters_dict["eval_missingness_by_detection_threshold"]=0
+        parameters_dict["hierarchical_imputation"]=0 
+        parameters_dict["remember_missingness_type_in_mask"]=0
+        parameters_dict["level_for_intensity_dependent_missingness_estimation"]=0
+        parameters_dict["save_intermediate_output_for_QA"]=0
+        parameters_dict["impute_over_whole_dataset"]=1
     
     # replace zeros with NA
     if parameters_dict["replace_zeros_with_nan"]:
@@ -897,27 +906,30 @@ if __name__ == "__main__":
             
         # Process data
         try:
+            log = ""
             # create a mask to store missingness type (thus imputation approach neccessary), 0 equals no imputation applied
             if parameters_dict["eval_missingness_on_protein_presence"]:
                 #check that parameters_dict["missingness_type_protein_absence"] is in missingness types
-                if parameters_dict["missingness_type_protein_absence"] not in impu_table_df["missingness_type"].drop_duplicates().tolist() and parameters_dict["hierarchical_imputation"]:
-                    log = "###WARNING###: Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
-                else:
-                    # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
-                    protmissing_mask_df = assign_missingness(data_df=data_df,
-                                                            id_mapping_df=id_mapping_df,
-                                                            missingness_type=parameters_dict["missingness_type_protein_absence"],
-                                                            mask_df=mask_df,
-                                                            precursor_col=parameters_dict["precursor_col"],
-                                                            protein_col=parameters_dict["protein_col"],
-                                                            on_filter_mask=parameters_dict["define_protein_missingness_on_filter_mask"])
-                    #Logging
-                    protmissing_counter = Counter(protmissing_mask_df.to_numpy().flatten())
-                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tDefined missingness if no precursor of a protein was measured as " + parameters_dict["missingness_type_protein_absence"] + "\n"
-                    log += "\t\t\t\t" +  str(np.round(protmissing_counter[parameters_dict["missingness_type_protein_absence"]]/sum(protmissing_counter.values())*100,2)) + "% of values are defined as missing due to protein absence.\n"
-                helper.logger(log_file, module_output=log)
+                if parameters_dict["hierarchical_imputation"]:
+                    if parameters_dict["missingness_type_protein_absence"] not in impu_table_df["missingness_type"].drop_duplicates().tolist():
+                        log += "###WARNING###: Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
+                        parameters_dict["eval_missingness_on_protein_presence"] = 0
+            if parameters_dict["eval_missingness_on_protein_presence"]:
+                # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
+                protmissing_mask_df = assign_missingness(data_df=data_df,
+                                                        id_mapping_df=id_mapping_df,
+                                                        missingness_type=parameters_dict["missingness_type_protein_absence"],
+                                                        mask_df=mask_df,
+                                                        precursor_col=parameters_dict["precursor_col"],
+                                                        protein_col=parameters_dict["protein_col"],
+                                                        on_filter_mask=parameters_dict["define_protein_missingness_on_filter_mask"])
+                #Logging
+                protmissing_counter = Counter(protmissing_mask_df.to_numpy().flatten())
+                log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tDefined missingness if no precursor of a protein was measured as " + parameters_dict["missingness_type_protein_absence"] + "\n"
+                log += "\t\t\t\t" +  str(np.round(protmissing_counter[parameters_dict["missingness_type_protein_absence"]]/sum(protmissing_counter.values())*100,2)) + "% of values are defined as missing due to protein absence.\n"
             else:
                 protmissing_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+            helper.logger(log_file, module_output=log)
             if parameters_dict["eval_missingness_by_detection_threshold"]:
                 
                 #in pandas version 2.2.2
@@ -937,20 +949,23 @@ if __name__ == "__main__":
                     helper.logger(log_file, module_output=log)
                     for level in levels:
                         samples_in_level = list(set(data_df.columns) & set(metadata_df[metadata_df[parameters_dict["level_for_intensity_dependent_missingness_estimation"]]== level][parameters_dict["metadata_sample_column"]]))
-                        mar_mnar_mask_df_level, regression_df_level, decision_boundary_level = intensity_dependent_missingness_estimation(data_df[samples_in_level],  
-                                                                                                                                          axis=parameters_dict["axis"], 
-                                                                                                                                          boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
-                                                                                                                                          detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
-                                                                                                                                          method=parameters_dict["intensity_dependent_missingness_fit_method"], 
-                                                                                                                                          n_knots=parameters_dict["intensity_dependent_missingness_n_knots"])
-                        #combine mask and regression_df with current level
-                        mar_mnar_mask_df = pd.concat([mar_mnar_mask_df, mar_mnar_mask_df_level],axis=1)
-                        regression_df_level.columns = [x+"_"+str(level) for x in regression_df_level.columns]
-                        regression_df = regression_df.join(regression_df_level,how="outer")
-                        decision_boundary_df.loc[level,"decision_boundary"] = decision_boundary_level
-                        decision_boundary_df.loc[level,"num_samples"] = len(samples_in_level)
-                    # Logging of decision_boundary_dataframe
-                    log = "\t\t\t\t" + decision_boundary_df.to_string(index=False).replace("\n","\n\t\t\t\t")+"\n"
+                        if samples_in_level:
+                            mar_mnar_mask_df_level, regression_df_level, decision_boundary_level = intensity_dependent_missingness_estimation(data_df[samples_in_level],  
+                                                                                                                                              axis=parameters_dict["axis"], 
+                                                                                                                                              boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
+                                                                                                                                              detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
+                                                                                                                                              method=parameters_dict["intensity_dependent_missingness_fit_method"], 
+                                                                                                                                              n_knots=parameters_dict["intensity_dependent_missingness_n_knots"])
+                            #combine mask and regression_df with current level
+                            mar_mnar_mask_df = pd.concat([mar_mnar_mask_df, mar_mnar_mask_df_level],axis=1)
+                            regression_df_level.columns = [x+"_"+str(level) for x in regression_df_level.columns]
+                            regression_df = regression_df.join(regression_df_level,how="outer")
+                            decision_boundary_df.loc[level,"decision_boundary"] = decision_boundary_level
+                            decision_boundary_df.loc[level,"num_samples"] = len(samples_in_level)
+                            # Logging of decision_boundary_dataframe
+                        else:
+                            log = "###WARNING###: "+str(parameters_dict["level_for_intensity_dependent_missingness_estimation"])+":"+str(level)+" skipped for intensity dependent missingness assignment as no sample in the data (anymore).\n"
+                    log += "\t\t\t\t" + decision_boundary_df.to_string(index=False).replace("\n","\n\t\t\t\t")+"\n"
                     helper.logger(log_file, log)
                     if parameters_dict["save_intermediate_output_for_QA"]:
                         decision_boundary_df.to_csv(os.path.join(out_dir_fp, "intensity_dependent_missingness_estimation_decision_boundaries.tsv"),sep="\t")
@@ -1141,34 +1156,43 @@ if __name__ == "__main__":
                     total_num_values,num_missing_values,missing_val_locs = obtain_missingness_for_log(data_df=data_df) # all missingness_types
                     missing_val_locs_m = list(set(missing_val_locs_m) & set(missing_val_locs))
                     num_missing_values_m = len(missing_val_locs_m)
+                    
+                    data_part_df = data_df.copy()
 
                     #IMPUTATION FUNCTION CALLS
                     if imputation_method == "knn":
-                        data_df = knn_imputation(data_df=data_df,k=parameters_dict["knn_k"],weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
+                        data_part_df = knn_imputation(data_df=data_part_df,k=parameters_dict["knn_k"],weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
                     elif imputation_method == "knn-ML":
-                        data_df = knn_imputation(data_df=data_df,k=parameters_dict["knn_k"],weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
+                        data_part_df = knn_imputation(data_df=data_part_df,k=parameters_dict["knn_k"],weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                     elif imputation_method == "minval-noise":
-                        data_df = minval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=True)
+                        data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                     elif imputation_method == "minval":
-                        data_df = minval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=False)
+                        data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=False)
                     elif imputation_method == "meanval-noise":
-                        data_df = meanval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=True)
+                        data_part_df = meanval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                     elif imputation_method == "meanval":
-                        data_df = meanval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=False)
+                        data_part_df = meanval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=False)
                     elif imputation_method == "medianval-noise":
-                        data_df = medianval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=True)
+                        data_part_df = medianval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                     elif imputation_method == "medianval":
-                        data_df = medianval_imputation(data_df=data_df,axis=parameters_dict["axis"],add_noise=False)
+                        data_part_df = medianval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=False)
                     elif imputation_method == "bpca":
-                        data_df = bpca_fill(data_df.T).T
+                        data_part_df = bpca_fill(data_part_df.T).T
                     elif imputation_method == "graphbased":
-                        data_df = graphbased_imputation(data_df=data_df,
+                        data_part_df = graphbased_imputation(data_df=data_part_df,
                                                         id_mapping_df=id_mapping_df,
                                                         protein_col=parameters_dict["protein_col"],
                                                         precursor_col=parameters_dict["precursor_col"],
                                                         impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
                                                         estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
                                                         weighting=parameters_dict["graphbased_imputation_weighting"])
+                    
+                    if missingness_type != "simple":
+                        data_part_df =  data_part_df[imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type]
+                        data_df.loc[data_part_df.index,data_part_df.columns] = data_df.loc[data_part_df.index,data_part_df.columns].add(data_part_df,fill_value=0).replace(0,np.nan)
+                    else:
+                        data_df = data_part_df
+                    
                     # remember which and how many values are missing after imputation
                     still_total_num_values,num_still_missing_values,still_missing_val_locs = obtain_missingness_for_log(data_df=data_df)
                     #update mask_df with imputed values
@@ -1187,7 +1211,8 @@ if __name__ == "__main__":
                         frac_missingness_type_from_missing = num_missing_values_m/num_missing_values
                     else:
                         frac_missingness_type_from_missing = 0
-                    frac_missingness_type_from_all = num_missing_values_m/total_num_values
+  
+                    frac_missingness_type_from_all = num_missing_values/total_num_values
                     log = "\t\t\t\t" + str(np.round(frac_missingness_type_from_all*100,2)) + "% of values were missing, of these " + str(np.round(frac_missingness_type_from_missing*100,2)) +"% with missingness type " + missingness_type + "\n"
                     log += "\t\t\t\t" + str(np.round(frac_imputed_missingness_type*100,2)) + "% of values with missingness type " + str(missingness_type) + " were imputed using imputation method " + imputation_method + ".\n" 
 

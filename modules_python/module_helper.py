@@ -1532,7 +1532,7 @@ def skip_parser_init(module):
     else:
         data_df_fp = askopenfilename(title="Please select your wide-format data",initialdir=workdir_fp)
     meta_df_fp = askopenfilename(title="Please select your metadata file")
-    param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_"+module+"_parameters.json")
+    param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_"+module+"_Parameters.json")
     out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
     log_file = askopenfilename(title="Please select your log_file",initialdir=workdir_fp)
     idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
