@@ -376,7 +376,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
                                 variable=variable, log=log)
         if current_operation == "check elements (; or _ separated)":
-            values = value.split(";").split("_")
+            values = value.split(";")
+            values = [el for item in values for el in item.split("_")]
             allowed_values = target_dict["Options"]
             lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
             for val in values:
