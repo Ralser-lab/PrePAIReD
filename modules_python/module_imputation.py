@@ -875,6 +875,7 @@ if __name__ == "__main__":
             if os.path.exists(imputation_table_fp) and not parameters_dict["overwrite_imputation_procedures"]:
                 # load imputation table
                 impu_table_df = pd.read_csv(imputation_table_fp,sep="\t")
+                log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tImputation table read from "+imputation_table_fp+".\n"
                 # check imputation table on completeness such that every lower hierarchy is defined for every upper hierarchy
                 #check_imputation_table_on_completeness() #TODO
             else:
@@ -893,6 +894,9 @@ if __name__ == "__main__":
                                                         default_impu_method_ProtAbsenceMNAR=parameters_dict["imputation_method_ProtAbsenceMNAR"],
                                                         default_knn_k=parameters_dict["knn_k"])
                 impu_table_df.to_csv(imputation_table_fp,sep="\t",index=False)
+                
+                log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tImputation table created and saved in "+imputation_table_fp+".\n"
+            helper.logger(log_file, module_output=log)
 
             '''
             #extract missingness types 
@@ -1188,7 +1192,7 @@ if __name__ == "__main__":
                                                         weighting=parameters_dict["graphbased_imputation_weighting"])
                     
                     if missingness_type != "simple":
-                        data_part_df =  data_part_df[imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type]
+                        data_part_df =  data_part_df[(imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type) & (data_df.loc[data_part_df.index,data_part_df.columns].isna())]
                         data_df.loc[data_part_df.index,data_part_df.columns] = data_df.loc[data_part_df.index,data_part_df.columns].add(data_part_df,fill_value=0).replace(0,np.nan)
                     else:
                         data_df = data_part_df

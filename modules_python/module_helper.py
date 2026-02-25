@@ -1006,7 +1006,7 @@ def create_imputation_table(metadata_df,sample_hierarchies,missingness_threshold
     for s,sample_hierarchy in enumerate(sample_hierarchies):
         sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].dropna().unique()
         sample_hierarchy_values = np.sort(sample_hierarchy_values)
-        missingness_thresholds_s = [eval(x) for x in missingness_thresholds.split(";")[s].split("_")] # to convert e.g. 1/3 to float
+        missingness_thresholds_s = [eval(x) for x in str(missingness_thresholds).split(";")[s].split("_")] # to convert e.g. 1/3 to float
         impu_table_part_df = pd.DataFrame(columns=impu_table_df.columns,index=range(len(sample_hierarchy_values)*len(missingness_types)*len(missingness_thresholds_s)))
         impu_table_part_df[sample_hierarchy] = list(itertools.chain.from_iterable([[x]*len(missingness_types)*len(missingness_thresholds_s) for x in sample_hierarchy_values]))
         impu_table_part_df["missingness_thresh"] = list(itertools.chain.from_iterable([[x]*len(missingness_types) for x in missingness_thresholds_s] * len(sample_hierarchy_values)))
