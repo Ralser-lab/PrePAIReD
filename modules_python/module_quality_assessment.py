@@ -1974,6 +1974,7 @@ def init_module():
     parser.add_argument("-m","--metapath", help="Filepath to metadata file", required=True) 
     parser.add_argument("-s","--step", help="step that should be evaluated", required=False, default="All") 
     parser.add_argument("-e","--config_eval", help="Filepath to evaluation configuration file", required=True) 
+    parser.add_argument("--docker", action="store_true")
     args = parser.parse_args()
     
     workdir = args.workingdir.replace("\\","/")
@@ -1981,7 +1982,7 @@ def init_module():
     meta_df_fp = args.metapath.replace("\\","/")
     config_eval_fp = args.config_eval.replace("\\","/")
     
-    return workdir, step, meta_df_fp, config_eval_fp
+    return workdir, step, meta_df_fp, config_eval_fp, args.docker
 
 def get_config_dict(config_fp, keys, step):
     """
@@ -2040,9 +2041,10 @@ if __name__ == "__main__":
         workdir = askdirectory(title="Please select your working directory", initialdir=os.path.abspath(os.getcwd()))
         meta_df_fp = askopenfilename(title="Please select the metadata file")       
         config_fp = askopenfilename(title="Please select the evaluation config file")
+        docker_setup = False
     
     else:
-        workdir, step, meta_df_fp, config_fp = init_module()
+        workdir, step, meta_df_fp, config_fp, docker_setup = init_module()
     
     keys = ["Data","F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11"]    
     dict_config_setup, steps = get_config_dict(config_fp, keys, step)
@@ -2062,9 +2064,9 @@ if __name__ == "__main__":
     if not steps:
         raise ValueError("Step could not be found")
         
-    try:    
+    if not docker_setup:    
         captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
-    except:
+    else:
         captions = pd.read_csv(os.path.join("/modules_python","Figures_Captions.tsv"), sep = "\t", index_col = 0)
     
 #%%
