@@ -38,10 +38,11 @@ def read_dataframe_header(filepath: str, log: str, header_only = False):
         #print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
-        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first 10 lines to save time
+        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first line to save time
     elif filepath.endswith(".csv"):  # read csv files
-        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first 10 lines to save time
-
+        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first line to save time
+    elif filepath.endswith(".parquet"):  # read parquet files
+        df = pd.read_parquet(filepath)  
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
         update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
@@ -252,7 +253,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
                 # print(df_cols)
                 # print(value[0])
-                series = pd.read_excel(metadata_file, usecols=[value[0]])
+                series = metadata_df[value[0]]
                 series = series[value[0]].tolist()
                 # print(series)
                 check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
@@ -515,6 +516,3 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     #print("Works so far")
 
     return current_flag, current_flag_value
-
-
-
