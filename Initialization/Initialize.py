@@ -204,7 +204,10 @@ if __name__ == "__main__":
         #print(sys.argv)
         #if script called from terminal
         parameters_txt_file, path_to_project_directory, module_order_filename, mass_spec_data_filename, metadata_filename = init_parser()
-    username = os.getlogin() ####
+    try:
+        username = os.getlogin()
+    except:
+        username = "NextFlow" ####
     preprocessed_filename = os.path.join(path_to_project_directory,"${counter}_${step}","data_${counter}.tsv")
     parameter_directory = "Parameter_Files"
 
