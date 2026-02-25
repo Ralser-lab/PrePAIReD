@@ -1096,7 +1096,7 @@ if __name__ == "__main__":
                                 #only allow imputed values for selected missingness type
                                 #missingness_mask_df = imputation_mask_df.loc[precursors,samples]
                                 #data_part_df = data_part_df[(missingness_mask_df == missingness_type) | (missingness_mask_df == "")]
-                                data_part_df =  data_part_df[imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type]
+                                data_part_df =  data_part_df[(imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type) & (data_df.loc[data_part_df.index,data_part_df.columns].isna())]
                                 #update data_df with data_part_df
                                 data_df.loc[data_part_df.index,data_part_df.columns] = data_df.loc[data_part_df.index,data_part_df.columns].add(data_part_df,fill_value=0).replace(0,np.nan)
                                 # remember which and how many values are missing after imputation
