@@ -2062,7 +2062,10 @@ if __name__ == "__main__":
     if not steps:
         raise ValueError("Step could not be found")
         
-    captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
+    try:    
+        captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
+    except:
+        captions = pd.read_csv(os.path.join("/modules_python","Figures_Captions.tsv"), sep = "\t", index_col = 0)
     
 #%%
     for step in steps:
