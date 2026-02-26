@@ -97,7 +97,7 @@ def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_
     data_processed : pd.DataFrame, optional
         Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
     sample_type_column : str, optional
-        Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+        Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     sample_type : str, optional
         Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
 
@@ -439,7 +439,7 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     size : tuple of float, optional
         Size of the plot. The default is (10, 10).
     fontsize : int, optional
@@ -1065,7 +1065,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     step : str, optional
         Preprocessing step (used for the title). The default is "".
     outfile : str, optional
@@ -1184,7 +1184,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     plot_by : str, optional
 	       Property for which data should be calculated. Options: "Missingness", "Mean", "Median", "CV", "norm_MAE", "norm_MSE", "Correlation", "Corr_pvalue". The default is "Correlation".
     outfile : str, optional
@@ -1344,7 +1344,7 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
     outfile : str, optional
         File path for the figure. The default is "Decision_boundary_estimation.png".
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     size : tuple of float, optional
@@ -1499,7 +1499,7 @@ def plot_correlation_distribution(data_origin, metadata, data_processed = None, 
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     column_metadata : str, optional
 	    Column in Metadata containing the covariate for correlation. The default is "Order".
     data_type : data_type : str, optional
@@ -1647,7 +1647,7 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     size : tuple of float, optional
         Size of the plot. The default is (5,5).
     fontsize : int, optional
@@ -1773,7 +1773,7 @@ def plot_completeness_vs_abundance_scatter(data_origin, metadata, sample_type = 
     sample_type : str, optional
 	    Sample type in Metadata[sample_type_column] for which indices should be extracted. The default is None.
     sample_type_column : str, optional
-	    Column in Metadata that distinguishes sample type. If None, samples will not be be distinguished. The default is None.
+	    Column in Metadata that distinguishes sample type. If None, samples will not be distinguished. The default is None.
     outfile : str, optional
         File path for the figure. The default is "Completness_vs_Abundance.png".
     size : tuple of float, optional
@@ -2067,7 +2067,7 @@ if __name__ == "__main__":
     if not docker_setup:    
         captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
     else:
-        captions = pd.read_csv(os.path.join("/modules_python","Figures_Captions.tsv"), sep = "\t", index_col = 0)
+        captions = pd.read_csv(os.path.join("Figures_Captions.tsv"), sep = "\t", index_col = 0)
     
 #%%
     for step in steps:
@@ -2297,13 +2297,16 @@ if __name__ == "__main__":
         #%%
         key_figure = "F09"   
         if dict_config_setup[step][key_figure]["plot_distribution_hist"] == "1":
-            normalisation_factors = pd.read_csv(dict_config_setup[step][key_figure]["normalization_factors"], sep="\t", index_col=0)
-            
-            plot_distribution_hist(normalisation_factors, 
-                                   outfile = dict_config_setup[step][key_figure]["outfile"],
-                                   baseline = 0
-                                   )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            if "NORMALISATION" in step:
+                normalisation_factors = pd.read_csv(dict_config_setup[step][key_figure]["normalization_factors"], sep="\t", index_col=0)
+                
+                plot_distribution_hist(normalisation_factors, 
+                                       outfile = dict_config_setup[step][key_figure]["outfile"],
+                                       baseline = 0
+                                       )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            else:
+                print("Error in normalisation factor plotting. Skipped.")
     
         ### Legend: log2-transformed normalization factors
         
