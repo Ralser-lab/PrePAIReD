@@ -596,7 +596,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     mask_description_base : pd.DataFrame, optional
         Unique identifiers for each filter of previous steps. The default is None.
     use_mask_values : bool, optional
-        If True mask values extractred from the mask instead of the mask description and used for plotting. The default is False.
+        If True, mask values extracted from the mask instead of the mask description and used for plotting. The default is False.
     size : tuple of float, optional
         Size of the plot. The default is (5,5).
     fontsize : int, optional
@@ -850,7 +850,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         Confidence interval for the ellipses. The default is 0.95.
     set_axis_lim : bool, optional
         Set axis-limits automatically (sometimes needed if plot_confidence_ellipse == True). The default is False.
-    axis_offset : TYPE, optional
+    axis_offset : float, optional
         Axis offset for automatic axis-limits. The default is 0.1.
     """
     
@@ -1052,7 +1052,7 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
 
 def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15, xlabel = "log2(PQ)", cmap = "Spectral"):
     """
-    Plotting of the intensity distribution per sample-
+    Plotting of the intensity distribution per sample.
 
     Parameters
     ----------
@@ -1196,7 +1196,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     size : tuple of float, optional
         Size of the plot. The default is (5,3).
     ylabel : str, optional
-        y-acis label. The default is "log2(Prec. Abundance)".
+        y-axis label. The default is "log2(Prec. Abundance)".
     fontsize : int, optional
         Font size of the labels. The default is 15.
     use_metadata_coloring : bool, optional
@@ -1486,7 +1486,7 @@ def plot_decision_boundary_estimation_curve(data_origin, metadata, method="respo
     
 def plot_correlation_distribution(data_origin, metadata, data_processed = None, sample_type = None, sample_type_column = None, column_metadata = "Order", data_type = "continuous", seed = 42, nbins = 50, size = (10,5), fontsize = 15, fontsize_legend = 15, outfile = "Correlation_distribution.png", use_same_random = True, legend_loc = "upper right", step = ""):
     """
-    Plotting of correlation distribution of covariate versus intensities compared to a random distribution (randomized covariate)
+    Plotting of correlation distribution of covariate versus intensities compared to a random distribution (randomized covariate).
 
     Parameters
     ----------
@@ -1632,7 +1632,7 @@ def plot_correlation_distribution(data_origin, metadata, data_processed = None, 
 
 def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = "Order", sample_type = None, sample_type_column = None, size = (5,5), fontsize = 15, fontsize_legend = 15, outfile = "Imputation.png", detailed = True, imputation_value = 99):
     """
-    Plotting of imputation versus covariate
+    Plotting of imputation versus covariate.
 
     Parameters
     ----------
@@ -2067,7 +2067,7 @@ if __name__ == "__main__":
     if not docker_setup:    
         captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
     else:
-        captions = pd.read_csv(os.path.join("Figures_Captions.tsv"), sep = "\t", index_col = 0)
+        captions = pd.read_csv("Figures_Captions.tsv", sep = "\t", index_col = 0)
     
 #%%
     for step in steps:

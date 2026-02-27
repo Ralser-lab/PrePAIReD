@@ -1,5 +1,5 @@
 Figure ID	Short Name	Description	Optional text
-F01	Quantity_distribution	Number of unique IDs (top) and log2(quantity) distribution (bottom) per sample. Median, first and third quartile are shown. Whiskers extend to maximal 1.5-times inter-quartile distance. Outliers are highlighted. Selected set:	1
+F01	Quantity_distribution	Number of unique IDs (top) and log2(quantity) distribution (bottom) per sample. Median, first and third quartiles are shown. Whiskers extend to a maximal 1.5-times inter-quartile distance. Outliers are highlighted. Selected set:	1
 F02	Filter_mask	Number of Unique IDs dropped by selected filters up to this step.	0
 F03	CV	Distribution of the coefficient of variation calculated on a log-normal scale for base 2. Selected sets according to:	1
 F04	PCA	Principal component analysis highlighting the 4 components with highest variance. Colored according to:	1
