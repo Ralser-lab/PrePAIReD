@@ -35,6 +35,7 @@ def init_module():
     parser.add_argument("-c","--counter", help="Counter of the first step",required=False, default="1")
     parser.add_argument("-t","--parameter_overview_table", help="Source containing all parameter information",required=False, default="Parameter_Overview.tsv")
     parser.add_argument("-s","--start", help="For a rerun denotes the starting point e.g. 03_NORMALISATION", required=False, default="new")
+    parser.add_argument("--docker", action="store_true")
     args = parser.parse_args()
     
     # Get input
@@ -65,7 +66,7 @@ def init_module():
     
     setup_order = get_setup_order(setup_str, counter)
     
-    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start
+    return setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start, args.docker
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
@@ -472,7 +473,15 @@ def write_config(config_file_path, setup_order, language, start):
             if c<len(setup_order) and step != "00_GENERAL":
                 file.write(", ")
 
-def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath, counter, start):
+def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flags, outpath, counter, start, docker_setup):
+    
+    if docker_setup:
+        outpath = ""
+        setup_order_ = setup_order.copy()
+        setup_order = [""]*len(setup_order)
+    else:
+        setup_order_ = setup_order
+        
     
     if start != "new":
         if start.split("_",maxsplit=1)[1] in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
@@ -510,7 +519,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                 #block_new.append("mask_description_origin = None")
                 #block_new.append("mask_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask.tsv"))
                 #block_new.append("mask_description_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind)+"_mask_desription.tsv"))
-            block_new.append(("param_fp = "+os.path.join(outpath,"Parameter_Files",setup_order[ind]+"_Parameters.json")))
+            block_new.append(("param_fp = "+os.path.join(outpath,"Parameter_Files",setup_order_[ind]+"_Parameters.json")))
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
@@ -715,9 +724,10 @@ if __name__ == "__main__":
         
         setup_order = get_setup_order(setup_str, counter)
         start = "new"
+        docker_setup = False
     
     else:
-        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start = init_module()
+        setup_order, outfile, config_file_path, config_evaluation_file_path, dict_path, parameter_overview_table_file_path, outpath, counter, start, docker_setup = init_module()
     
     # Get dictionaries
     if not load_dictionaries:
@@ -754,5 +764,5 @@ if __name__ == "__main__":
     print("The configuration file is saved in "+config_file_path+".")
     
     # Create evaluation config file
-    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter, start)
+    write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter, start, docker_setup)
     print("The configuration file for evaluation is saved in "+config_file_path+".")
