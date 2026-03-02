@@ -41,10 +41,10 @@ source(file.path(script_dir, "helper_functions_R.R"))
 #'
 #' @param datapath Path to a directory containing the quantitative data files.
 #' @param parampath Path to a JSON parameter file.
-#' @param outpath Output directory where results will be written.
+#' @param  Output directory where results will be written.
 #' @param log_file Path to a file where logs will be written.
 #' @param counter Step of the preprocessing pipeline currently run.
-impute <- function(datapath, parampath, outpath, log_file, counter){
+impute <- function(datapath, parampath, , log_file, counter){
     
     ## build input paths robustly (no dependence on trailing "/")
     in_data_file <- file.path(datapath, sprintf("data_%s.tsv", as.numeric(counter) - 1))
@@ -66,10 +66,10 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     ## call imputation function
     main_impute <- switch(
         tolower(parameter_list[["imputation_method"]]),
-        "missforest" = function() impute_missForest(quant_df, parameter_list),
-        "bpca_R" = function() impute_pca(quant_df, parameter_list),
-        "ppca" = function() impute_pca(quant_df, parameter_list),
-        "ppm" = function() impute_ppm(quant_df, parameter_list),
+        "missforest" = function() impute_missForest(quant_df, parameter_list, outpath),
+        "bpca_R" = function() impute_pca(quant_df, parameter_list, outpath),
+        "ppca" = function() impute_pca(quant_df, parameter_list, outpath),
+        "ppm" = function() impute_ppm(quant_df, parameter_list, outpath),
         "mnar" = function() impute_MNAR(quant_df, parameter_list)
     )
     
@@ -117,7 +117,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
 #' }
 #'
 #' @return A data frame with imputed values.
-impute_missForest <- function(quant_df, parameter_list){
+impute_missForest <- function(quant_df, parameter_list, outpath){
     
     ## load package, throws error if package is not installed
     library(missForest)
@@ -149,7 +149,7 @@ impute_missForest <- function(quant_df, parameter_list){
     if(parameter_list[["export_output_missForest"]]){
         cat("\n Writing complete output of missForest to output directory.\n")
         saveRDS(imputed_list,
-                paste0(parameter_list[["outpath"]],
+                file.path(outpath,
                        "output_missForest_list.RData"))
     }
     
@@ -176,7 +176,7 @@ impute_missForest <- function(quant_df, parameter_list){
 #' }
 #'
 #' @return A data frame with imputed values.
-impute_pca <- function(quant_df, parameter_list){
+impute_pca <- function(quant_df, parameter_list, outpath){
     
     ## load package, throws error if package is not installed
     library(pcaMethods)
@@ -209,9 +209,8 @@ impute_pca <- function(quant_df, parameter_list){
     
     
     if(parameter_list[["export_output_pca"]]){
-        saveRDS(imputed_list,
-                paste0(parameter_list[["outpath"]], "output_",
-                       parameter_list[["imputation_method"]],"_list.RData"))
+        saveRDS(imputed_list, file.path(outpath,
+                paste0("output_", parameter_list[["imputation_method"]],"_list.RData"))
     }
     
     ## get the estimated complete observations
@@ -233,7 +232,7 @@ impute_pca <- function(quant_df, parameter_list){
 #' }
 #'
 #' @return A data frame with imputed values.
-impute_ppm <- function(quant_df, parameter_list){
+impute_ppm <- function(quant_df, parameter_list, outpath){
     
     ## load package, throws error if package is not installed
     library(mice)
@@ -256,7 +255,7 @@ impute_ppm <- function(quant_df, parameter_list){
     
     if(parameter_list[["export_output_ppm"]]){
         saveRDS(imputed_list,
-                paste0(parameter_list[["outpath"]], "output_ppm_list.RData"))
+                file.path(outpath, "output_ppm_list.RData"))
     }
     
     imputed_df <- as.data.frame(complete(imputed_list))
