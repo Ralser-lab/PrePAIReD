@@ -14,11 +14,8 @@ suppressPackageStartupMessages({
 script_path <- (function() {
     args <- commandArgs(trailingOnly = FALSE)
     
-    # Rscript --file=path/to/script.R
     file_arg <- grep("^--file=", args, value = TRUE)
     if (length(file_arg)) return(normalizePath(sub("^--file=", "", file_arg)))
-    
-    # Some wrappers set this (less common)
     if (!is.null(sys.frames()[[1]]$ofile)) return(normalizePath(sys.frames()[[1]]$ofile))
     
     stop("Can't determine script path. Run via: Rscript --vanilla path/to/script.R")
@@ -47,11 +44,11 @@ source(file.path(script_dir, "helper_functions_R.R"))
 impute <- function(datapath, parampath, outpath, log_file, counter){
     
     ## build input paths robustly (no dependence on trailing "/")
-    in_data_file <- file.path(datapath, sprintf("data_%s.tsv", as.numeric(counter) - 1))
-    in_mask_file <- file.path(datapath, sprintf("data_%s_mask.tsv", as.numeric(counter) - 1))
-    in_mask_desc_file <- file.path(datapath, sprintf("data_%s_mask_description.tsv", as.numeric(counter) - 1))
+    in_data_file <- datapath
+    in_mask_file <- sub("\\.tsv$", "_mask.tsv", datapath)
+    in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
     
-    ## read in data (fix: use row.names=1 so first column becomes rownames)
+    ## read in data
     quant_df <- as.data.frame(read.table(file = in_data_file,
                                          sep  = "\t",
                                          header = TRUE,
@@ -75,18 +72,34 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     
     imputed_df <- run_with_logging(main_impute, log_file)
     
-    ## load mask + mask_description and write them out unchanged
+    ## load mask + mask_description
     mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
     mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file), 
                                                 rownames = 1))
     
-    ## write outputs (robust paths)
-    out_data_file <- file.path(outpath, sprintf("data_%s.tsv", 
+    ## add 0.99 to the mask for every cell that was imputed
+    ### positions that were imputed
+    imp <- is.na(quant_df)
+    
+    ### overlapping rows/cols (keeps mask order)
+    r <- match(rownames(mask), rownames(imp))
+    c <- match(colnames(mask), colnames(imp))
+    
+    ### valid overlaps
+    r_ok <- !is.na(r)
+    c_ok <- !is.na(c)
+    
+    ### add 0.99 for imputed positions
+    mask[r_ok, c_ok] <- mask[r_ok, c_ok] +
+        0.99 * imp[r[r_ok], c[c_ok], drop = FALSE]
+    
+    ## write outputs
+    out_data_file <- file.path(outpath, sprintf("data_%02d.tsv", 
                                                 as.numeric(counter)))
-    out_mask_file <- file.path(outpath, sprintf("data_%s_mask.tsv", 
+    out_mask_file <- file.path(outpath, sprintf("data_%02d_mask.tsv", 
                                                 as.numeric(counter)))
     out_mask_desc_file <- file.path(outpath, 
-                                    sprintf("data_%s_mask_description.tsv", 
+                                    sprintf("data_%02d_mask_description.tsv", 
                                             as.numeric(counter)))
     
     ## write imputed data.frame into .tsv file
@@ -210,7 +223,7 @@ impute_pca <- function(quant_df, parameter_list, outpath){
     
     if(parameter_list[["export_output_pca"]]){
         saveRDS(imputed_list, file.path(outpath,
-                paste0("output_", parameter_list[["imputation_method"]],"_list.RData"))
+                paste0("output_", parameter_list[["imputation_method"]],"_list.RData")))
     }
     
     ## get the estimated complete observations
