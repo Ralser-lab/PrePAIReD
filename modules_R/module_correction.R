@@ -1,497 +1,318 @@
-#!/usr/bin/env Rscript
-#===========================================================
-# Batch Correction Module (R) — refactored to follow the new CLI pattern
-# author: Roza Mizrak @rozsurmiz 
-# Uses helper_functions_R.R: make_parser(), validate_opts(), run_with_logging(), read_JSON()
-# - Pure function: batch_correct(data, meta, params) -> corrected data.frame
-# - CLI main(): parses args in Python-like style and handles I/O + logging
-
-#         ┌──────────────────────────────┐
-#         │    R Batch Correction Script │
-#         └──────────────────────────────┘
-#                      ▲
-#                      │
-#     ┌─────────────────┴─────────────────┐
-#      │                                   │
-#      │                                   │
-#Python wrapper                        Command-line call
-#(called from                        (run Rscript directly)
-#cross-language pipeline)
-#    │                                   │
-#    ▼                                   ▼
-#┌─────────────────┐                 ┌─────────────┐
-#│ batch_correct() │◄────────────────┤  main()     │
-#│  (Public entry  │  function call  │  (CLI)      │
-#│   point)        │────────────────►│             │
-#└─────────────────┘   passes args   └─────────────┘
-#     │
-#     ▼
-#┌───────────────────────────┐
-#│ Core batch correction     │
-#│   logic:                  │
-#│   - read inputs           │
-#│   - align samples         │
-#│   - pick method (LIMMA,   │
-#│     ComBat, Harmony)      │
-#│   - write outputs         │
-#└───────────────────────────┘
-#===========================================================
+###############################################################################
+# Batch correction module in R
+# Provides the following options for batch correction:
+# limma_r, combat_r, harmony_r
+# Author: Roza Mizrak @rozsurmiz (pipeline style refactor by LCN)
+###############################################################################
 
 suppressPackageStartupMessages({
-  library(optparse)
-  library(data.table)
-  library(jsonlite)
-  if (requireNamespace("limma", quietly = TRUE)) library(limma)
-  # keep sva/harmony as optional-only, not attached
-  suppressWarnings(suppressMessages(requireNamespace("sva", quietly = TRUE)))
-  suppressWarnings(suppressMessages(requireNamespace("harmony", quietly = TRUE)))
+    library(optparse)
+    library(data.table)
 })
 
-# ---- Scale handling helpers ---------------------------------------------------
-.scale_normalize <- function(x, center=TRUE, scale=FALSE) {
-  if (center || scale) {
-    x <- t(scale(t(x), center = center, scale = scale))
-  }
-  x
-}
+# Pipeline-safe helper sourcing
+script_path <- (function() {
+    args <- commandArgs(trailingOnly = FALSE)
+    file_arg <- grep("^--file=", args, value = TRUE)
+    if (length(file_arg)) return(normalizePath(sub("^--file=", "", file_arg)))
+    if (!is.null(sys.frames()[[1]]$ofile)) return(normalizePath(sys.frames()[[1]]$ofile))
+    stop("Can't determine script path.")
+})()
 
-.safe_eps <- function() 1e-12
+script_dir <- dirname(script_path)
+source(file.path(script_dir, "helper_functions_R.R"))
 
-.is_scale <- function(params, name) {
-  sc <- params$input_scale
-  if (is.null(sc)) sc <- params$data_scale
-  if (is.null(sc)) sc <- "log2"
-  tolower(sc) == tolower(name)
-}
 
-.to_log2_if_needed <- function(mat, params) {
-  if (.is_scale(params, "linear")) {
-    return(log2(pmax(mat, .safe_eps())))
-  }
-  mat
-}
-
-.read_tsv_with_rownames <- function(path) {
-  df <- data.table::fread(path, sep = "\t", data.table = FALSE, check.names = FALSE)
-  rownames(df) <- df[[1]]
-  df[[1]] <- NULL
-  as.data.frame(df, check.names = FALSE)
-}
-
-.to_linear_if_needed <- function(mat, params, method) {
-  # For methods that expect linear space; currently none of LIMMA/ComBat/Harmony do.
-  # Keep as placeholder for future methods (e.g., multiplicative scaling in linear space).
-  expects_linear <- FALSE
-  if (is.character(method)) {
-    m <- toupper(method)
-    expects_linear <- m %in% c()  # empty for now
-  }
-  if (expects_linear && !.is_scale(params, "linear")) {
-    return(2^mat)
-  }
-  mat
-}
-
-.relog_if_needed <- function(mat, params, method) {
-  expects_linear <- FALSE
-  if (is.character(method)) {
-    m <- toupper(method)
-    expects_linear <- m %in% c()
-  }
-  if (expects_linear && !.is_scale(params, "linear")) {
-    return(log2(pmax(mat, .safe_eps())))
-  }
-  mat
-}
-# ------------------------------------------------------------------------------
-
-# ---- Load your helpers (must define read_JSON(), run_with_logging()) ----
-# ---- Portable helper loader (no hard-coded paths) --------------------------
-.load_helpers <- function() {
-  env_path <- Sys.getenv("PIPELINE_HELPERS_R", unset = "")
-  if (nzchar(env_path) && file.exists(env_path)) {
-    source(env_path, chdir = TRUE); return(invisible(TRUE))
-  }
-  args <- commandArgs(trailingOnly = FALSE)
-  file_arg <- "--file="
-  script_path <- tryCatch({
-    f <- args[grep(file_arg, args, fixed = TRUE)]
-    if (length(f)) normalizePath(sub(file_arg, "", f[1])) else NA_character_
-  }, error = function(e) NA_character_)
-  candidates <- unique(na.omit(c(
-    if (!is.na(script_path)) file.path(dirname(script_path), "helper_functions_R.R") else NA_character_,
-    if (!is.na(script_path)) file.path(dirname(script_path), "..", "helper_functions_R.R") else NA_character_,
-    file.path(getwd(), "helper_functions_R.R")
-  )))
-  for (cand in candidates) {
-    if (file.exists(cand)) { source(cand, chdir = TRUE); return(invisible(TRUE)) }
-  }
-  stop(
-    paste0(
-      "helper_functions_R.R not found.\n",
-      "Set env var PIPELINE_HELPERS_R=/absolute/path/to/helper_functions_R.R\n",
-      "or place helper_functions_R.R next to this script.\n",
-      "Searched:\n - ", paste(candidates, collapse = "\n - ")
-    ),
-    call. = FALSE
-  )
-}
-.load_helpers()
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-# ---- small utils ----
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
-.have_fun <- function(fname) exists(fname, mode = "function", inherits = TRUE)
-
-.ensure_dir <- function(p) {
-  if (!dir.exists(p)) dir.create(p, recursive = TRUE, showWarnings = FALSE)
-}
-
-.align_by_intersect <- function(data_df, meta_df) {
-  # Expectation: rows = features, cols = samples
-  common <- intersect(colnames(data_df), rownames(meta_df))
-  drop_data <- setdiff(colnames(data_df), common)
-  drop_meta <- setdiff(rownames(meta_df), common)
-
-  warns <- character(0)
-  if (length(drop_data)) {
-    warns <- c(warns, paste0(
-      "###WARNING### ", length(drop_data),
-      " data column(s) not in metadata (dropped): ",
-      paste(drop_data, collapse = ", ")
+#' @title Function for batch correction in R
+#' @description
+#' Reads a quantitative data table and metadata, then performs batch correction
+#' using one of the supported methods.
+#'
+#' The batch correction step is wrapped in a logging function to capture console
+#' output and messages to a log file.
+#'
+#' Additionally, it passes through the corresponding mask and mask_description
+#' files unchanged so the pipeline continues to work consistently.
+#'
+#' @param datapath Path to quantitative input data (.tsv).
+#' @param parampath Path to a JSON parameter file.
+#' @param outpath Output directory where results are written.
+#' @param metadata Path to metadata file.
+#' @param log_file Path to log file.
+#' @param counter Step of the preprocessing pipeline currently run.
+#'
+#' @return NULL (writes corrected data and mask files to disk).
+batch_correct <- function(datapath, parampath, outpath,
+                          metadata, log_file, counter){
+    
+    ## build input paths robustly (no dependence on trailing "/")
+    in_data_file <- datapath
+    in_mask_file <- sub("\\.tsv$", "_mask.tsv", datapath)
+    in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
+    
+    ## read data
+    quant_df <- as.data.frame(read.table(
+        file = in_data_file,
+        sep = "\t",
+        header = TRUE,
+        row.names = 1,
+        check.names = FALSE
     ))
-  }
-  if (length(drop_meta)) {
-    warns <- c(warns, paste0(
-      "###WARNING### ", length(drop_meta),
-      " metadata row(s) not in data (ignored): ",
-      paste(drop_meta, collapse = ", ")
+    
+    meta_df <- as.data.frame(read.table(
+        file = metadata,
+        sep = "\t",
+        header = TRUE,
+        row.names = 1,
+        check.names = FALSE
     ))
-  }
-  list(
-    data_df = data_df[, common, drop = FALSE],
-    meta_df = meta_df[common, , drop = FALSE],
-    log     = if (length(warns)) paste(warns, collapse = "\n") else ""
-  )
-}
-
-#===========================================================
-# Core batch correction functions
-#===========================================================
-
-# limma::removeBatchEffect
-batchcorrect_limma <- function(Data, batchER) {
-  set.seed(42)
-  DM <- Data$Matrix; md <- Data$MetaData
-
-  batchF1 <- if (!is.null(batchER$batch))  factor(md[[batchER$batch]])  else NULL
-  batchF2 <- if (!is.null(batchER$batch2)) factor(md[[batchER$batch2]]) else NULL
-  covs    <- if (!is.null(batchER$covariates)) as.matrix(md[, batchER$covariates, drop = FALSE]) else NULL
-
-  if (is.null(batchER$Class)) {
-    corrected <- removeBatchEffect(DM, batch = batchF1, batch2 = batchF2, covariates = covs)
-  } else {
-    Class   <- factor(md[[batchER$Class]])
-    designM <- model.matrix(~0 + Class)
-    corrected <- removeBatchEffect(DM, batch = batchF1, batch2 = batchF2, covariates = covs, design = designM)
-  }
-
-  Data$Matrix <- corrected
-  Data
-}
-
-# sva::ComBat (optional)
-batchcorrect_combat <- function(Data, batchER) {
-  if (!requireNamespace("sva", quietly = TRUE)) {
-    stop("Package 'sva' is required for method 'COMBAT_R' but is not installed.")
-  }
-  set.seed(42)
-  DM <- Data$Matrix; md <- Data$MetaData
-
-  par_prior <- batchER$par.prior %||% TRUE
-  fitsamples <- batchER$fitsamples
-
-  mat <- DM
-  batch_vec <- md[[batchER$batch]]
-
-  # Optional fit samples handling
-  if (!is.null(fitsamples)) {
-    fs <- intersect(fitsamples, rownames(md))
-    if (length(fs) > 0) {
-      # Ensure all batch levels present; if not, restrict to present ones
-      present_levels <- unique(md[fs, batchER$batch])
-      keep <- md[, batchER$batch] %in% present_levels
-      if (!all(keep)) {
-        message("###WARNING###: Restricting to batches present in fit samples for ComBat.")
-        md  <- md[keep, , drop = FALSE]
-        mat <- mat[, rownames(md), drop = FALSE]
-        batch_vec <- md[[batchER$batch]]
-      }
+    
+    parameter_list <- read_JSON(parampath)
+    
+    ## batch handling from schema
+    if (!is.null(parameter_list[["batch_cols_meta"]])) {
+        
+        batch_cols <- parameter_list[["batch_cols_meta"]]
+        
+        if (length(batch_cols) >= 1) {
+            parameter_list[["batch"]] <- batch_cols[[1]]
+        }
+        
+        if (length(batch_cols) >= 2) {
+            parameter_list[["batch2"]] <- batch_cols[[2]]
+        }
     }
-  }
-
-  mod <- NULL
-  if (!is.null(batchER$covariates_preserve) && length(batchER$covariates_preserve)) {
-    mod <- stats::model.matrix(~ ., data = md[, batchER$covariates_preserve, drop = FALSE])
-  }
-
-  corrected <- sva::ComBat(
-    dat = as.matrix(mat),
-    batch = as.factor(batch_vec),
-    mod = mod,
-    par.prior = par_prior,
-    prior.plots = FALSE
-  )
-
-  # If we subset for fit, corrected already matches mat's columns
-  Data$Matrix <- corrected
-  Data
-}
-
-# harmony::HarmonyMatrix over PCA (optional)
-batchcorrect_harmony <- function(Data, batchER) {
-  if (!requireNamespace("harmony", quietly = TRUE)) {
-    stop("Package 'harmony' is required for method 'HARMONY_R' but is not installed.")
-  }
-  set.seed(42)
-  DM <- Data$Matrix; md <- Data$MetaData
-  n_pcs <- batchER$n_pcs %||% 20
-
-  pca <- prcomp(t(DM), center = TRUE, scale. = FALSE)
-  pcs <- pca$x[, seq_len(min(n_pcs, ncol(pca$x))), drop = FALSE]
-
-  vars_use <- unique(na.omit(c(batchER$batch, batchER$covariates)))
-  h_args   <- batchER$harmony_args %||% list()
-
-  harmony_pcs <- do.call(
-    harmony::HarmonyMatrix,
-    c(list(data_mat = pcs, meta_data = md, vars_use = vars_use, do_pca = FALSE), h_args)
-  )
-
-  loadings <- pca$rotation[, seq_len(ncol(harmony_pcs)), drop = FALSE]
-  centered <- t(DM) - matrix(pca$center, nrow = ncol(DM), ncol = nrow(DM), byrow = TRUE)
-  corrected_centered <- harmony_pcs %*% t(loadings)
-  corrected <- t(corrected_centered + matrix(pca$center, nrow = ncol(DM), ncol = nrow(DM), byrow = TRUE))
-
-  Data$Matrix <- corrected
-  Data
-}
-
-# Dispatcher
-.dispatch_batch <- function(Data, batchER) {
-  # pick method from common keys, default LIMMA_R
-  pick <- function(...) {
-    keys <- list(...)
-    for (k in keys) if (!is.null(k) && length(k) == 1 && !is.na(k)) return(k)
+    
+    ## set seed
+    set.seed(parameter_list[["seed"]] + counter)
+    
+    ## align samples
+    common <- intersect(colnames(quant_df), rownames(meta_df))
+    quant_df <- quant_df[, common, drop = FALSE]
+    meta_df <- meta_df[common, , drop = FALSE]
+    
+    ## method naming fallback
+    method <- parameter_list[["correct_method"]]
+    
+    ## call batch correction
+    main_batch <- switch(
+        tolower(method),
+        "limma_r"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
+        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list),
+        "harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list)
+    )
+    
+    corrected_df <- run_with_logging(main_batch, log_file)
+    
+    ## load mask + mask_description to save unchanged
+    mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
+    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file),
+                                                rownames = 1))
+    
+    ## write outputs
+    out_data_file <- file.path(outpath,
+                               sprintf("data_%02d.tsv", as.numeric(counter)))
+    out_mask_file <- file.path(outpath,
+                               sprintf("data_%02d_mask.tsv", as.numeric(counter)))
+    out_mask_desc_file <- file.path(outpath,
+                                    sprintf("data_%02d_mask_description.tsv",
+                                            as.numeric(counter)))
+    
+    write.table(corrected_df,
+                out_data_file,
+                sep = "\t",
+                quote = FALSE,
+                col.names = NA)
+    
+    fwrite(mask,
+           out_mask_file,
+           row.names = TRUE,
+           sep = "\t")
+    
+    fwrite(mask_description,
+           out_mask_desc_file,
+           row.names = TRUE,
+           sep = "\t")
+    
     return(NULL)
-  }
-  m <- pick(batchER$correct_method, batchER$method, batchER$Method, "LIMMA_R")
-  # normalize (remove stray paths/characters and uppercase)
-  m <- toupper(gsub("[^A-Za-z0-9_]+", "", as.character(m)))
-  # fix common typos/aliases
-  if (m %in% c("LIMMA","LIMMAR","REMOVEBATCHEFFECT")) m <- "LIMMA_R"
-  if (m %in% c("COMBAT","COMBATR","SVA_COMBAT","SVACOMBAT")) m <- "COMBAT_R"
-  if (m %in% c("HARMONY","HARMONYR")) m <- "HARMONY_R"
-
-  if (m == "LIMMA_R")   return(batchcorrect_limma(Data, batchER))
-  if (m == "COMBAT_R")  return(batchcorrect_combat(Data, batchER))
-  if (m == "HARMONY_R") return(batchcorrect_harmony(Data, batchER))
-  stop("Unknown batch correction method: ", m)
-}
-
-#===========================================================
-# Pure entrypoint (no I/O): returns corrected data.frame
-#===========================================================
-batch_correct <- function(data_df, meta_df, params) {
-  # Align samples
-  ali <- .align_by_intersect(data_df, meta_df)
-  data_df <- ali$data_df
-  meta_df <- ali$meta_df
-  log_string <- if (nzchar(ali$log)) paste0(ali$log, "\n") else ""
-
-  method     <- toupper(params$correct_method %||% "LIMMA_R")
-  batch_cols <- params$batch_cols_meta %||% params$batch %||% "batch"
-  if (length(batch_cols) < 1) stop("Missing batch column; expected 'batch' or 'batch_cols_meta' in params.")
-  batch1 <- batch_cols[[1]]
-  batch2 <- if (length(batch_cols) >= 2) batch_cols[[2]] else NULL
-  
-  # fitsamples can be provided directly or as a .txt file path
-  fitsamples <- NULL
-  fs_param <- params$fitsamples_idx_list %||% NULL
-  if (is.character(fs_param) && length(fs_param) == 1 &&
-      grepl("\\.txt$", fs_param, ignore.case = TRUE) && file.exists(fs_param)) {
-    fs_lines <- readLines(fs_param, warn = FALSE)
-    fs_lines <- unique(trimws(fs_lines))
-    fitsamples <- fs_lines[nzchar(fs_lines)]
-    message("###DEBUG### fitsamples_idx_list loaded from file: ", fs_param,
-            " (", length(fitsamples), " entries)")
-  } else if (!is.null(fs_param)) {
-    fitsamples <- fs_param
-  }
-
-  batchER <- list(
-    correct_method = method,
-    batch       = batch1,
-    batch2      = batch2,
-    covariates  = params$covariates %||% params$combat_cols_adjust_meta %||% NULL,
-    Class       = params$Class %||% NULL,
-    par.prior   = params$par.prior %||% TRUE,
-    n_pcs       = params$n_pcs %||% 20,
-    harmony_args = params$harmony_args %||% list(),
-    covariates_preserve = params$combat_cols_preserve_meta %||% NULL,
-    fitsamples  = fitsamples
-  )
-  # ---- Scale guard: ensure correct space per method ---------------------------
-  method_upper <- toupper(method)
-  # Methods that operate naturally on log-scale
-  requires_log <- method_upper %in% c("LIMMA_R","COMBAT_R","HARMONY_R")
-  if (requires_log) {
-    data_df <- .to_log2_if_needed(as.matrix(data_df), params)
-    data_df <- as.data.frame(data_df, check.names = FALSE)
-  }
-  # ----------------------------------------------------------------------------
-  Data <- list(Matrix = as.matrix(data_df), MetaData = meta_df)
-  corrected <- .dispatch_batch(Data, batchER)
-  M_out <- corrected$Matrix
-  # Return as data.frame preserving rownames
-  out_df <- as.data.frame(M_out, check.names = FALSE)
-  return(out_df)
 }
 
 
-#===========================================================
-# CLI
-#===========================================================
-main <- function() {
-  # Parse args using the shared helper
-  parser <- make_parser()
-  args   <- parse_args(parser, args = commandArgs(trailingOnly = TRUE))
-  validate_opts(args)
-
-  # Read parameters
-  params <- read_JSON(args$params)
-
-  # Build input paths
-  input_file <- file.path(args$data, sprintf("data_%02d.tsv", as.integer(args$counter) - 1))
-  if (!file.exists(input_file)) {
-    stop(sprintf("Input file not found: %s", input_file), call. = FALSE)
-  }
-  if (is.null(args$metadata) || !file.exists(args$metadata)) {
-    stop("Batch correction requires a metadata file (--metadata).", call. = FALSE)
-  }
-
-  # ---- Load matrices with proper rownames ----
-  DM_df   <- .read_tsv_with_rownames(input_file)
-  meta_df <- .read_tsv_with_rownames(args$metadata)
-  
-  # ---- Helpers for name reconciliation ----
-  .normalize_runs <- function(x) {
-    x <- gsub("\\\\", "/", x)              # Windows -> POSIX
-    x <- sub(".*/", "", x)                 # basename
-    # strip common vendor suffixes/extensions
-    x <- sub("\\.rawIdx\\.wiff\\.dia$", "", x, ignore.case = TRUE)
-    x <- sub("\\.wiff\\.dia$", "", x, ignore.case = TRUE)
-    x <- sub("\\.raw$", "", x, ignore.case = TRUE)
-    x <- sub("\\.mzML$", "", x, ignore.case = TRUE)
-    x <- sub("\\.d$", "", x, ignore.case = TRUE)
-    x
-  }
-  choose_meta_id <- function(meta, run_names_norm) {
-    best <- NULL; best_score <- -1
-    for (cn in names(meta)) {
-      cand <- .normalize_runs(meta[[cn]])
-      sc <- length(intersect(run_names_norm, cand))
-      if (sc > best_score) { best <- cn; best_score <- sc }
-    }
-    list(best = best, score = best_score)
-  }
-  
-  # ---- Normalize current data colnames up front ----
-  colnames(DM_df) <- .normalize_runs(colnames(DM_df))
-  
-  # ---- Apply --ids mapping (normalize BOTH keys and values) ----
-  if (!is.null(args$ids) && file.exists(args$ids)) {
-    idmap <- data.table::fread(args$ids, sep = "\t", data.table = FALSE, check.names = FALSE)
-    lnms <- tolower(names(idmap))
-    # try by header names
-    from_idx <- which(lnms %in% c("raw","raw_file","file","path","run","original","old","source"))
-    to_idx   <- which(lnms %in% c("sample","sample.name","name","new","target","id"))
-    # fallback by content (paths/extensions in 'from'; overlap to runs in 'to')
-    if (length(from_idx) == 0)
-      from_idx <- which(sapply(idmap, function(col) any(grepl("[/\\\\]|\\.raw|\\.wiff|\\.dia|\\.mzML", col, ignore.case=TRUE))))
-    if (length(to_idx) == 0)
-      to_idx <- which(sapply(idmap, function(col) length(intersect(.normalize_runs(col), colnames(DM_df))) > 0))
-    if (length(from_idx) >= 1 && length(to_idx) >= 1) {
-      from <- names(idmap)[from_idx[1]]; to <- names(idmap)[to_idx[1]]
-      m <- setNames(.normalize_runs(idmap[[to]]), .normalize_runs(idmap[[from]]))
-      # rename any columns that match a mapping key
-      current <- colnames(DM_df)
-      hit <- intersect(current, names(m))
-      if (length(hit)) {
-        idx <- match(hit, current)
-        new <- current
-        new[idx] <- unname(m[hit])
-        colnames(DM_df) <- new
-        message("###DEBUG### applied ids mapping: ", length(hit), " columns renamed via --ids (", from, " -> ", to, ")")
-      } else {
-        message("###WARNING### --ids provided but no keys matched current column names after normalization.")
-      }
+#' @title Batch correction using limma
+#' @description
+#' Performs batch correction using \code{limma::removeBatchEffect}.
+#'
+#' Supports one or two batch factors, optional covariates,
+#' and optional design matrix via the \code{Class} parameter.
+#'
+#' @param quant_df Quantitative data.frame (features × samples).
+#' @param meta_df Metadata data.frame (samples × annotations).
+#' @param parameter_list Parameter list from JSON file.
+#'
+#' @return Corrected data.frame.
+batchcorrect_limma <- function(quant_df, meta_df, parameter_list){
+    
+    library(limma)
+    
+    cat("\n\nStarting limma batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    batchF1 <- if (!is.null(parameter_list[["batch"]]))
+        factor(meta_df[[parameter_list[["batch"]]]]) else NULL
+    
+    batchF2 <- if (!is.null(parameter_list[["batch2"]]))
+        factor(meta_df[[parameter_list[["batch2"]]]]) else NULL
+    
+    covs <- if (!is.null(parameter_list[["covariates"]]))
+        as.matrix(meta_df[, parameter_list[["covariates"]], drop = FALSE]) else NULL
+    
+    if (is.null(parameter_list[["Class"]])) {
+        
+        corrected <- limma::removeBatchEffect(
+            as.matrix(quant_df),
+            batch = batchF1,
+            batch2 = batchF2,
+            covariates = covs
+        )
+        
     } else {
-      message("###WARNING### Could not auto-detect from/to columns in --ids file; skipping ids mapping.")
+        
+        Class <- factor(meta_df[[parameter_list[["Class"]]]])
+        designM <- model.matrix(~0 + Class)
+        
+        corrected <- limma::removeBatchEffect(
+            as.matrix(quant_df),
+            batch = batchF1,
+            batch2 = batchF2,
+            covariates = covs,
+            design = designM
+        )
     }
-  }
-  
-  
-  # 5) **Normalize metadata rownames**  <-- ADD THIS LINE
-  rownames(meta_df) <- .normalize_runs(rownames(meta_df))
-  
-  # ---- If metadata rownames aren’t sample IDs, pick the best column and use it ----
-  run_names <- colnames(DM_df)
-  initial_overlap <- length(intersect(run_names, rownames(meta_df)))
-  if (initial_overlap == 0) {
-    pick <- choose_meta_id(meta_df, run_names)
-    if (!is.null(pick$best) && pick$score > 0) {
-      message("###DEBUG### switching metadata ID column to: ", pick$best,
-              " (overlap ", pick$score, ")")
-      rownames(meta_df) <- .normalize_runs(meta_df[[pick$best]])
-      if (anyDuplicated(rownames(meta_df))) {
-        message("###WARNING### duplicates in chosen metadata ID; making them unique")
-        rownames(meta_df) <- make.unique(rownames(meta_df))
-      }
+    
+    cat("\nFinished limma batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
+    
+    as.data.frame(corrected)
+}
+
+
+#' @title Batch correction using ComBat
+#' @description
+#' Performs batch correction using \code{sva::ComBat}.
+#'
+#' Optional covariates can be preserved via a design matrix.
+#'
+#' @param quant_df Quantitative data.frame (features × samples).
+#' @param meta_df Metadata data.frame (samples × annotations).
+#' @param parameter_list Parameter list from JSON file.
+#'
+#' @return Corrected data.frame.
+batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
+    
+    library(sva)
+    
+    cat("\n\nStarting ComBat batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    mod <- NULL
+    if (!is.null(parameter_list[["covariates_preserve"]])) {
+        mod <- stats::model.matrix(
+            ~ .,
+            data = meta_df[, parameter_list[["covariates_preserve"]], drop = FALSE]
+        )
     }
-  }
-  
-  # ---- Final diagnostics; hard-stop if still zero to avoid empty output ----
-  overlap <- length(intersect(colnames(DM_df), rownames(meta_df)))
-  message("###DEBUG### data_df dim: ", paste(dim(DM_df), collapse="x"))
-  message("###DEBUG### meta_df dim: ", paste(dim(meta_df), collapse="x"))
-  message("###DEBUG### overlap (final pre-align): ", overlap)
-  
-  if (overlap == 0) {
-    message("###DEBUG### sample names (data_df, first 5): ",
-            paste(utils::head(colnames(DM_df), 5), collapse=", "))
-    message("###DEBUG### sample names (meta_df, first 5): ",
-            paste(utils::head(rownames(meta_df), 5), collapse=", "))
-    stop("No overlapping sample IDs between data columns and metadata rownames after normalization/mapping. ",
-         "Check --ids mapping and naming conventions.", call. = FALSE)
-  }
-  # Optional seed handling for reproducibility
-  if (!is.null(params[['seed']])) {
-    set.seed(params[['seed']] + as.integer(args$counter))
-  }
+    
+    par_prior <- parameter_list[["par.prior"]]
+    if (is.null(par_prior)) par_prior <- TRUE
+    
+    corrected <- sva::ComBat(
+        dat = as.matrix(quant_df),
+        batch = factor(meta_df[[parameter_list[["batch"]]]]),
+        mod = mod,
+        par.prior = par_prior,
+        prior.plots = FALSE
+    )
+    
+    cat("\nFinished ComBat batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
+    
+    as.data.frame(corrected)
+}
 
-  # Run with logging
-  corrected_df <- run_with_logging(
-    function() batch_correct(DM_df, meta_df, params),
-    args$log
-  )
 
-  # Write output
-  corrected_df <- as.data.frame(corrected_df)
-  output_file <- file.path(args$out, sprintf("data_%02d.tsv", as.integer(args$counter)))
-  fwrite(corrected_df, output_file, row.names = TRUE, sep = "\t")
+#' @title Batch correction using Harmony
+#' @description
+#' Performs batch correction using PCA followed by
+#' \code{harmony::HarmonyMatrix}, and reconstructs the corrected
+#' data in expression space while preserving PCA centering.
+#'
+#' @param quant_df Quantitative data.frame (features × samples).
+#' @param meta_df Metadata data.frame (samples × annotations).
+#' @param parameter_list Parameter list from JSON file.
+#'
+#' @return Corrected data.frame.
+batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
+    
+    library(harmony)
+    
+    cat("\n\nStarting Harmony batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    n_pcs <- parameter_list[["n_pcs"]]
+    if (is.null(n_pcs)) n_pcs <- 20
+    
+    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
+    pcs <- pca$x[, seq_len(min(n_pcs, ncol(pca$x))), drop = FALSE]
+    
+    vars_use <- unique(na.omit(c(
+        parameter_list[["batch"]],
+        parameter_list[["covariates"]]
+    )))
+    
+    harmony_pcs <- harmony::HarmonyMatrix(
+        data_mat = pcs,
+        meta_data = meta_df,
+        vars_use = vars_use,
+        do_pca = FALSE
+    )
+    
+    loadings <- pca$rotation[, seq_len(ncol(harmony_pcs)), drop = FALSE]
+    
+    centered <- t(quant_df) -
+        matrix(pca$center,
+               nrow = ncol(quant_df),
+               ncol = nrow(quant_df),
+               byrow = TRUE)
+    
+    corrected_centered <- harmony_pcs %*% t(loadings)
+    
+    corrected <- t(
+        corrected_centered +
+            matrix(pca$center,
+                   nrow = ncol(quant_df),
+                   ncol = nrow(quant_df),
+                   byrow = TRUE)
+    )
+    
+    cat("\nFinished Harmony batch correction. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
+    
+    as.data.frame(corrected)
+}
+
+
+# CLI entrypoint
+main <- function() {
+    parser <- make_parser()
+    args <- parse_args(parser, args = commandArgs(trailingOnly = TRUE))
+    validate_opts(args)
+    
+    batch_correct(datapath = args$data,
+                  parampath = args$params,
+                  outpath = args$out,
+                  metadata = args$md,
+                  log_file = args$log,
+                  counter = as.numeric(args$counter))
 }
 
 if (sys.nframe() == 0) main()
