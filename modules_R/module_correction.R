@@ -1,7 +1,7 @@
 ###############################################################################
 # Batch correction module in R
 # Provides the following options for batch correction:
-# limma_r, combat_r, harmony_r
+# limma, combat_r
 # Author: Roza Mizrak @rozsurmiz (pipeline style refactor by LCN)
 ###############################################################################
 
@@ -97,9 +97,9 @@ batch_correct <- function(datapath, parampath, outpath,
     ## call batch correction
     main_batch <- switch(
         tolower(method),
-        "limma_r"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
-        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list),
-        "harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list)
+        "limma"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
+        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list)
+        #"harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list)
     )
     
     corrected_df <- run_with_logging(main_batch, log_file)
@@ -251,54 +251,54 @@ batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
 #' @param parameter_list Parameter list from JSON file.
 #'
 #' @return Corrected data.frame.
-batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
-    
-    library(harmony)
-    
-    cat("\n\nStarting Harmony batch correction. ",
-        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
-    
-    n_pcs <- parameter_list[["n_pcs"]]
-    if (is.null(n_pcs)) n_pcs <- 20
-    
-    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
-    pcs <- pca$x[, seq_len(min(n_pcs, ncol(pca$x))), drop = FALSE]
-    
-    vars_use <- unique(na.omit(c(
-        parameter_list[["batch"]],
-        parameter_list[["covariates"]]
-    )))
-    
-    harmony_pcs <- harmony::HarmonyMatrix(
-        data_mat = pcs,
-        meta_data = meta_df,
-        vars_use = vars_use,
-        do_pca = FALSE
-    )
-    
-    loadings <- pca$rotation[, seq_len(ncol(harmony_pcs)), drop = FALSE]
-    
-    centered <- t(quant_df) -
-        matrix(pca$center,
-               nrow = ncol(quant_df),
-               ncol = nrow(quant_df),
-               byrow = TRUE)
-    
-    corrected_centered <- harmony_pcs %*% t(loadings)
-    
-    corrected <- t(
-        corrected_centered +
-            matrix(pca$center,
-                   nrow = ncol(quant_df),
-                   ncol = nrow(quant_df),
-                   byrow = TRUE)
-    )
-    
-    cat("\nFinished Harmony batch correction. ",
-        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
-    
-    as.data.frame(corrected)
-}
+#batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
+#    
+#    library(harmony)
+#    
+#    cat("\n\nStarting Harmony batch correction. ",
+#        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+#    
+#    n_pcs <- parameter_list[["n_pcs"]]
+#    if (is.null(n_pcs)) n_pcs <- 20
+#    
+#    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
+#    pcs <- pca$x[, seq_len(min(n_pcs, ncol(pca$x))), drop = FALSE]
+#    
+#    vars_use <- unique(na.omit(c(
+#        parameter_list[["batch"]],
+#        parameter_list[["covariates"]]
+#    )))
+#    
+#    harmony_pcs <- harmony::HarmonyMatrix(
+#        data_mat = pcs,
+#        meta_data = meta_df,
+#        vars_use = vars_use,
+#        do_pca = FALSE
+#    )
+#    
+#    loadings <- pca$rotation[, seq_len(ncol(harmony_pcs)), drop = FALSE]
+#    
+#    centered <- t(quant_df) -
+#        matrix(pca$center,
+#               nrow = ncol(quant_df),
+#               ncol = nrow(quant_df),
+#               byrow = TRUE)
+#    
+#    corrected_centered <- harmony_pcs %*% t(loadings)
+#  
+#    corrected <- t(
+#        corrected_centered +
+#            matrix(pca$center,
+#                   nrow = ncol(quant_df),
+#                   ncol = nrow(quant_df),
+#                   byrow = TRUE)
+#    )
+#    
+#    cat("\nFinished Harmony batch correction. ",
+#        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
+#    
+#    as.data.frame(corrected)
+#}
 
 
 # CLI entrypoint
