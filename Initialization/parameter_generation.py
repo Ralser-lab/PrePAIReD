@@ -339,9 +339,9 @@ def write_parameter_file_imputation(outfile, dict_flags):
                                 block_new.append("## Options: "+str(dict_flags[setup][flag]["Options"]).replace("\'",""))
                                 block_new.append(flag+" = "+str(dict_flags[setup][flag]["Default"])+"\n")
                         # R
-                        elif flag in ["imputation_method"]:
-                            block_new.append("## Options: "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]).replace("\'",""))
-                            block_new.append("imputation_method = "+imputation_method+"\n")
+                        #elif flag in ["imputation_method"]:
+                        #    block_new.append("## Options: "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]).replace("\'",""))
+                        #    block_new.append("imputation_method = "+imputation_method+"\n")
                     else:
                         raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]+dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]).replace("\'",""))
                         sys.exit(1)             
