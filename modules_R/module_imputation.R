@@ -41,10 +41,10 @@ source(file.path(script_dir, "helper_functions_R.R"))
 #'
 #' @param datapath Path to a directory containing the quantitative data files.
 #' @param parampath Path to a JSON parameter file.
-#' @param  Output directory where results will be written.
+#' @param outpath Output directory where results will be written.
 #' @param log_file Path to a file where logs will be written.
 #' @param counter Step of the preprocessing pipeline currently run.
-impute <- function(datapath, parampath, , log_file, counter){
+impute <- function(datapath, parampath, outpath, log_file, counter){
     
     ## build input paths robustly (no dependence on trailing "/")
     in_data_file <- file.path(datapath, sprintf("data_%s.tsv", as.numeric(counter) - 1))
