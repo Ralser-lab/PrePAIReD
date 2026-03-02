@@ -10,9 +10,7 @@ suppressPackageStartupMessages({
     library(data.table)
 })
 
-# ---------------------------------------------------------------------------
-# Pipeline-safe helper sourcing (no hard-coded paths)
-# ---------------------------------------------------------------------------
+# Pipeline-safe helper sourcing 
 script_path <- (function() {
     args <- commandArgs(trailingOnly = FALSE)
     
@@ -327,9 +325,7 @@ impute_MNAR <- function(quant_df, parameter_list){
 }
 
 
-# ---------------------------------------------------------------------------
 # CLI entrypoint (pipeline integration)
-# ---------------------------------------------------------------------------
 main <- function() {
     parser <- make_parser()
     args <- parse_args(parser, args = commandArgs(trailingOnly = TRUE))
