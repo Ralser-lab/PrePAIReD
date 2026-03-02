@@ -264,10 +264,10 @@ main <- function() {
   
   # Write output - the mask 
   normalized_df <- as.data.frame(normalized_df)
-  output_file <- file.path(args$out, sprintf("data_%s.tsv", as.character(args$counter)))
-  output_file_mask <- file.path(args$out, sprintf("data_%s_mask.tsv", as.character(args$counter)))
-
-  output_file_mask_description <- file.path(args$out, sprintf("data_%s_mask_description.tsv", as.character(args$counter)))
+  output_file <- file.path(args$out, sprintf("data_%02d.tsv", as.numeric(args$counter)))
+  output_file_mask <- file.path(args$out, sprintf("data_%02d_mask.tsv", as.numeric(args$counter)))
+  output_file_mask_description <- file.path(args$out, sprintf("data_%02d_mask_description.tsv", as.numeric(args$counter)))
+  
   fwrite(normalized_df, output_file, row.names = TRUE, sep = "\t")
   fwrite(mask, output_file_mask, row.names = TRUE, sep = "\t")
   fwrite(mask_description, output_file_mask_description, row.names = TRUE, sep = "\t")
