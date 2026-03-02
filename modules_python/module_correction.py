@@ -201,11 +201,14 @@ def batchcorrect_combat(
         C_all = c_df.loc[samples_all] if c_df != None else None
 
         # Check if all samples have the same number of observations
-        if X_all != None:
+        if X_all != None and C_all != None:
             assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-        else:
+        elif X_all != None:
             assert Y_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-
+        elif C_all != None:
+            assert Y_all.shape[0] == X_all.shape[0] == b_all.shape[0]
+        else:
+            assert Y_all.shape[0] == b_all.shape[0]
 
         data_processed_arr = c_fit.transform(
             Y=Y_all,
