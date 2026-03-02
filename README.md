@@ -1,3 +1,166 @@
+# Preprocessing Pipeline --- Nextflow
+
+This repository contains a **Nextflow-based preprocessing workflow** for
+proteomics data.
+
+The pipeline is designed to run reproducibly using **Docker containers**
+and requires only a small number of dependencies.
+
+# Table of Contents
+
+-   Requirements
+-   Installation
+    -   Docker
+    -   Java
+    -   Nextflow
+    -   Git
+-   Quick Start
+-   Working Directory Setup
+-   Configuration Files
+-   Running the Pipeline
+-   Folder Structure Example
+-   Troubleshooting
+-   Minimal Requirements Summary
+-   Support
+
+
+------------------------------------------------------------------------
+
+# Requirements
+
+You need:
+
+-   Java (JDK 11 or newer recommended)
+-   Docker
+-   Nextflow
+-   Git (optional but recommended)
+
+------------------------------------------------------------------------
+
+# Installation
+
+## Docker Installation
+
+Docker is required to run the workflow in a reproducible environment.
+
+Official installation page:
+
+https://docs.docker.com/get-docker/
+
+You can install Docker via:
+
+-   Docker Desktop (recommended for macOS and Windows)
+-   Terminal installation (Linux)
+
+------------------------------------------------------------------------
+
+## macOS --- Docker Desktop
+
+Installation guide:
+
+https://docs.docker.com/desktop/setup/install/mac-install/
+
+Steps:
+
+1.  Download Docker Desktop for Mac.
+2.  Install the `.dmg` file.
+3.  Start Docker Desktop.
+
+Verify:
+
+``` bash
+docker --version
+```
+
+------------------------------------------------------------------------
+## Windows --- Docker Desktop (Recommended with WSL2)
+
+Installation guide:
+
+https://docs.docker.com/desktop/setup/install/windows-install/
+
+### Step 1 --- Install WSL2
+
+Open PowerShell as Administrator:
+
+``` powershell
+wsl --install
+```
+
+Reboot if requested.
+
+### Step 2 --- Install Docker Desktop
+
+1.  Install Docker Desktop.
+2.  Open Settings → enable:
+
+-   Use WSL 2 based engine
+-   Integration with your Linux distribution
+
+Verify inside WSL terminal:
+
+``` bash
+docker --version
+```
+
+------------------------------------------------------------------------
+
+## Linux --- Docker via Terminal
+
+Example for Ubuntu / Debian:
+
+``` bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+sudo systemctl enable --now docker
+```
+
+Add user permissions:
+
+``` bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Verify:
+
+``` bash
+docker --version
+```
+
+------------------------------------------------------------------------
+
+# Java Installation
+
+Nextflow requires Java.
+
+## macOS (Homebrew)
+
+``` bash
+brew install openjdk@17
+```
+
+## Linux
+
+``` bash
+sudo apt-get install -y openjdk-17-jre
+```
+
+## Windows (WSL)
+
+Install inside WSL terminal:
+
+``` bash
+sudo apt-get install -y openjdk-17-jre
+```
+
+Verify:
+
+``` bash
+java -version
+```
+
+------------------------------------------------------------------------
 
 
 IMPUTATION documentation
