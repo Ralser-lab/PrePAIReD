@@ -198,7 +198,7 @@ def batchcorrect_combat(
             b_all = metadata_df[batch_key].to_numpy()
         
         X_all = x_df.loc[samples_all] if x_df != None else None
-        C_all = c_df.loc[samples_all]
+        C_all = c_df.loc[samples_all] if c_df != None else None
 
         # Check if all samples have the same number of observations
         if X_all != None:
