@@ -60,6 +60,8 @@ Installation guide:
 
 https://docs.docker.com/desktop/setup/install/mac-install/
 
+### Option 1 — Install via GUI
+
 Steps:
 
 1.  Download Docker Desktop for Mac.
@@ -71,7 +73,13 @@ Verify:
 ``` bash
 docker --version
 ```
+### Option 2 — Install via Terminal (Homebrew)
 
+```bash
+brew install --cask docker
+open /Applications/Docker.app
+docker --version
+```
 ------------------------------------------------------------------------
 ## Windows --- Docker Desktop (Recommended with WSL2)
 
