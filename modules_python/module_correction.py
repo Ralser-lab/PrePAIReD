@@ -146,6 +146,8 @@ def batchcorrect_combat(
         # covariates to adjust for during batch correction
         if cov_adjust_list != None:
             c_df = metadata_df[cov_adjust_list]
+        else:
+            c_df = None
 
         # Init combat Model
         combat_model=pycombat.Combat()
@@ -157,12 +159,14 @@ def batchcorrect_combat(
 
             Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
-            if x_df != None:
+            if x_df is not None:
                 X_fit = x_df.loc[fitsamples_idx_list]
             else:
                 X_fit = None
-            C_fit = c_df.loc[fitsamples_idx_list]
-
+            if c_df is not None:
+                C_fit = c_df.loc[fitsamples_idx_list]
+            else:
+                C_fit = None
 
             c_fit = combat_model.fit(
                 Y=Y_fit,
