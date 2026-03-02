@@ -97,7 +97,7 @@ def batchcorrect_combat(
     ):
         
         """
-        Apply COMBAT batch correction by using the pyComBat package.
+        Apply ComBat batch correction by using the pyComBat package.
         See https://github.com/CoAxLab/pycombat for more information.
         
         This function supports optional selection of samples for model 
@@ -135,8 +135,19 @@ def batchcorrect_combat(
         """
         log_string = ""
         log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"+"\tStart COMBAT batch correction.\n")
-
+                "%Y-%m-%d%t%H:%M:%S"+"\tStart ComBat batch correction.\n")
+        
+        missing_values = data_df.isna()
+        if sum(missing_values)>0:
+            log_string += time.strftime(
+                    "###WARNING###: Missing values detected for ComBat. Inserting feature mean per batch temporary. The imputed values will be removed after this step.\n")
+        
+        for item in metadata_df[batch_key].unique():
+            indices_batch = metadata_df[metadata_df[batch_key]==item].index
+            imp_tmp = data_df.loc[indices_batch]
+            imp_tmp = imp_tmp.fillna(imp_tmp.mean())
+            data_df.loc[imp_tmp.index] = imp_tmp
+                    
         # effects to preserve during batch correction
         if cov_preserve_list != None:
             x_df = metadata_df[cov_preserve_list]
@@ -155,7 +166,7 @@ def batchcorrect_combat(
         if fitsamples_idx_list != None:
             
             log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S"+"\tFit COMBAT Class on defined samples.\n")
+                    "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on defined samples.\n")
 
             Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
             b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
@@ -176,7 +187,7 @@ def batchcorrect_combat(
             )
         else:
             log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S"+"\tFit COMBAT Class on all samples.\n")
+                    "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on all samples.\n")
 
             c_fit = combat_model.fit(
                 Y=data_df.to_numpy(),
@@ -190,7 +201,6 @@ def batchcorrect_combat(
 
         samples_all = data_df.index
         Y_all = data_df.to_numpy()
-
         
         if fitsamples_idx_list != None:
             b_all =  metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
@@ -221,6 +231,8 @@ def batchcorrect_combat(
             data_processed_arr,
             index=data_df.index,
             columns=data_df.columns)
+        
+        data_processed_df[missing_values] = np.nan
 
         # Check if output df consists of NA's exclusively
         # if so return error in Log and don't return processed df
