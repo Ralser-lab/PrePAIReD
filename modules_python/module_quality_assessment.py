@@ -568,8 +568,8 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
         ax_boxplot_processed.grid(axis="y")
         
     if data_processed is not None:
-        y_lim = (np.min([data_processed[indices_processed].min().min(),data_origin[indices_origin].min().min()])*0.95,
-                 np.max([data_processed[indices_processed].max().max(),data_origin[indices_origin].max().max()])*1.05)
+        y_lim = (np.min([data_processed[indices_processed].replace(-1*np.inf,np.nan).min().min(),data_origin[indices_origin].replace(-1*np.inf,np.nan).min().min()])*0.95,
+                 np.max([data_processed[indices_processed].replace(+1*np.inf,np.nan).max().max(),data_origin[indices_origin].replace(+1*np.inf,np.nan).max().max()])*1.05)
     else:
         y_lim = (data_origin[indices_origin].min().min()*0.95,data_origin[indices_origin].max().max()*1.05)
 
