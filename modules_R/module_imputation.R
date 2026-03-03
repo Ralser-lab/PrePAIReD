@@ -1,6 +1,6 @@
 ###############################################################################
 # Imputation module in R
-# Provides the following options for imputation: missforest, bpca, ppca, ppm, mnar
+# Provides the following options for imputation: missforest, bpca, ppca, ppm, lcg
 # Author: LCN (including functions from VF)
 # Tested on R version 4.5.2 (2025-10-31) -- "[Not] Part in a Rumble"
 ###############################################################################
@@ -67,7 +67,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
         "bpca_R" = function() impute_pca(quant_df, parameter_list, outpath),
         "ppca" = function() impute_pca(quant_df, parameter_list, outpath),
         "ppm" = function() impute_ppm(quant_df, parameter_list, outpath),
-        "mnar" = function() impute_MNAR(quant_df, parameter_list)
+        "lcg" = function() impute_MNAR(quant_df, parameter_list)
     )
     
     imputed_df <- run_with_logging(main_impute, log_file)
@@ -293,7 +293,7 @@ impute_ppm <- function(quant_df, parameter_list, outpath){
 #' @return A data frame with imputed values.
 impute_MNAR <- function(quant_df, parameter_list){
     
-    cat("\n\nStarting MNAR imputation. ",
+    cat("\n\nStarting lcg imputation. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
     nSamp <- ncol(quant_df)
@@ -310,7 +310,7 @@ impute_MNAR <- function(quant_df, parameter_list){
         sigma <- median(featureSD, na.rm = TRUE)
     }
     
-    cat("\nCentre of MNAR distribution = ", center, "and sigma = ", sigma, ".\n")
+    cat("\nCentre of lcg distribution = ", center, "and sigma = ", sigma, ".\n")
     
     ## defining features to be imputed
     impute_subset_df <- quant_df[probObserved < parameter_list[["cutoff_feat_complete"]], ]
@@ -330,7 +330,7 @@ impute_MNAR <- function(quant_df, parameter_list){
     imputed_df <- rbind(impute_subset_df,
                         nonimpute_subset_df)[row.names(quant_df),]
     
-    cat("\nFinished MNAR imputation. ",
+    cat("\nFinished lcg imputation. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
     
     return(imputed_df)
