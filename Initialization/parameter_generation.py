@@ -513,6 +513,8 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
             else:
                 if start == "new":
                     block_new.append("data_origin = None")
+                elif docker_setup:
+                    block_new.append("data_origin = "+os.path.join("data_"+c_start+".tsv"))
                 else:
                     block_new.append("data_origin = "+os.path.join(outpath,start,"data_"+c_start+".tsv"))
             block_new.append("data_processed = "+os.path.join(outpath,setup_order[ind],"data_"+"{:02d}".format(ind+counter-1)+".tsv"))
@@ -660,7 +662,7 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
                     block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F09.png"))
             else:
                 block_new.append("plot_distribution_hist = 0")
-                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","report_folder","F09.png"))
+                block_new.append("outfile = "+ os.path.join(outpath,setup_order[ind],"report_folder","F09.png"))
             block_new.append("%-%-%-%")
             #
             if step in ["FILTERING_LONG","FILTERING_WIDE"]: 
