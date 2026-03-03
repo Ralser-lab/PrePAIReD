@@ -137,7 +137,7 @@ def detection_probability_curve(data_df, axis=1, boundary=0.5, detection_proport
     Returns
     -------
     decision_boundary : float
-        Calculated abundance threshold for MNAR/MAR classification.
+        Calculated abundance threshold for LA/HA classification.
     result : statsmodels.GLMResults
         Logistic regression model fit results.
     """
@@ -251,7 +251,7 @@ def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, de
 
     Returns
     -------
-    mnar_mask df : pd.DataFrame
+    la_mask df : pd.DataFrame
         Dataframe specifying missingness for every precursor in every sample.
     regression_df : pd.DataFrame
         Dataframe with average precursor abundance, variance, completeness and predicted completeness by fit function.
@@ -261,27 +261,27 @@ def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, de
     # Fit Logistic Regression
     decision_boundary, regression_df = detection_probability_curve(data_df, axis=axis, boundary=boundary, detection_proportion_cap=detection_proportion_cap, method=method, n_knots=n_knots)
     
-    mar_int = 2
-    mnar_int = 3
+    ha_int = 2
+    la_int = 3
     
-    #initialize mask distinguishing MAR from MNAR, preserving measured values as zeros
+    #initialize mask distinguishing HA from LA, preserving measured values as zeros
     missingness_mask_df = data_df.isnull()
     missingness_mask_df = missingness_mask_df.replace({False: 0, True: 1})
-    #classify missingness type for every precursor as MAR if below decision_boundary and MNAR if above decision_boundary
-    mars = (data_df.mean(axis=axis) >= decision_boundary)
-    mars = mars[mars].index
-    mnars = (data_df.mean(axis=axis) < decision_boundary)
-    mnars = mnars[mnars].index
-    missingness_mask_df.loc[mars] = missingness_mask_df.loc[mars] * mar_int
-    missingness_mask_df.loc[mnars] = missingness_mask_df.loc[mnars] * mnar_int
+    #classify missingness type for every precursor as HA if below decision_boundary and LA if below decision_boundary
+    has = (data_df.mean(axis=axis) >= decision_boundary)
+    has = has[has].index
+    las = (data_df.mean(axis=axis) < decision_boundary)
+    las = las[las].index
+    missingness_mask_df.loc[has] = missingness_mask_df.loc[has] * ha_int
+    missingness_mask_df.loc[las] = missingness_mask_df.loc[las] * la_int
     #reset values which are missing but missingness could not be classified back to zero
     missingness_mask_df.replace(1,0,inplace=True)
     #missingness_mask_df.replace(0,np.nan,inplace=True)
     #numbers to strings
-    missingness_mask_df.replace({np.nan:"", 0:"", mar_int:"MAR", mnar_int:"MNAR"},inplace=True)
+    missingness_mask_df.replace({np.nan:"", 0:"", ha_int:"HA", la_int:"LA"},inplace=True)
     #missingness_mask_df.replace([0,np.nan],"",inplace=True)
-    #missingness_mask_df.replace(mar_int,"MAR",inplace=True)
-    #missingness_mask_df.replace(mnar_int,"MNAR",inplace=True)
+    #missingness_mask_df.replace(ha_int,"HA",inplace=True)
+    #missingness_mask_df.replace(la_int,"LA",inplace=True)
     
     return missingness_mask_df, regression_df, decision_boundary
 
@@ -888,10 +888,10 @@ if __name__ == "__main__":
                                                         data_df=data_df,
                                                         metadata_sample_column=parameters_dict["metadata_sample_column"],
                                                         default_impu_method_ProtAbsence=parameters_dict["imputation_method_ProtAbsence"],
-                                                        default_impu_method_MAR=parameters_dict["imputation_method_MAR"],
-                                                        default_impu_method_MNAR=parameters_dict["imputation_method_MNAR"],
-                                                        default_impu_method_ProtAbsenceMAR=parameters_dict["imputation_method_ProtAbsenceMAR"],
-                                                        default_impu_method_ProtAbsenceMNAR=parameters_dict["imputation_method_ProtAbsenceMNAR"],
+                                                        default_impu_method_HA=parameters_dict["imputation_method_HA"],
+                                                        default_impu_method_LA=parameters_dict["imputation_method_LA"],
+                                                        default_impu_method_ProtAbsenceHA=parameters_dict["imputation_method_ProtAbsenceHA"],
+                                                        default_impu_method_ProtAbsenceLA=parameters_dict["imputation_method_ProtAbsenceLA"],
                                                         default_knn_k=parameters_dict["knn_k"])
                 impu_table_df.to_csv(imputation_table_fp,sep="\t",index=False)
                 
@@ -919,7 +919,7 @@ if __name__ == "__main__":
                         log += "###WARNING###: Missingness evaluation on protein presence as defined by missingness_type_protein_absence in the parameters does not match any entry in imputation_table['missingness_type'].\n\t\t\t\tMissingness evaluation on protein presence skipped.\n"
                         parameters_dict["eval_missingness_on_protein_presence"] = 0
             if parameters_dict["eval_missingness_on_protein_presence"]:
-                # remember in mask missingness type (protein present vs. protein not present or MAR vs. MAR/MNAR)
+                # remember in mask missingness type (protein present vs. protein not present or HA vs. HA/LA)
                 protmissing_mask_df = assign_missingness(data_df=data_df,
                                                         id_mapping_df=id_mapping_df,
                                                         missingness_type=parameters_dict["missingness_type_protein_absence"],
@@ -944,7 +944,7 @@ if __name__ == "__main__":
                 #identify hierarchy to evaluate missingness, evaluate missingness, store in one matrix
                 if parameters_dict["level_for_intensity_dependent_missingness_estimation"] is not None:
                     levels = metadata_df[parameters_dict["level_for_intensity_dependent_missingness_estimation"]].unique()
-                    mar_mnar_mask_df = pd.DataFrame()
+                    ha_la_mask_df = pd.DataFrame()
                     regression_df = pd.DataFrame()
                     decision_boundary_df = pd.DataFrame(index=levels,columns=["decision_boundary","num_samples"])
                     decision_boundary_df.index.name = parameters_dict["level_for_intensity_dependent_missingness_estimation"]
@@ -954,14 +954,14 @@ if __name__ == "__main__":
                     for level in levels:
                         samples_in_level = list(set(data_df.columns) & set(metadata_df[metadata_df[parameters_dict["level_for_intensity_dependent_missingness_estimation"]]== level][parameters_dict["metadata_sample_column"]]))
                         if samples_in_level:
-                            mar_mnar_mask_df_level, regression_df_level, decision_boundary_level = intensity_dependent_missingness_estimation(data_df[samples_in_level],  
+                            ha_la_mask_df_level, regression_df_level, decision_boundary_level = intensity_dependent_missingness_estimation(data_df[samples_in_level],  
                                                                                                                                               axis=parameters_dict["axis"], 
                                                                                                                                               boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
                                                                                                                                               detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
                                                                                                                                               method=parameters_dict["intensity_dependent_missingness_fit_method"], 
                                                                                                                                               n_knots=parameters_dict["intensity_dependent_missingness_n_knots"])
                             #combine mask and regression_df with current level
-                            mar_mnar_mask_df = pd.concat([mar_mnar_mask_df, mar_mnar_mask_df_level],axis=1)
+                            ha_la_mask_df = pd.concat([ha_la_mask_df, ha_la_mask_df_level],axis=1)
                             regression_df_level.columns = [x+"_"+str(level) for x in regression_df_level.columns]
                             regression_df = regression_df.join(regression_df_level,how="outer")
                             decision_boundary_df.loc[level,"decision_boundary"] = decision_boundary_level
@@ -977,7 +977,7 @@ if __name__ == "__main__":
                     # Logging
                     log =  time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tIntensity dependent missingness estimated over the entire dataset.\n"
                     helper.logger(log_file, module_output=log)
-                    mar_mnar_mask_df, regression_df, decision_boundary = intensity_dependent_missingness_estimation(data_df, 
+                    ha_la_mask_df, regression_df, decision_boundary = intensity_dependent_missingness_estimation(data_df, 
                                                                                                                     axis=parameters_dict["axis"], 
                                                                                                                     boundary=parameters_dict["intensity_dependent_missingness_decision_boundary"], 
                                                                                                                     detection_proportion_cap=parameters_dict["intensity_dependent_missingness_detection_proportion_cap"], 
@@ -989,10 +989,10 @@ if __name__ == "__main__":
                 if parameters_dict["save_intermediate_output_for_QA"]:
                     regression_df.to_csv(os.path.join(out_dir_fp, "intensity_dependent_missingness_estimation_plot_data.tsv"),sep="\t")
             else:
-                mar_mnar_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+                ha_la_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
             # combine masks if any distinguishment of missingness
             if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
-                imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + mar_mnar_mask_df.loc[data_df.index,data_df.columns]
+                imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + ha_la_mask_df.loc[data_df.index,data_df.columns]
                 #replace / in beginning or end
                 imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True)
                 #reset index to precursor id
@@ -1131,7 +1131,7 @@ if __name__ == "__main__":
                 helper.logger(log_file, module_output=log)
                 if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                     missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
-                    notimplemented_missingness_types = set(missingness_types) - {"MAR","MNAR",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/MAR",parameters_dict["missingness_type_protein_absence"] + "/MNAR"}
+                    notimplemented_missingness_types = set(missingness_types) - {"HA","LA",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/HA",parameters_dict["missingness_type_protein_absence"] + "/LA"}
                     if  notimplemented_missingness_types != set():
                         log = "###WARNING###: No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
                         helper.logger(log_file, module_output=log)
@@ -1140,16 +1140,16 @@ if __name__ == "__main__":
                 for missingness_type in missingness_types:
                     if missingness_type == "simple": #no distinguishment of missingness types
                         imputation_method = parameters_dict["imputation_method"]
-                    elif missingness_type == "MAR":
-                        imputation_method = parameters_dict["imputation_method_MAR"]
-                    elif missingness_type == "MNAR":
-                        imputation_method = parameters_dict["imputation_method_MNAR"]
+                    elif missingness_type == "HA":
+                        imputation_method = parameters_dict["imputation_method_HA"]
+                    elif missingness_type == "LA":
+                        imputation_method = parameters_dict["imputation_method_LA"]
                     elif missingness_type == parameters_dict["missingness_type_protein_absence"]:
                         imputation_method = parameters_dict["imputation_method_ProtAbsence"]
-                    elif missingness_type == parameters_dict["missingness_type_protein_absence"] + "/MAR":
-                        imputation_method = parameters_dict["imputation_method_ProtAbsenceMAR"]
-                    elif missingness_type == parameters_dict["missingness_type_protein_absence"] + "/MNAR":
-                        imputation_method = parameters_dict["imputation_method_ProtAbsenceMNAR"]
+                    elif missingness_type == parameters_dict["missingness_type_protein_absence"] + "/HA":
+                        imputation_method = parameters_dict["imputation_method_ProtAbsenceHA"]
+                    elif missingness_type == parameters_dict["missingness_type_protein_absence"] + "/LA":
+                        imputation_method = parameters_dict["imputation_method_ProtAbsenceLA"]
                     else:
                         continue
                     #remember which and how many values were missing prior imputation

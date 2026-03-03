@@ -1685,7 +1685,7 @@ def plot_imputation_vs_covariate(data_origin, metadata, mask, column_metadata = 
         imputation_comp = (mask!="0").sum()
         ax.plot(x,imputation_comp[indices_origin], c="k",ls="--",label="Total")
     else:
-        if any(mask=="MAR") or any(mask=="MNAR") or any(mask=="ProtAbsence") or any("ProtAbsence/MAR") or any("ProtAbsence/MNAR"):
+        if any(mask=="HA") or any(mask=="LA") or any(mask=="ProtAbsence") or any("ProtAbsence/HA") or any("ProtAbsence/LA"):
             mask = mask.isna().astype(float)*0.99
         temp_mask=mask.map(lambda x: int(str(float(x)).split(".")[-1]))  
         imputed_precs=(temp_mask!=imputation_value).sum(axis=0)
