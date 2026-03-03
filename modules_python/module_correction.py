@@ -145,7 +145,7 @@ def batchcorrect_combat(
         for item in metadata_df[batch_key].unique():
             indices_batch = metadata_df[metadata_df[batch_key]==item].index
             imp_tmp = data_df.loc[indices_batch]
-            imp_tmp = imp_tmp.fillna(imp_tmp.mean())
+            imp_tmp = imp_tmp.fillna(imp_tmp.median())
             data_df.loc[imp_tmp.index] = imp_tmp
                     
         # effects to preserve during batch correction
