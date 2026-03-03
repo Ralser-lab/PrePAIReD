@@ -14,8 +14,8 @@ import pickle
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = True ####
-write_to_disc = False
+load_dictionaries = False ####
+write_to_disc = True
 
 if not load_dictionaries:
     import pandas as pd
@@ -121,7 +121,7 @@ def get_dictionary_flags(data_flag):
                                                            "Comment":"use one (1) or missingness type specific method (0)"},
                                       "imputation_method":{"Options":dict_flags["IMPUTATION"]["imputation_method"]["Options"],
                                                            "Default":dict_flags["IMPUTATION"]["imputation_method"]["Default"],
-                                                           "Comment": "simple_imputation == 0 only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"])}
+                                                           "Comment": "simple_imputation == 0 only implemented for "+str(dict_flags["IMPUTATION"]["imputation_method_HA"]["Options"])}
                                       }
     return dict_flags
 
@@ -314,7 +314,7 @@ def write_parameter_file_imputation(outfile, dict_flags):
                 if line.startswith("imputation_method"):
                     imputation_method = line.split(" = ")[1].strip()
                     if not simple:
-                        if imputation_method not in dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]:
+                        if imputation_method not in dict_flags["IMPUTATION"]["imputation_method_HA"]["Options"]:
                             raise ValueError("###ERROR###: Method not implemented for complex setup")
                             sys.exit(1) 
             setup = "IMPUTATION"
@@ -325,10 +325,10 @@ def write_parameter_file_imputation(outfile, dict_flags):
                 if simple:
                     if imputation_method in dict_flags["IMPUTATION"]["imputation_method"]["Options"]:
                         # Distinguish between R and Python: Python-specific flags
-                        if imputation_method not in ["missforest","bpca_R","ppca","ppm","MNAR"]:
-                            if flag not in ["imputation_method_MAR","imputation_method_MNAR",
+                        if imputation_method not in ["missforest","bpca_R","ppca","ppm","lcg"]:
+                            if flag not in ["imputation_method_HA","imputation_method_LA",
                                             "imputation_method_ProtAbsence",
-                                            "imputation_method_ProtAbsenceMAR","imputation_method_ProtAbsenceMNAR",
+                                            "imputation_method_ProtAbsenceHA","imputation_method_ProtAbsenceLA",
                                             "simple_imputation","imputation_method",
                                             "eval_missingness_on_protein_presence", "eval_missingness_by_detection_threshold", 
                                             "hierarchical_imputation", "remember_missingness_type_in_mask", 
@@ -343,7 +343,7 @@ def write_parameter_file_imputation(outfile, dict_flags):
                         #    block_new.append("## Options: "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]).replace("\'",""))
                         #    block_new.append("imputation_method = "+imputation_method+"\n")
                     else:
-                        raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]+dict_flags["IMPUTATION"]["imputation_method_MAR"]["Options"]).replace("\'",""))
+                        raise ValueError("###ERROR###: Method for IMPUTATION not found; Allowed values in "+str(dict_flags["IMPUTATION"]["imputation_method"]["Options"]+dict_flags["IMPUTATION"]["imputation_method_HA"]["Options"]).replace("\'",""))
                         sys.exit(1)             
                 else:
                     # Setup type specific flags (Python)
