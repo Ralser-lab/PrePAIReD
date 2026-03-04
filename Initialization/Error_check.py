@@ -226,7 +226,6 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     :param data_file: str, proteomics filename, f.e. DIA-NN output
     :param log: str, logfile
     """
-    #print(operation)
     #print(value)
     current_operation = operation
     if value is not None:  # skip operations if a value is nan
@@ -335,7 +334,21 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
                                  f"and adjusted columns ({length_cols}) is different")
             for val in value:
-                check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)
+                check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)   
+        if current_operation == "check len(combat_cols_adjust_meta) and el in AllowedValues if existence of combat_cols_adjust_meta":   
+            if user_dict["combat_cols_adjust_meta"]:
+                adjust_cols = user_dict["combat_cols_adjust_meta"]  # get the list with column names
+                allowed_values = operation_dictionary["correct_method"]["combat"]["combat_cols_adjust_dtypes"][
+                    "Options"]  # dtypes
+                length_cols = check_for_length(adjust_cols, module=module, variable=variable, log=log)
+                length_dtypes = check_for_length(value, module=module, variable=variable, log=log)
+                if length_cols != length_dtypes:
+                    update_log(log, f"###ERROR###: for variable {variable}: Length of dtypes ({length_dtypes}) "
+                                     f"and adjusted columns ({length_cols}) is different")
+                    raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                                     f"and adjusted columns ({length_cols}) is different")
+                for val in value:
+                    check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)              
         if current_operation == "check elements":
             values = value.split(";")
             for val in values:
