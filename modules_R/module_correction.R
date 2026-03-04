@@ -1,8 +1,7 @@
 ###############################################################################
-# Batch correction module in R
-# Provides the following options for batch correction:
-# limma, combat_r
-# Author: Roza Mizrak @rozsurmiz (pipeline style refactor by LCN)
+# Summarization module in R
+# Provides the following options for summarization: medianpolish, plm, fastmaxLFQ
+# Author: LCN
 ###############################################################################
 
 suppressPackageStartupMessages({
@@ -13,124 +12,131 @@ suppressPackageStartupMessages({
 # Pipeline-safe helper sourcing
 script_path <- (function() {
     args <- commandArgs(trailingOnly = FALSE)
+    
     file_arg <- grep("^--file=", args, value = TRUE)
     if (length(file_arg)) return(normalizePath(sub("^--file=", "", file_arg)))
     if (!is.null(sys.frames()[[1]]$ofile)) return(normalizePath(sys.frames()[[1]]$ofile))
-    stop("Can't determine script path.")
+    
+    stop("Can't determine script path. Run via: Rscript --vanilla path/to/script.R")
 })()
 
 script_dir <- dirname(script_path)
+
 source(file.path(script_dir, "helper_functions_R.R"))
 
 
-#' @title Function for batch correction in R
+#' @title Function for peptide-to-protein summarization in R
 #' @description
-#' Reads a quantitative data table and metadata, then performs batch correction
-#' using one of the supported methods.
+#' Reads a quantitative peptide-level table and a parameter JSON file, then
+#' summarizes peptides to protein abundances using one of the supported methods.
+#' Wrapped in a logging function to capture console output and messages.
 #'
-#' The batch correction step is wrapped in a logging function to capture console
-#' output and messages to a log file.
-#'
-#' Additionally, it passes through the corresponding mask and mask_description
-#' files unchanged so the pipeline continues to work consistently.
-#'
-#' @param datapath Path to quantitative input data (.tsv).
+#' @param datapath Path to quantitative input file.
 #' @param parampath Path to a JSON parameter file.
-#' @param outpath Output directory where results are written.
-#' @param metadata Path to metadata file.
-#' @param log_file Path to log file.
+#' @param idmappath Path to mapping dataframe.
+#' @param outpath Directory where output will be written.
+#' @param log_file File path where logs will be written.
 #' @param counter Step of the preprocessing pipeline currently run.
-#'
-#' @return NULL (writes corrected data and mask files to disk).
-batch_correct <- function(datapath, parampath, outpath,
-                          metadata, log_file, counter){
+summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter){
     
     ## build input paths robustly (no dependence on trailing "/")
     in_data_file <- datapath
     in_mask_file <- sub("\\.tsv$", "_mask.tsv", datapath)
     in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
     
-    ## read data
-    quant_df <- as.data.frame(read.table(
-        file = in_data_file,
-        sep = "\t",
-        header = TRUE,
-        row.names = 1,
-        check.names = FALSE
-    ))
-    
-    meta_df <- as.data.frame(read.table(
-        file = metadata,
-        sep = "\t",
-        header = TRUE,
-        row.names = 1,
-        check.names = FALSE
-    ))
+    ## read in data
+    quant_df <- as.data.frame(read.table(file = in_data_file,
+                                         sep = "\t",
+                                         header = TRUE,
+                                         row.names = 1,
+                                         check.names = FALSE))
     
     parameter_list <- read_JSON(parampath)
     
-    ## batch handling from schema
-    if (!is.null(parameter_list[["batch_cols_meta"]])) {
-        
-        batch_cols <- parameter_list[["batch_cols_meta"]]
-        
-        if (length(batch_cols) >= 1) {
-            parameter_list[["batch"]] <- batch_cols[[1]]
-        }
-        
-        if (length(batch_cols) >= 2) {
-            parameter_list[["batch2"]] <- batch_cols[[2]]
-        }
-    }
+    mapping_df <- as.data.frame(read.table(file = idmappath,
+                                           sep = "\t",
+                                           header = TRUE,
+                                           check.names = FALSE))
     
-    ## set seed
+    ## setting seed
     set.seed(parameter_list[["seed"]] + counter)
     
-    ## align samples
-    common <- intersect(colnames(quant_df), rownames(meta_df))
-    quant_df <- quant_df[, common, drop = FALSE]
-    meta_df <- meta_df[common, , drop = FALSE]
+    ## check if feature and protein columns are in mapping df
+    if(!(parameter_list[["feature_col"]] %in% colnames(mapping_df) &
+         parameter_list[["protein_col"]] %in% colnames(mapping_df))){
+        stop("'feature_col' and/or 'protein_col' provided in parameter list do not exist in id mapping file.")
+    }
     
-    ## method naming fallback
-    method <- parameter_list[["correct_method"]]
+    ## check overlap between row names and mapping
+    if(length(intersect(row.names(quant_df),
+                        mapping_df[, parameter_list[["feature_col"]]])) == 0){
+        stop("No overlap between row names of data and feature ids in id_mapping file.")
+    }
     
-    ## call batch correction
-    main_batch <- switch(
-        tolower(method),
-        "limma"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
-        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list)
-        #"harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list)
-    )
+    ## call summarization function
+    main_summarize <- switch(
+        tolower(parameter_list[["summarization_method"]]),
+        "medianpolish" = function() summarize_median_polish(quant_df, 
+                                                            parameter_list,
+                                                            mapping_df),
+        "fastmaxlfq" = function() summarize_fast_maxlfq(quant_df, 
+                                                        parameter_list,
+                                                        mapping_df),
+        "plm" = function() summarize_plm(quant_df, 
+                                         parameter_list,
+                                         mapping_df))
     
-    corrected_df <- run_with_logging(main_batch, log_file)
+    protein_df <- run_with_logging(main_summarize, log_file)
+    
+    ## replace generated NaNs by NAs
+    protein_df[is.nan(as.matrix(protein_df))] <- NA
+    protein_df[!is.finite(as.matrix(protein_df))] <- NA
     
     ## load mask + mask_description to save unchanged
     mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
-    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file),
+    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file), 
                                                 rownames = 1))
     
     ## write outputs
     out_data_file <- file.path(outpath,
                                sprintf("data_%02d.tsv", as.numeric(counter)))
-    out_mask_file <- file.path(outpath,
-                               sprintf("data_%02d_mask.tsv", as.numeric(counter)))
-    out_mask_desc_file <- file.path(outpath,
-                                    sprintf("data_%02d_mask_description.tsv",
+    out_data_file_precursors_unlog <- file.path(outpath,
+                                                sprintf("data_%02d_precursors_unlog.tsv",
+                                                        as.numeric(counter)))
+    out_data_file_unlog <- file.path(outpath,
+                                     sprintf("data_%02d_unlog.tsv",
+                                             as.numeric(counter)))
+    out_mask_file <- file.path(outpath, sprintf("data_%02d_mask.tsv", 
+                                                as.numeric(counter)))
+    out_mask_desc_file <- file.path(outpath, 
+                                    sprintf("data_%02d_mask_description.tsv", 
                                             as.numeric(counter)))
     
-    write.table(corrected_df,
+    write.table(protein_df,
                 out_data_file,
                 sep = "\t",
                 quote = FALSE,
                 col.names = NA)
     
-    fwrite(mask,
-           out_mask_file,
+    write.table(2^quant_df,
+                out_data_file_precursors_unlog,
+                sep = "\t",
+                quote = FALSE,
+                col.names = NA)
+    
+    write.table(2^protein_df,
+                out_data_file_unlog,
+                sep = "\t", 
+                quote = FALSE,
+                col.names = NA)
+    
+    fwrite(mask, 
+           out_mask_file, 
            row.names = TRUE,
            sep = "\t")
     
     fwrite(mask_description,
-           out_mask_desc_file,
+           out_mask_desc_file, 
            row.names = TRUE,
            sep = "\t")
     
@@ -138,181 +144,134 @@ batch_correct <- function(datapath, parampath, outpath,
 }
 
 
-#' @title Batch correction using limma
-#' @description
-#' Performs batch correction using \code{limma::removeBatchEffect}.
-#'
-#' Supports one or two batch factors, optional covariates,
-#' and optional design matrix via the \code{Class} parameter.
-#'
-#' @param quant_df Quantitative data.frame (features × samples).
-#' @param meta_df Metadata data.frame (samples × annotations).
-#' @param parameter_list Parameter list from JSON file.
-#'
-#' @return Corrected data.frame.
-batchcorrect_limma <- function(quant_df, meta_df, parameter_list){
+#' Summarize precursors/peptides to proteins using median polish
+summarize_median_polish <- function(quant_df, parameter_list, mapping_df){
     
-    library(limma)
+    library(iq)
     
-    cat("\n\nStarting limma batch correction. ",
+    feat_col <- parameter_list[["feature_col"]]
+    prot_col <- parameter_list[["protein_col"]]
+    
+    cat("\n\nStarting median polish summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
-    batchF1 <- if (!is.null(parameter_list[["batch"]]))
-        factor(meta_df[[parameter_list[["batch"]]]]) else NULL
-    
-    batchF2 <- if (!is.null(parameter_list[["batch2"]]))
-        factor(meta_df[[parameter_list[["batch2"]]]]) else NULL
-    
-    covs <- if (!is.null(parameter_list[["covariates"]]))
-        as.matrix(meta_df[, parameter_list[["covariates"]], drop = FALSE]) else NULL
-    
-    if (is.null(parameter_list[["Class"]])) {
-        
-        corrected <- limma::removeBatchEffect(
-            as.matrix(quant_df),
-            batch = batchF1,
-            batch2 = batchF2,
-            covariates = covs
-        )
-        
-    } else {
-        
-        Class <- factor(meta_df[[parameter_list[["Class"]]]])
-        designM <- model.matrix(~0 + Class)
-        
-        corrected <- limma::removeBatchEffect(
-            as.matrix(quant_df),
-            batch = batchF1,
-            batch2 = batchF2,
-            covariates = covs,
-            design = designM
-        )
-    }
-    
-    cat("\nFinished limma batch correction. ",
-        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
-    
-    as.data.frame(corrected)
-}
-
-
-#' @title Batch correction using ComBat
-#' @description
-#' Performs batch correction using \code{sva::ComBat}.
-#'
-#' Optional covariates can be preserved via a design matrix.
-#'
-#' @param quant_df Quantitative data.frame (features × samples).
-#' @param meta_df Metadata data.frame (samples × annotations).
-#' @param parameter_list Parameter list from JSON file.
-#'
-#' @return Corrected data.frame.
-batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
-    
-    library(sva)
-    
-    cat("\n\nStarting ComBat batch correction. ",
-        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
-    
-    mod <- NULL
-    if (!is.null(parameter_list[["covariates_preserve"]])) {
-        mod <- stats::model.matrix(
-            ~ .,
-            data = meta_df[, parameter_list[["covariates_preserve"]], drop = FALSE]
-        )
-    }
-    
-    par_prior <- parameter_list[["par.prior"]]
-    if (is.null(par_prior)) par_prior <- TRUE
-    
-    corrected <- sva::ComBat(
-        dat = as.matrix(quant_df),
-        batch = factor(meta_df[[parameter_list[["batch"]]]]),
-        mod = mod,
-        par.prior = par_prior,
-        prior.plots = FALSE
+    quant_list <- split(
+        as.data.frame(quant_df),
+        mapping_df[match(row.names(quant_df),
+                         mapping_df[, feat_col]), prot_col]
     )
+    quant_list <- lapply(quant_list, as.matrix)
     
-    cat("\nFinished ComBat batch correction. ",
-        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
+    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+        colSums(!is.na(x))
+    }))
     
-    as.data.frame(corrected)
+    quant_prot_df <- iq::create_protein_table(quant_list)$estimate
+    quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
+    
+    cat("\n\nFinished median polish summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    return(quant_prot_df)
 }
 
 
-#' @title Batch correction using Harmony
-#' @description
-#' Performs batch correction using PCA followed by
-#' \code{harmony::HarmonyMatrix}, and reconstructs the corrected
-#' data in expression space while preserving PCA centering.
-#'
-#' @param quant_df Quantitative data.frame (features × samples).
-#' @param meta_df Metadata data.frame (samples × annotations).
-#' @param parameter_list Parameter list from JSON file.
-#'
-#' @return Corrected data.frame.
-#batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
-#    
-#    library(harmony)
-#    
-#    cat("\n\nStarting Harmony batch correction. ",
-#        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
-#    
-#    n_pcs <- parameter_list[["n_pcs"]]
-#    if (is.null(n_pcs)) n_pcs <- 20
-#    
-#    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
-#    pcs <- pca$x[, seq_len(min(n_pcs, ncol(pca$x))), drop = FALSE]
-#    
-#    vars_use <- unique(na.omit(c(
-#        parameter_list[["batch"]],
-#        parameter_list[["covariates"]]
-#    )))
-#    
-#    harmony_pcs <- harmony::HarmonyMatrix(
-#        data_mat = pcs,
-#        meta_data = meta_df,
-#        vars_use = vars_use,
-#        do_pca = FALSE
-#    )
-#    
-#    loadings <- pca$rotation[, seq_len(ncol(harmony_pcs)), drop = FALSE]
-#    
-#    centered <- t(quant_df) -
-#        matrix(pca$center,
-#               nrow = ncol(quant_df),
-#               ncol = nrow(quant_df),
-#               byrow = TRUE)
-#    
-#    corrected_centered <- harmony_pcs %*% t(loadings)
-#  
-#    corrected <- t(
-#        corrected_centered +
-#            matrix(pca$center,
-#                   nrow = ncol(quant_df),
-#                   ncol = nrow(quant_df),
-#                   byrow = TRUE)
-#    )
-#    
-#    cat("\nFinished Harmony batch correction. ",
-#        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
-#    
-#    as.data.frame(corrected)
-#}
+#' Summarize precursors/peptides to proteins using fastMaxLFQ
+summarize_fast_maxlfq <- function(quant_df, parameter_list, mapping_df){
+    
+    library(iq)
+    
+    feat_col <- parameter_list[["feature_col"]]
+    prot_col <- parameter_list[["protein_col"]]
+    
+    cat("\n\nStarting fast MaxLFQ summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    prot_ids <- mapping_df[match(row.names(quant_df), mapping_df[, feat_col]), prot_col]
+    
+    quant_list <- split(as.data.frame(quant_df), prot_ids)
+    
+    res <- lapply(names(quant_list), \(p){
+        
+        x <- as.matrix(quant_list[[p]])
+        idx <- which(!is.na(x), arr.ind = TRUE)
+        
+        if(nrow(idx) == 0) return(NULL)
+        
+        list(protein = rep(p, nrow(idx)),
+             sample = colnames(x)[idx[,2]],
+             id = rownames(x)[idx[,1]],
+             quant = x[idx])
+    })
+    
+    res <- res[!sapply(res, is.null)]
+    
+    norm_data <- list(protein_list = unlist(lapply(res, `[[`, "protein"), use.names = FALSE),
+                      sample_list = unlist(lapply(res, `[[`, "sample"), use.names = FALSE),
+                      id = unlist(lapply(res, `[[`, "id"), use.names = FALSE),
+                      quant = unlist(lapply(res, `[[`, "quant"), use.names = FALSE))
+    
+    quant_prot_df <- iq::fast_MaxLFQ(norm_data)$estimate
+    
+    cat("\n\nFinished fast MaxLFQ summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    return(quant_prot_df)
+}
 
 
-# CLI entrypoint
+#' Summarize precursors/peptides to proteins using PLM
+summarize_plm <- function(quant_df, parameter_list, mapping_df){
+    
+    library(preprocessCore)
+    
+    feat_col <- parameter_list[["feature_col"]]
+    prot_col <- parameter_list[["protein_col"]]
+    
+    cat("\n\nStarting PLM summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    quant_list <- split(
+        as.data.frame(quant_df),
+        mapping_df[match(row.names(quant_df),
+                         mapping_df[, feat_col]), prot_col]
+    )
+    quant_list <- lapply(quant_list, as.matrix)
+    
+    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+        colSums(!is.na(x))
+    }))
+    
+    sample_names <- colnames(quant_df)
+    n_samples <- ncol(quant_df)
+    
+    quant_prot_df <- do.call(rbind, lapply(quant_list, \(df){
+        out <- preprocessCore::rcModelPLM(y = df)
+        out$Estimates[seq_len(n_samples)]
+    }))
+    
+    colnames(quant_prot_df) <- sample_names
+    quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
+    
+    cat("\n\nFinished PLM summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    return(quant_prot_df)
+}
+
+
+# CLI entrypoint (pipeline integration)
 main <- function() {
     parser <- make_parser()
     args <- parse_args(parser, args = commandArgs(trailingOnly = TRUE))
     validate_opts(args)
     
-    batch_correct(datapath = args$data,
-                  parampath = args$params,
-                  outpath = args$out,
-                  metadata = args$md,
-                  log_file = args$log,
-                  counter = as.numeric(args$counter))
+    summarize(datapath = args$data,
+              parampath = args$params,
+              outpath = args$out,
+              idmappath = args$ids,
+              log_file = args$log,
+              counter = as.numeric(args$counter))
 }
 
 if (sys.nframe() == 0) main()

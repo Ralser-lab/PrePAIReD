@@ -1,6 +1,6 @@
 ###############################################################################
 # Summarization module in R
-# Provides the following options for summarization: medianpolish, plm
+# Provides the following options for summarization: medianpolish, plm, fastmaxLFQ
 # Author: LCN
 ###############################################################################
 
@@ -79,6 +79,9 @@ summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter
         "medianpolish" = function() summarize_median_polish(quant_df, 
                                                             parameter_list,
                                                             mapping_df),
+        "fastmaxlfq" = function() summarize_fast_maxlfq(quant_df, 
+                                                        parameter_list,
+                                                        mapping_df),
         "plm" = function() summarize_plm(quant_df, 
                                          parameter_list,
                                          mapping_df))
@@ -167,6 +170,61 @@ summarize_median_polish <- function(quant_df, parameter_list, mapping_df){
     quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
     
     cat("\n\nFinished median polish summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    return(quant_prot_df)
+}
+
+#' Summarize precursors/peptides to proteins using fastMaxLFQ
+#' Summarize precursors/peptides to proteins using fastmaxLFQ
+summarize_fast_maxlfq <- function(quant_df, parameter_list, mapping_df){
+    
+    library(iq)
+    
+    feat_col <- parameter_list[["feature_col"]]
+    prot_col <- parameter_list[["protein_col"]]
+    
+    cat("\n\nStarting fast MaxLFQ summarization. ",
+        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
+    
+    if (is.null(quant_df)) stop("summarize_fast_maxlfq: quant_df is NULL (upstream read/subset returned NULL).")
+    
+    prot_ids <- mapping_df[
+        match(row.names(quant_df), mapping_df[, feat_col]),
+        prot_col
+    ]
+    
+    keep <- !is.na(prot_ids)
+    if (!all(keep)) {
+        quant_df <- quant_df[keep, , drop = FALSE]
+        prot_ids <- prot_ids[keep]
+    }
+    
+    quant_list <- split(as.data.frame(quant_df), prot_ids)
+    quant_list <- lapply(quant_list, as.matrix)
+    
+    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+        colSums(!is.na(x))
+    }))
+    
+    idx <- which(!is.na(as.matrix(quant_df)), arr.ind = TRUE)
+    
+    norm_data <- list(
+        protein_list = prot_ids[idx[,1]],
+        sample_list  = colnames(quant_df)[idx[,2]],
+        id           = row.names(quant_df)[idx[,1]],
+        quant        = as.matrix(quant_df)[idx]   # must be log2 intensities
+    )
+    
+    quant_prot_df <- iq::fast_MaxLFQ(
+        norm_data,
+        row_names = unique(prot_ids),
+        col_names = colnames(quant_df)
+    )$estimate
+    
+    quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
+    
+    cat("\n\nFinished fast MaxLFQ summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
     return(quant_prot_df)
