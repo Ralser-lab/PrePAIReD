@@ -290,8 +290,8 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
         #script_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda: 0)))
         #lib = os.path.join(script_dir, libname)
         #cpp_library = cdll.LoadLibrary(lib)
-    elif os.path.exists("maxlfq.so") and platform.system() == "Linux":
-        cpp_library = cdll.LoadLibrary("maxlfq.so")
+    elif os.path.exists("./maxlfq.so") and platform.system() == "Linux":
+        cpp_library = cdll.LoadLibrary("./maxlfq.so")
     elif os.path.exists("modules_python/maxlfq.so") and platform.system() == "Linux":
         cpp_library = cdll.LoadLibrary("modules_python/maxlfq.so")                        
     else:
