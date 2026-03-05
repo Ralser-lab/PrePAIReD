@@ -281,8 +281,12 @@ def estimate_protein_profile(precursor_df, expected_n_runs, run, accession, sequ
     
     #if platform.system() == "Windows":    
     libname_trim = libname.split(".")[0]
-    lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
-    lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
+    try:
+        lib="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname
+        lib_trim="/".join(abspath(getsourcefile(lambda:0)).split("/")[:-1]) + "/" + libname_trim
+    except:
+        lib = libname
+        lib_trim = libname_trim
     #lib=lib.replace("/","/")
     if os.path.exists(lib_trim) and platform.system() == "Linux":
         cpp_library = cdll.LoadLibrary(lib_trim)
