@@ -821,7 +821,7 @@ if __name__ == "__main__":
     data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = module, 
                                                                                                                                                                            get_metadata=False, 
                                                                                                                                                                            get_id_mapping=True, 
-                                                                                                                                                                           get_mask=False, 
+                                                                                                                                                                           get_mask=True, 
                                                                                                                                                                            return_data_fp_only=True,
                                                                                                                                                                            skip_parser=skip_parser,
                                                                                                                                                                            data_df_fp=data_df_fp,
@@ -844,9 +844,9 @@ if __name__ == "__main__":
         helper.logger(log_file,"###ERROR###: Input data file could not be loaded")
         sys.exit("###ERROR###: Input data file could not be loaded")
     
-    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
-        masked_df = helper.load_mask(data_df_fp)
-        mask_description_df = helper.load_mask_description(data_df_fp)
+    #if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+    #    masked_df = helper.load_mask(data_df_fp)
+    #    mask_description_df = helper.load_mask_description(data_df_fp)
     
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,module_output)
@@ -897,7 +897,7 @@ if __name__ == "__main__":
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tUnlogged protein data saved to " + os.path.join(out_dir_fp, outname[:-4]+"_unlog.tsv")+".\n"
     data_processed_df = helper.log_transform(data_processed_df)
 
-    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
-        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
-    else:
-        helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False)
+    #if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)
+    #else:
+    #    helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=False)
