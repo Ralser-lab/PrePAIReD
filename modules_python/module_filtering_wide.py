@@ -978,14 +978,14 @@ if __name__ == "__main__":
 
             elif method == "filter_precursors_by_metadata":
                 #log filtering method
-                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['proteotypicity_col']} not {parameters_dict['proteotypicity_value']}.\n"
+                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['precursor_filter_col']} not {parameters_dict['precursor_filter_value']}.\n"
                 helper.logger(log_file,log)
-                #apply exclusion of nonproteotypic precursors
+                #apply exclusion of selected precursors
                 data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
                                                                        id_mapping_df=id_mapping_df, 
                                                                        precursor_col=parameters_dict["precursor_col"], 
-                                                                       filter_col=parameters_dict["proteotypicity_col"], 
-                                                                       filter_value=parameters_dict["proteotypicity_value"])
+                                                                       filter_col=parameters_dict["precursor_filter_col"], 
+                                                                       filter_value=parameters_dict["precursor_filter_value"])
                 
                 #catch errors
                 if "###ERROR###" in log:
@@ -996,7 +996,7 @@ if __name__ == "__main__":
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
                                                                   axis='precursors', 
-                                                                  method="Proteotypic",
+                                                                  method=precursor_filter_col,
                                                                   mask_df=mask_df, 
                                                                   mask_description_df=mask_description_df, 
                                                                   pre_method_columns=pre_method_columns,
