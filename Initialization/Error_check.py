@@ -317,6 +317,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             #print(input_ids_columns)
             input_ids_columns = input_ids_columns.split(";")
             input_ids_columns.append("Proteotypic")
+            input_ids_columns.append("include_correction")
             check_for_existence(value, l=input_ids_columns, module=module, variable=variable, log=log)
         if current_operation == "existence of path":
             check_for_path_existence(filepath=value, log=log)
@@ -529,3 +530,4 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     #print("Works so far")
 
     return current_flag, current_flag_value
+
