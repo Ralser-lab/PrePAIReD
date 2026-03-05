@@ -151,6 +151,8 @@ def get_peptide_ratios(wide_format, cc, minimum_ratios=1):
 
     """
     n_runs = wide_format.shape[1]
+    # ensure writable array
+    wide_format = wide_format.copy()
     # Replace 0 with NaNs
     wide_format[wide_format == 0] = np.nan
     # Initialize results array
