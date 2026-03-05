@@ -94,158 +94,171 @@ def batchcorrect_combat(
     fitsamples_idx_list=list,
     cov_preserve_list=list,
     cov_adjust_list=list,
+    cov_adjust_list_dtypes=list,
     ):
         
-        """
-        Apply ComBat batch correction by using the pyComBat package.
-        See https://github.com/CoAxLab/pycombat for more information.
-        
-        This function supports optional selection of samples for model 
-        fittingand allows specification of covariates to preserve or 
-        adjust for during correction.
+    """
+    Apply ComBat batch correction by using the pyComBat package.
+    See https://github.com/CoAxLab/pycombat for more information.
+    
+    This function supports optional selection of samples for model 
+    fittingand allows specification of covariates to preserve or 
+    adjust for during correction.
 
-        author: BZ, CD
+    author: BZ, CD
 
-        Notes:
-        -----
-        - If the corrected data contains only NaNs, the function returns an error message in the log instead.
-        - Ensure that the covariate columns in `cov_preserve_list` and `cov_adjust_list` exist in `metadata_df`.
-        - Low variance in features or improper imputation can lead to failed correction with all NaN results.
-        
-        Parameters
-        ----------
-        data_df : pd.DataFrame
-            features (e.g. precursors) as rows, samples as columns
-        batch_key : str
-            column level to correct by (e.g. "batch")
-        fitsamples_idx_list : list, optional
-            List of sample indices to use for fitting the combat class (e.g. QC-samples only), 
-            Must be column names of profiles. 
-            The default is None, fitting with all samples.
-        cov_preserve_list : list
-            list of column levels with covariates to be left untouched
-        cov_adjust_list : list
-            list of column levels with covariates to be corrected for
-        cov_adjust_list_dtypes : list 
-            list of dtypes for covariates
+    Notes:
+    -----
+    - If the corrected data contains only NaNs, the function returns an error message in the log instead.
+    - Ensure that the covariate columns in `cov_preserve_list` and `cov_adjust_list` exist in `metadata_df`.
+    - Low variance in features or improper imputation can lead to failed correction with all NaN results.
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        features (e.g. precursors) as rows, samples as columns
+    batch_key : str
+        column level to correct by (e.g. "batch")
+    fitsamples_idx_list : list, optional
+        List of sample indices to use for fitting the combat class (e.g. QC-samples only), 
+        Must be column names of profiles. 
+        The default is None, fitting with all samples.
+    cov_preserve_list : list
+        list of column levels with covariates to be left untouched
+    cov_adjust_list : list
+        list of column levels with covariates to be corrected for
+    cov_adjust_list_dtypes : list 
+        list of dtypes for covariates
 
-        Returns
-        -------
-        Corrected feature matrix as pd.DataFrame, same shape as input profiles.
-        """
-        log_string = ""
+    Returns
+    -------
+    Corrected feature matrix as pd.DataFrame, same shape as input profiles.
+    """
+    log_string = ""
+    log_string += time.strftime(
+            "%Y-%m-%d%t%H:%M:%S"+"\tStart ComBat batch correction.\n")
+    
+    missing_values = data_df.isna()
+    if missing_values.sum().sum()>0:
         log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"+"\tStart ComBat batch correction.\n")
+                "###WARNING###: Missing values detected for ComBat. Inserting feature mean per batch temporary. The imputed values will be removed after this step.\n")
+    
+    for item in metadata_df[batch_key].unique():
+        indices_batch = metadata_df[metadata_df[batch_key]==item].index
+        imp_tmp = data_df.loc[indices_batch]
+        imp_tmp = imp_tmp.fillna(imp_tmp.median())
+        data_df.loc[imp_tmp.index] = imp_tmp
+                
+    # effects to preserve during batch correction
+    if cov_preserve_list is not None:
+        x_df = metadata_df[cov_preserve_list]
+    else:
+        x_df = None
+
+    # covariates to adjust for during batch correction
+    if cov_adjust_list is not None:
+        c_df = metadata_df[cov_adjust_list]
+        c_vars_nom = [
+            c for c, dtype in zip(
+                cov_adjust_list, cov_adjust_list_dtypes) if dtype == "nominal"]
+        c_vars_not_nom = [
+            c for c, dtype in zip(
+                cov_adjust_list, cov_adjust_list_dtypes) if dtype != "nominal"]
         
-        missing_values = data_df.isna()
-        if sum(missing_values)>0:
-            log_string += time.strftime(
-                    "###WARNING###: Missing values detected for ComBat. Inserting feature mean per batch temporary. The imputed values will be removed after this step.\n")
-        
-        for item in metadata_df[batch_key].unique():
-            indices_batch = metadata_df[metadata_df[batch_key]==item].index
-            imp_tmp = data_df.loc[indices_batch]
-            imp_tmp = imp_tmp.fillna(imp_tmp.median())
-            data_df.loc[imp_tmp.index] = imp_tmp
-                    
-        # effects to preserve during batch correction
-        if cov_preserve_list != None:
-            x_df = metadata_df[cov_preserve_list]
-        else:
-            x_df = None
+        if  len(c_vars_nom) > 0:
+            c_df = pd.concat([
+                c_df[c_vars_not_nom], 
+                pd.get_dummies(c_df[c_vars_nom].astype(str), drop_first=True)
+                        ], axis=1)
+    else:
+        c_df = None
 
-        # covariates to adjust for during batch correction
-        if cov_adjust_list != None:
-            c_df = metadata_df[cov_adjust_list]
-        else:
-            c_df = None
-
-        # Init combat Model
-        combat_model=pycombat.Combat()
-        # fit combat model on selected samples
-        if fitsamples_idx_list != None:
-            
-            log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on defined samples.\n")
-
-            Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
-            b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
-            if x_df is not None:
-                X_fit = x_df.loc[fitsamples_idx_list]
-            else:
-                X_fit = None
-            if c_df is not None:
-                C_fit = c_df.loc[fitsamples_idx_list]
-            else:
-                C_fit = None
-
-            c_fit = combat_model.fit(
-                Y=Y_fit,
-                b=b_fit,
-                X=X_fit,
-                C=C_fit
-            )
-        else:
-            log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on all samples.\n")
-
-            c_fit = combat_model.fit(
-                Y=data_df.to_numpy(),
-                b=metadata_df[batch_key].to_numpy(),
-                X=x_df, 
-                C=c_df
-            )
-
+    # Init combat Model
+    combat_model=pycombat.Combat()
+    # fit combat model on selected samples
+    if fitsamples_idx_list is not None:
         log_string += time.strftime(
-                    "%Y-%m-%d%t%H:%M:%S"+"\tTransform data.\n")
+                "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on defined samples.\n")
 
-        samples_all = data_df.index
-        Y_all = data_df.to_numpy()
-        
-        if fitsamples_idx_list != None:
-            b_all =  metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
+        Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
+        b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
+        if x_df is not None:
+            X_fit = x_df.loc[fitsamples_idx_list]
         else:
-            b_all = metadata_df[batch_key].to_numpy()
-        
-        X_all = x_df.loc[samples_all] if x_df != None else None
-        C_all = c_df.loc[samples_all] if c_df != None else None
-
-        # Check if all samples have the same number of observations
-        if X_all != None and C_all != None:
-            assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-        elif X_all != None:
-            assert Y_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-        elif C_all != None:
-            assert Y_all.shape[0] == X_all.shape[0] == b_all.shape[0]
+            X_fit = None
+        if c_df is not None:
+            C_fit = c_df.loc[fitsamples_idx_list]
         else:
-            assert Y_all.shape[0] == b_all.shape[0]
+            C_fit = None
 
-        data_processed_arr = c_fit.transform(
-            Y=Y_all,
-            b=b_all,
-            X=X_all,
-            C=C_all
+        c_fit = combat_model.fit(
+            Y=Y_fit,
+            b=b_fit,
+            X=X_fit,
+            C=C_fit
+        )
+    else:
+        log_string += time.strftime(
+                "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on all samples.\n")
+
+        c_fit = combat_model.fit(
+            Y=data_df.to_numpy(),
+            b=metadata_df[batch_key].to_numpy(),
+            X=x_df, 
+            C=c_df
         )
 
-        data_processed_df = pd.DataFrame(
-            data_processed_arr,
-            index=data_df.index,
-            columns=data_df.columns)
-        
-        data_processed_df[missing_values] = np.nan
+    log_string += time.strftime(
+                "%Y-%m-%d%t%H:%M:%S"+"\tTransform data.\n")
 
-        # Check if output df consists of NA's exclusively
-        # if so return error in Log and don't return processed df
-        if data_processed_df.isna().all().all():
-            log_string += "###ERROR###: All Values in DF were transformed to NA.\n"\
-                    +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance."  + "\n"
-            return log_string
-        else:
-            log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"\
-                +"\tFinished COMBAT batch correction successfully.\n")
+    samples_all = data_df.index
+    Y_all = data_df.to_numpy()
+    
+    if fitsamples_idx_list is not None:
+        b_all =  metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
+    else:
+        b_all = metadata_df[batch_key].to_numpy()
+    
 
-            return data_processed_df, log_string
+    X_all = x_df.loc[samples_all] if x_df is not None else None
+    C_all = c_df.loc[samples_all] if c_df is not None else None
+
+    # Check if all samples have the same number of observations
+    if X_all is not None and C_all is not None:
+        assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+    elif X_all is not None:
+        assert Y_all.shape[0] == X_all.shape[0] == b_all.shape[0]
+    elif C_all is not None:
+        assert Y_all.shape[0] == C_all.shape[0] == b_all.shape[0]
+    else:
+        assert Y_all.shape[0] == b_all.shape[0]
+
+    data_processed_arr = c_fit.transform(
+        Y=Y_all,
+        b=b_all,
+        X=X_all,
+        C=C_all
+    )
+
+    data_processed_df = pd.DataFrame(
+        data_processed_arr,
+        index=data_df.index,
+        columns=data_df.columns)
+    
+    data_processed_df[missing_values] = np.nan
+
+    # Check if output df consists of NA's exclusively
+    # if so return error in Log and don't return processed df
+    if data_processed_df.isna().all().all():
+        log_string += "###ERROR###: All Values in DF were transformed to NA.\n"\
+                +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance."  + "\n"
+        return log_string
+    else:
+        log_string += time.strftime(
+            "%Y-%m-%d%t%H:%M:%S"\
+            +"\tFinished COMBAT batch correction successfully.\n")
+
+        return data_processed_df, log_string
         
 def get_min_samples(m):
     """
@@ -345,6 +358,8 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
     # iterate over features
     for idx in data_df.columns:
         metadata_vars = [] # collect variables that show significant associations with feature
+        
+        
         for metadata_var, dt in zip(adjust_cols_list,adjust_cols_dtypes_list):
             # remove missing values and define common samples in meta and feature data
             samples_meta = metadata_df.loc[samples_idx_list, metadata_var].dropna()
@@ -379,9 +394,10 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
 
+
             # check if ordinal or nomonal variable groups have at 
             # do not check association if <5 samples per group
-            elif (dt == "ordinal") or (dt=="nominal"):
+            if (dt == "ordinal") or (dt=="nominal"):
                 if any([len(x) for x in samples_idx_test_list]) < min_samples:
                     log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
                         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
@@ -391,62 +407,57 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                     corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                     corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
             
-
-            else:
-                samples_test_list = [data_df.loc[x, idx] for x in samples_idx_test_list]
-            
-                #test for significant associations/correlations
-                if dt=="nominal":
-                    if len(metadata_df.loc[common_samples,metadata_var].unique())==2:
-                        # cast metadata variable to boolean for pointbiserial
-                        if metadata_df.loc[common_samples,metadata_var].dtype not in [bool, float]:
-                            levels_var = metadata_df.loc[common_samples,metadata_var].unique()
-                            metadata_df[metadata_var] = metadata_df[metadata_var].replace(
-                                {levels_var[0]:True, levels_var[1]:False})
-                        # Point biserial correlation + one way ANOVA
-                        
-                        association, pval_corr = stats.pointbiserialr(
-                            metadata_df.loc[common_samples,metadata_var],
-                            data_df.loc[common_samples, idx])
-                        pval_test = stats.f_oneway(*samples_test_list).pvalue
-                        pval = pval_test
-                        if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
-                            log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
-                        corr_df.loc[idx,coef_type_str + metadata_var] = association
-                    elif len(metadata_df.loc[common_samples,metadata_var].unique())<2:
-                        #no association possible with one value per variable
-                        association=0
-                        pval=1
-                    else:
-                        pval=stats.f_oneway(*samples_test_list).pvalue
-                
-                elif dt == "ordinal":
-                    #Spearman correlation + one way ANOVA
-                    association, pval_corr = stats.spearmanr(
-                        metadata_df.loc[common_samples, metadata_var],
+            samples_test_list = [data_df.loc[x, idx] for x in samples_idx_test_list]
+            #test for significant associations/correlations
+            if dt=="nominal":
+                if len(metadata_df.loc[common_samples,metadata_var].unique())==2:
+                    # cast metadata variable to boolean for pointbiserial
+                    if metadata_df.loc[common_samples,metadata_var].dtype not in [bool, float]:
+                        levels_var = metadata_df.loc[common_samples,metadata_var].unique()
+                        metadata_df[metadata_var] = metadata_df[metadata_var].replace(
+                            {levels_var[0]:True, levels_var[1]:False})
+                    # Point biserial correlation + one way ANOVA
+                    
+                    association, pval_corr = stats.pointbiserialr(
+                        metadata_df.loc[common_samples,metadata_var],
                         data_df.loc[common_samples, idx])
-                    pval_test=stats.f_oneway(*samples_test_list).pvalue
+                    pval_test = stats.f_oneway(*samples_test_list).pvalue
                     pval = pval_test
                     if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
                         log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
-                    corr_df.loc[idx,coef_type_str + metadata_var]=association
-
-                elif dt =="continuous":
-
-                    
-                    #Pearson correlation
-                    association, pval=stats.pearsonr(
-                        metadata_df.loc[common_samples, metadata_var],
-                        data_df.loc[common_samples, idx])
                     corr_df.loc[idx,coef_type_str + metadata_var] = association
+                elif len(metadata_df.loc[common_samples,metadata_var].unique())<2:
+                    #no association possible with one value per variable
+                    association=0
+                    pval=1
                 else:
-                    pass
+                    pval=stats.f_oneway(*samples_test_list).pvalue
+            
+            elif dt == "ordinal":
+                #Spearman correlation + one way ANOVA
+                association, pval_corr = stats.spearmanr(
+                    metadata_df.loc[common_samples, metadata_var],
+                    data_df.loc[common_samples, idx])
+                pval_test=stats.f_oneway(*samples_test_list).pvalue
+                pval = pval_test
+                if (pval_test<=alpha_significance and pval_corr>alpha_significance) or (pval_test>alpha_significance and pval_corr<=alpha_significance):
+                    log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
+                corr_df.loc[idx,coef_type_str + metadata_var]=association
 
-                # if p-value of association test below significance value 
-                # variable will be stored for later adjustment
-                if pval < alpha_significance:
-                    metadata_vars.append(metadata_var)
-                corr_df.loc[idx, "pval_"+ metadata_var] = pval
+            elif dt =="continuous":
+                #Pearson correlation
+                association, pval=stats.pearsonr(
+                    metadata_df.loc[common_samples, metadata_var],
+                    data_df.loc[common_samples, idx])
+                corr_df.loc[idx,coef_type_str + metadata_var] = association
+            else:
+                pass
+
+            # if p-value of association test below significance value 
+            # variable will be stored for later adjustment
+            if pval < alpha_significance:
+                metadata_vars.append(metadata_var)
+            corr_df.loc[idx, "pval_"+ metadata_var] = pval
 
     return corr_df, log_string
 
@@ -971,7 +982,7 @@ if __name__ == "__main__":
     metadata_df.set_index(parameters_dict["metadata_sample_column"], inplace=True, drop=False)
    
     # -------------------------------------------------------------------------#
-    # Check Compatibility of feature and meta data                             #
+    # Check Compatibility of feature data and meta data                        #
     # -------------------------------------------------------------------------#
     
     # check if batchcolumns in metafile
@@ -1034,16 +1045,21 @@ if __name__ == "__main__":
                 samples_na_list = list(
                     metadata_df[metadata_df[batch_col].isna()].index)
                 warning_na_meta_str = \
-                    f"###WARNING###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
-                    + "\n\t\t\t\tFollowing sample(s) has/have been dropped for analysis:\n\t\t\t\t" \
+                    f"###ERROR###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
                     + "\n\t\t\t\t".join(samples_na_list) + "\n"
-                log_string += warning_na_meta_str
+                if "###ERROR" in log_string_batchcol:
+                    log_string += log_string_batchcol
+                    helper.logger(log_file, log_string)
+                    if exit_module:
+                        sys.exit(1)
     
                 # drop samples
                 if len(samples_na_list) > 0:
                     drop_samples = set(samples_na_list) & set(data_df.index)
                     data_df = data_df.drop(drop_samples, axis=0)
                     metadata_df = metadata_df.drop(drop_samples, axis=0)
+
+        helper.logger(log_file, log_string)
 
         # Exit module if there are multiple levels in batch_cols of meta file
         for b in parameters_dict["batch_cols_meta"]:
@@ -1055,6 +1071,74 @@ if __name__ == "__main__":
                 helper.logger(log_file, log_string)
                 if exit_module:
                     sys.exit(1)
+
+    # Add check if some precursors are not present in every batch 
+    if parameters_dict["correct_method"] in ["combat", "harmony", "adjust_confounders_batchwise"]:
+        if parameters_dict["check_feature_presence_batch"]:
+            batch_presence_th = parameters_dict["presence_batch_threshold"]
+            
+            flag_presence_batch = False
+            log_str_presence = ""
+
+            presence_dfs = dict().fromkeys(
+                parameters_dict["batch_cols_meta"], dict())
+            missing_precursors_batch = set()
+            
+            
+            # Check if presence is below th in any batch
+            for batch in parameters_dict["batch_cols_meta"]:
+                presence_batch_df = (
+                    data_df.T
+                    .notna()
+                    .groupby(metadata_df[batch])
+                    .mean()
+                )
+                if (presence_batch_df<batch_presence_th).sum(axis=1).sum() > 0:
+                    log_str_presence += f"###ERROR###: Not every precursor has a presence of >{batch_presence_th*100}% in every batch.\nThe following number of precursors are missing per batch:\n"
+                    for batch_level in presence_batch_df.index:
+                        n_missing_batch_level = (
+                            presence_batch_df<batch_presence_th).sum(axis=1).loc[batch_level]
+                        log_str_presence += f"\t {batch} {batch_level} :{n_missing_batch_level} \t\t\n"
+                    presence_dfs[batch][batch_level] = list(
+                        data_df.index[(presence_batch_df<batch_presence_th).loc[batch_level]==True]
+                        )
+                    missing_precursors_batch = missing_precursors_batch.union(set(presence_dfs[batch][batch_level]))
+                    
+                    flag_presence_batch = True
+            missing_precursors_batch = list(missing_precursors_batch)
+
+
+            if flag_presence_batch:
+                helper.logger(log_file, log_str_presence)
+            else:
+                helper.logger(log_file, f"All precursor have presence of > {batch_presence_th*100}% in all batches.")
+
+
+
+            if flag_presence_batch:
+                presence_doc_df = (
+                    pd.DataFrame(
+                        [
+                            (precursor, f"{batch}_{batch_level}")
+                            for batch, levels in presence_dfs.items()
+                            for batch_level, precursors in levels.items()
+                            for precursor in precursors
+                        ],
+                        columns=["Precursor.Id", "include_correction_batch"],
+                    )
+                    .groupby("Precursor.Id", as_index=True)
+                    .agg({"include_correction_batch":lambda x: ", ".join(sorted(set(x)))})
+                )
+                
+                # manipulate id-mapping by adding missingngess in batch
+                id_mapping_df["include_correction"] = True
+                id_mapping_df = pd.concat([id_mapping_df, presence_doc_df], axis=1)
+                id_mapping_df.loc[
+                    missing_precursors_batch, "include_correction"] = False
+
+                id_mapping_df.to_csv(
+                    os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
+                sys.exit("###ERROR###: Precursor presence in some batches below threshold!")
     
     # transpose data
     data_df = data_df.T
