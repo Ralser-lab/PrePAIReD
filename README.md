@@ -6,23 +6,28 @@ proteomics data.
 The pipeline is designed to run reproducibly using **Docker containers**
 and requires only a small number of dependencies.
 
+------------------------------------------------------------------------
+
+`<a name="top">`{=html}`</a>`{=html}
+
 # Table of Contents
 
--   Requirements
--   Installation
-    -   Docker
-    -   Java
-    -   Nextflow
-    -   Git
--   Quick Start
--   Working Directory Setup
--   Configuration Files
--   Running the Pipeline
--   Folder Structure Example
--   Troubleshooting
--   Minimal Requirements Summary
--   Support
-
+-   [Requirements](#requirements)
+-   [Installation](#installation)
+    -   [Docker Installation](#docker-installation)
+    -   [Java Installation](#java-installation)
+    -   [Nextflow Installation](#nextflow-installation)
+    -   [Git Installation](#git-installation)
+-   [Download the Pipeline](#download-the-pipeline)
+-   [Starting Docker](#starting-docker)
+-   [Working Directory Setup](#working-directory-setup)
+-   [Configuration Files](#configuration-files)
+-   [Running the Pipeline](#running-the-pipeline)
+-   [Resuming a Pipeline](#resuming-a-pipeline)
+-   [Folder Structure Example](#folder-structure-example)
+-   [Troubleshooting](#troubleshooting)
+-   [Minimal Requirements Summary](#minimal-requirements-summary)
+-   [Support](#support)
 
 ------------------------------------------------------------------------
 
@@ -34,6 +39,8 @@ You need:
 -   Docker
 -   Nextflow
 -   Git (optional but recommended)
+
+[⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
 
@@ -80,6 +87,9 @@ brew install --cask docker
 open /Applications/Docker.app
 docker --version
 ```
+
+[⬆ Back to top](#top)
+
 ------------------------------------------------------------------------
 ## Windows --- Docker Desktop (Recommended with WSL2)
 
@@ -111,6 +121,8 @@ Verify inside WSL terminal:
 docker --version
 ```
 
+[⬆ Back to top](#top)
+
 ------------------------------------------------------------------------
 
 ## Linux --- Docker via Terminal
@@ -135,6 +147,8 @@ Verify:
 ``` bash
 docker --version
 ```
+
+[⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
 
@@ -168,8 +182,396 @@ Verify:
 java -version
 ```
 
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+# Nextflow Installation
+
+Official documentation:  
+https://www.nextflow.io/docs/latest/getstarted.html
+
+Nextflow requires **Java (JDK 11 or newer)**.
+
+---
+
+# macOS Installation
+
+Download Nextflow using curl:
+
+```bash
+curl -s https://get.nextflow.io | bash
+```
+
+Move the executable to your system path:
+
+```bash
+sudo mv nextflow /usr/local/bin/
+```
+
+Verify installation:
+
+```bash
+nextflow -version
+```
+
+[⬆ Back to top](#top)
+
+---
+
+# Linux Installation
+
+Download Nextflow:
+
+```bash
+curl -s https://get.nextflow.io | bash
+```
+
+Move Nextflow to your system path:
+
+```bash
+sudo mv nextflow /usr/local/bin/
+```
+
+Verify installation:
+
+```bash
+nextflow -version
+```
+
+[⬆ Back to top](#top)
+
+---
+
+# Windows Installation (WSL2 Recommended)
+
+Nextflow runs best in **Windows Subsystem for Linux (WSL)**.
+
+---
+
+## 1. Install WSL2
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+wsl --install
+```
+
+Restart your computer if required.
+
+---
+
+## 2. Open the WSL Terminal (Ubuntu)
+
+Install Java:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y openjdk-17-jre
+```
+
+Verify installation:
+
+```bash
+java -version
+```
+
+---
+
+## 3. Install Nextflow
+
+Download Nextflow:
+
+```bash
+curl -s https://get.nextflow.io | bash
+```
+
+Move Nextflow to the system path:
+
+```bash
+sudo mv nextflow /usr/local/bin/
+```
+
+Verify installation:
+
+```bash
+nextflow -version
+```
+
+---
+
+# Verify Installation
+
+Run the following command:
+
+```bash
+nextflow -version
+```
+
+If the installation was successful, the Nextflow version will be printed.
+
+[⬆ Back to top](#top)
+
 ------------------------------------------------------------------------
 
+# Git Installation
+
+Optional but recommended.
+
+``` bash
+# macOS
+brew install git
+
+# Linux / WSL
+sudo apt-get install -y git
+```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Download the Pipeline
+
+Clone the repository:
+
+``` bash
+git clone https://github.com/Ralser-lab/Preprocessing.git
+cd Preprocessing
+```
+
+Or download manually via GitHub **Code → Download ZIP**.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Starting Docker
+
+Docker must be running before starting the pipeline.
+
+### macOS / Windows
+
+Start Docker Desktop.
+
+### Linux
+
+``` bash
+sudo systemctl start docker
+```
+
+Verify:
+
+``` bash
+docker info
+```
+
+### Docker Images
+
+You **do not need to manually download images**.\
+Nextflow automatically pulls the required Docker image when the pipeline
+starts.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Working Directory Setup
+
+Create a working directory where configuration files and results will be
+stored.
+
+Example:
+
+``` bash
+mkdir -p "/Users/**username**/Desktop/test pipeline"
+```
+
+⚠️ If your path contains spaces, always use quotes.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Configuration Files
+
+Your working directory must contain the following files:
+
+    test pipeline/
+    ├── parameters.txt
+    ├── config_evaluation.txt
+    ├── Config_data.txt
+    └── Config.txt
+
+These files define:
+
+  File                    Purpose
+  ----------------------- --------------------------
+  parameters.txt          Pipeline parameters
+  config_evaluation.txt   Evaluation settings
+  Config_data.txt         Input/output paths
+  Config.txt              Preprocessing step order
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+## Configure Data Paths
+
+Edit `Config_data.txt`:
+
+``` txt
+WORKING_PATH = "/Users/**username**/Desktop/test pipeline"
+ORIGINALDATA = "/Users/**username**/Desktop/Data/diann.tsv"
+METADATA     = "/Users/**username**/Desktop/Data/Metadata.tsv"
+```
+
+Make sure:
+
+-   Paths exist on your system
+-   Use quotes if paths contain spaces
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+## Configure Preprocessing Steps
+
+Example `config.txt`:
+
+``` txt
+Run = new
+order = 01_FILTERING_LONG_py, 02_FILTERING_WIDE_py, 03_NORMALISATION_py, 04_IMPUTATION_py, 05_CORRECTION_py, 06_SUMMARISATION_py
+```
+or in case of rerun
+``` txt
+Run = 02_FILTERING_WIDE_py
+order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATION_py
+```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Running the Pipeline
+
+Navigate to the working directory:
+
+``` bash
+cd "/Users/username/Desktop/test_pipeline"
+```
+
+Run pipeline:
+
+``` bash
+nextflow run /path/to/Preprocessing/nextflow.nf -profile docker
+```
+
+Example:
+
+``` bash
+nextflow run "/Users/username/.../workflow/nextflow.nf"
+```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Resuming a Pipeline
+
+Resume previous run:
+
+``` bash
+nextflow run nextflow.nf -resume
+```
+
+Resume with aggressive cleanup:
+
+``` bash
+nextflow run nextflow.nf -resume --cleanup_aggressive true
+```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Folder Structure Example
+
+    project/
+    │
+    ├── Preprocessing/        		# cloned repository
+    │   └── nextflow.nf
+    │
+    └── test pipeline/        		# working directory
+        ├── 01_FILTERING_LONG		# result folder for each module
+		│   ├── data_01.tsv			# intermediate data
+		│   ├── report.pdf			# report file include all report till this step
+		│   ├── report_folder		# folder includes evaluation fiigure and the corresponding figure captions (all reported in report.pdf)
+		│   └── step_log.txt		# log file for the module to trace errors
+		├── 02_FILTERING_WIDE
+		├── 03_IMPUTATION
+		├── 04_SUMMARISATION
+		├── Parameter_Files   		# parameter direcory
+		├── parameters.txt
+        ├── config_evaluation.txt
+        ├── Config_data.txt
+        └── Config.txt
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Troubleshooting
+
+## Paths with Spaces
+
+Always wrap paths in quotes.
+
+    "/Users/name/My Folder/data.tsv"
+
+## Docker Permission Issues
+
+    sudo usermod -aG docker $USER
+
+Log out and log back in.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+## Windows Recommendation
+
+Use WSL paths instead of Windows paths.
+
+Good:
+
+    /home/user/project/
+
+Avoid:
+
+    C:\Users\user\project\
+
+------------------------------------------------------------------------
+
+# Minimal Requirements Summary
+
+You only need:
+
+-   Docker
+-   Java
+-   Nextflow
+
+Nothing else is required.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Support
+
+If you encounter issues, please open a GitHub issue in this repository.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
 
 IMPUTATION documentation
 
