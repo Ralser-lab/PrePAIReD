@@ -8,8 +8,6 @@ and requires only a small number of dependencies.
 
 ------------------------------------------------------------------------
 
-`<a name="top">`{=html}`</a>`{=html}
-
 # Table of Contents
 
 -   [Requirements](#requirements)
