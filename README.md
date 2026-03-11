@@ -23,6 +23,7 @@ and requires only a small number of dependencies.
 -   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
+-   [Example Commands](#example-commands)
 -   [Folder Structure Example](#folder-structure-example)
 -   [Troubleshooting](#troubleshooting)
 -   [Minimal Requirements Summary](#minimal-requirements-summary)
@@ -675,7 +676,7 @@ git clone https://github.com/Ralser-lab/Preprocessing.git
 cd Preprocessing
 ```
 
-Make sure Docker is running before building the image.
+Make sure [Docker is running]((#starting-docker)) before building the image. 
 
 Build the Docker image locally:
 
