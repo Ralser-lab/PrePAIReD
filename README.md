@@ -20,6 +20,7 @@ and requires only a small number of dependencies.
 -   [Starting Docker](#starting-docker)
 -   [Working Directory Setup](#working-directory-setup)
 -   [Configuration Files](#configuration-files)
+-   [Build the Docker Image](#building-Image)
 -   [Running the Pipeline](#running-the-pipeline)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
 -   [Folder Structure Example](#folder-structure-example)
@@ -444,6 +445,114 @@ or in case of rerun
 Run = 02_FILTERING_WIDE_py
 order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATION_py
 ```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Build the Docker Image
+
+Before running the pipeline, the Docker image must be built locally from the `Dockerfile` in the repository.
+
+First ensure that **Docker is installed and running**.
+
+---
+## Start Docker
+
+### macOS
+
+If you are using **Docker Desktop**, start it from Applications:
+
+```bash
+open /Applications/Docker.app
+```
+
+Verify Docker is running:
+
+```bash
+docker info
+```
+
+If you are using **Colima**, start it with:
+
+```bash
+colima start
+```
+Verify:
+
+```bash
+docker info
+```
+
+---
+
+### Windows
+
+Start **Docker Desktop** from the Start Menu.
+
+Alternatively using PowerShell:
+
+```powershell
+Start-Process "Docker Desktop"
+```
+
+Verify Docker is running:
+
+```bash
+docker info
+```
+
+---
+
+### Linux
+
+Start the Docker service:
+
+```bash
+sudo systemctl start docker
+```
+
+Enable Docker to start automatically:
+
+```bash
+sudo systemctl enable docker
+```
+
+Verify Docker is running:
+
+```bash
+docker info
+```
+
+---
+
+## Build the Docker Image
+Navigate to the repository root where the `Dockerfile` is located.
+
+```bash
+docker build --no-cache -t unified_env_all:1.0 .
+```
+
+Check that the image was created:
+
+```bash
+docker images
+```
+
+You should see something similar to:
+
+```
+REPOSITORY          TAG       IMAGE ID
+unified_env_all     1.0       <image_id>
+```
+
+---
+
+## Notes
+
+- Docker must be running before starting the pipeline.
+- The image only needs to be built once unless the `Dockerfile` changes.
+- If the image is published to a container registry, users will not need to build it locally.
 
 [⬆ Back to top](#top)
 
