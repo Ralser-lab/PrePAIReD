@@ -1,0 +1,65 @@
+name: unifiedenv
+channels:
+  - conda-forge
+  - bioconda
+  - r
+  - pytorch
+  - defaults
+
+dependencies:
+  # Python + scientific stack
+  - python=3.12
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - matplotlib=3.9.*
+  - seaborn
+  - statsmodels
+  - python-igraph
+  - tqdm    
+  - scikit-misc
+  - procps-ng 
+  - reportlab
+  - pypdf
+   
+
+  # PyTorch CPU builds (lock-file safe)
+  - pytorch=2.4.1=cpu_*
+  - torchvision=0.19.1=cpu_*
+  - torchaudio=2.4.1=cpu_*
+
+  # R + CRAN
+  - r-base=4.4
+  - r-optparse
+  - r-tidyverse
+  - r-data.table
+  - r-pheatmap
+  - r-missforest
+  - r-mice
+  - r-imputelcmd
+  
+  # Bioconductor
+  - bioconductor-deseq2
+  - bioconductor-edger
+  - bioconductor-limma
+  - bioconductor-sva
+  - bioconductor-vsn
+  - bioconductor-preprocesscore
+  - bioconductor-genefilter
+  - bioconductor-genomicranges
+  - bioconductor-summarizedexperiment
+  - bioconductor-biobase
+  - bioconductor-biocparallel
+  - bioconductor-pcamethods
+
+  # Utilities
+  - jq
+  - yq
+
+  # pip-only packages
+  - pip
+  - pip:
+      - harmony-pytorch
+      - pycombat
+      - pingouin
