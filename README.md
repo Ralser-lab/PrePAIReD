@@ -193,7 +193,7 @@ Nextflow requires **Java (JDK 11 or newer)**.
 
 ---
 
-# macOS Installation
+## macOS Installation
 
 Download Nextflow using curl:
 
@@ -217,7 +217,7 @@ nextflow -version
 
 ---
 
-# Linux Installation
+## Linux Installation
 
 Download Nextflow:
 
@@ -241,13 +241,13 @@ nextflow -version
 
 ---
 
-# Windows Installation (WSL2 Recommended)
+## Windows Installation (WSL2 Recommended)
 
 Nextflow runs best in **Windows Subsystem for Linux (WSL)**.
 
 ---
 
-## 1. Install WSL2
+### 1. Install WSL2
 
 Open **PowerShell as Administrator** and run:
 
@@ -259,7 +259,7 @@ Restart your computer if required.
 
 ---
 
-## 2. Open the WSL Terminal (Ubuntu)
+### 2. Open the WSL Terminal (Ubuntu)
 
 Install Java:
 
@@ -276,7 +276,7 @@ java -version
 
 ---
 
-## 3. Install Nextflow
+### 3. Install Nextflow
 
 Download Nextflow:
 
@@ -298,7 +298,7 @@ nextflow -version
 
 ---
 
-# Verify Installation
+### Verify Installation
 
 Run the following command:
 
