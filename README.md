@@ -20,7 +20,7 @@ and requires only a small number of dependencies.
 -   [Starting Docker](#starting-docker)
 -   [Working Directory Setup](#working-directory-setup)
 -   [Configuration Files](#configuration-files)
--   [Docker Environment Setup](#building-Image)
+-   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
 -   [Folder Structure Example](#folder-structure-example)
