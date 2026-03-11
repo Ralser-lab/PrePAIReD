@@ -554,6 +554,26 @@ unified_env_all     1.0       <image_id>
 - The image only needs to be built once unless the `Dockerfile` changes.
 - If the image is published to a container registry, users will not need to build it locally.
 
+---
+
+## Container Configuration in Nextflow
+
+Local Docker image in **Dockerfile**:
+
+``` groovy
+process.container = 'unified_env_all:1.0'
+docker.enabled = true
+```
+
+Remote container example:
+
+``` groovy
+process.container = 'ghcr.io/ralser-lab/preprocessing:1.0'
+docker.enabled = true
+```
+
+Nextflow will automatically download the container if needed.
+
 [⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
@@ -595,6 +615,127 @@ Resume with aggressive cleanup:
 ``` bash
 nextflow run nextflow.nf -resume --cleanup_aggressive true
 ```
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------
+
+# Example Commands
+
+## Option 1: Use the prebuilt GitHub container image
+
+Clone the repository and enter the directory:
+
+```bash
+git clone https://github.com/Ralser-lab/Preprocessing.git
+cd Preprocessing
+```
+
+Check that `nextflow.config` contains:
+
+```groovy
+process.container = 'ghcr.io/ralser-lab/preprocessing:1.0'
+```
+
+Move to your working data directory:
+
+```bash
+cd /Users/username/Desktop/test_data
+```
+
+Prepare the required input files in this directory:
+
+- `config_data.txt`  
+  Include:
+  - path to your input data
+  - path to your metadata
+  - working directory path
+
+- `config.txt`
+- `config_evaluation.txt`
+- `Parameters.txt`
+
+Run the pipeline using the absolute path to the workflow:
+
+```bash
+nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" -profile docker
+```
+
+---
+
+## Option 2: Build the Docker image locally
+
+Clone the repository and enter the directory:
+
+```bash
+git clone https://github.com/Ralser-lab/Preprocessing.git
+cd Preprocessing
+```
+
+Make sure Docker is running before building the image.
+
+Build the Docker image locally:
+
+```bash
+docker build -t unified_env_all:1.0 .
+```
+
+Check that `nextflow.config` contains:
+
+```groovy
+process.container = 'unified_env_all:1.0'
+```
+
+Move to your working data directory:
+
+```bash
+cd /Users/username/Desktop/test_data
+```
+
+Prepare the required input files in this directory:
+
+- `config_data.txt`  
+  Include:
+  - path to your input data
+  - path to your metadata
+  - working directory path
+
+- `config.txt`
+- `config_evaluation.txt`
+- `Parameters.txt`
+
+Run the pipeline using the absolute path to the workflow:
+
+```bash
+nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" -profile docker
+```
+
+---
+
+## Before running
+
+Make sure the following are installed and available:
+
+- Nextflow
+- Docker
+- Git
+
+For the local-image option, also make sure the Docker application is started before running:
+
+- **macOS / Windows:** open Docker Desktop and wait until it shows Docker is running
+- **Linux:** start the Docker service if needed
+
+Example check commands:
+
+```bash
+git --version
+docker --version
+nextflow -version
+```
+
 
 [⬆ Back to top](#top)
 
