@@ -20,7 +20,7 @@ and requires only a small number of dependencies.
 -   [Starting Docker](#starting-docker)
 -   [Working Directory Setup](#working-directory-setup)
 -   [Configuration Files](#configuration-files)
--   [Build the Docker Image](#building-Image)
+-   [Docker Environment Setup](#building-Image)
 -   [Running the Pipeline](#running-the-pipeline)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
 -   [Folder Structure Example](#folder-structure-example)
@@ -450,7 +450,7 @@ order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATIO
 
 ------------------------------------------------------------------------
 
-# Build the Docker Image
+# Docker Environment Setup
 
 Before running the pipeline, the Docker image must be built locally from the `Dockerfile` in the repository.
 
@@ -526,7 +526,7 @@ docker info
 
 ---
 
-## Build the Docker Image
+## Build the Image
 Navigate to the repository root where the `Dockerfile` is located.
 
 ```bash
