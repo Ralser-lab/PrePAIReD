@@ -676,7 +676,7 @@ git clone https://github.com/Ralser-lab/Preprocessing.git
 cd Preprocessing
 ```
 
-Make sure [Docker is running]((#starting-docker)) before building the image. 
+Make sure [Docker is running](#starting-docker) before building the image. 
 
 Build the Docker image locally:
 
