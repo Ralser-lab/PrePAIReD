@@ -435,7 +435,9 @@ Make sure:
 
 ## Configure Preprocessing Steps
 
-Example `config.txt`:
+For an automatic setup of the remaining files run Initialization/parameter_generation.py (Only requirement: Python 3.9+).
+
+An example `config.txt` output will look like:
 
 ``` txt
 Run = new
