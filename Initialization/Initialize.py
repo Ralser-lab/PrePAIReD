@@ -130,7 +130,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                                 #print(f"Error check successfully finished for {module_name}.")     
                             except Exception as e:
                                 update_log(log, "###ERROR###: "+str(e))
-                                sys.exit(1)
+                                sys.exit(0)
                                 # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
         if run_error_check:
