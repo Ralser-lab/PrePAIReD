@@ -274,7 +274,7 @@ process INIT_PARAMS {
   tag "INIT_PARAMS"
   maxForks 1
 
-  publishDir { "${publish_root}" }, mode: 'copy'
+  publishDir { "${publish_root}" }, mode: 'copy', overwrite: true
 
   input:
     tuple val(publish_root),
@@ -284,30 +284,43 @@ process INIT_PARAMS {
           path(params_txt),
           path(original_data),
           path(meta_file)
-
+          
+          
   output:
-    tuple path("Parameter_Files"), path("init.done"), path("logfile_setup.txt")
+    tuple path("Parameter_Files"), path("logfile_setup.txt"), path("init.done")
 
   script:
   """
-  set -euo pipefail
+  set -uo pipefail
 
+  py_exit=0
   python "${init_script}" \\
     -w "." \\
-    -m "${meta_file}" \\
-    -d "${original_data}"
+    -m "\${meta_file}" \\
+    -d "\${original_data}" || py_exit=\\$?
+
+  test -f logfile_setup.txt
+
+  # If initialization failed, always copy the logfile first
+  if [ "\\$py_exit" -ne 0 ]; then
+      mkdir -p "${publish_root}"
+      cp -f logfile_setup.txt "\${publish_root}/"
+
+      if [ -d Parameter_Files ]; then
+          cp -r Parameter_Files "\${publish_root}/"
+      fi
+
+      if grep -Fq '###ERROR###' logfile_setup.txt; then
+          echo "Found ###ERROR### in logfile_setup.txt"
+      else
+          echo "Initialization failed without ###ERROR### marker"
+      fi
+
+      exit 100
+  fi
 
   test -d Parameter_Files
   touch init.done
-  test -f logfile_setup.txt
-
-  if grep -q '###ERROR###' logfile_setup.txt; then
-      mkdir -p "${publish_root}"
-      cp logfile_setup.txt "${publish_root}/"
-      cp -r Parameter_Files "${publish_root}/"
-      echo "Found ###ERROR### in logfile_setup.txt"
-      exit 100
-  fi
   """
 }
 
