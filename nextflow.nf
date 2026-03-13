@@ -286,7 +286,7 @@ process INIT_PARAMS {
           path(meta_file)
 
   output:
-    tuple path("Parameter_Files"), path("init.done")
+    tuple path("Parameter_Files"), path("init.done"), path("logfile_setup.txt")
 
   script:
   """
@@ -299,6 +299,15 @@ process INIT_PARAMS {
 
   test -d Parameter_Files
   touch init.done
+  test -f logfile_setup.txt
+
+  if grep -q '###ERROR###' logfile_setup.txt; then
+      mkdir -p "${publish_root}"
+      cp logfile_setup.txt "${publish_root}/"
+      cp -r Parameter_Files "${publish_root}/"
+      echo "Found ###ERROR### in logfile_setup.txt"
+      exit 100
+  fi
   """
 }
 
@@ -512,7 +521,7 @@ workflow GENERATED {
       ))
     )
     
-    def ch0 = init_ch.map { param_dir, init_done ->
+    def ch0 = init_ch.map { param_dir, init_done, setup_log ->
       [
         file("${seed_data.getAbsolutePath()}"),
         file("${seed_idmap.getAbsolutePath()}"),
