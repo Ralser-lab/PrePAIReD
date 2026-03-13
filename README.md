@@ -592,7 +592,7 @@ cd "/Users/username/Desktop/test_pipeline"
 Run pipeline:
 
 ``` bash
-nextflow run /path/to/Preprocessing/nextflow.nf -profile docker
+nextflow run /path/to/Preprocessing/nextflow.nf 
 ```
 
 Example:
@@ -664,7 +664,7 @@ Prepare the required input files in this directory:
 Run the pipeline using the absolute path to the workflow:
 
 ```bash
-nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" -profile docker
+nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" 
 ```
 
 ---
@@ -713,7 +713,7 @@ Prepare the required input files in this directory:
 Run the pipeline using the absolute path to the workflow:
 
 ```bash
-nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" -profile docker
+nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" 
 ```
 
 ---
