@@ -608,8 +608,8 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     """    
     
     if use_mask_values:
-        mask.fillna("0",inplace=True)
-        mask_values = list(set(pd.melt(mask)["value"].values)^set("0"))
+        mask.fillna(0,inplace=True)
+        mask_values = list(set(pd.melt(mask)["value"].values)^set([0]))
         mask_values.sort()
     else:
         description_dict = {mask_description.loc[index,"value"]:index for index in mask_description.index}
