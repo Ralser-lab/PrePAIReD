@@ -410,6 +410,9 @@ These files define:
   Config_data.txt         Input/output paths
   Config.txt              Preprocessing step order
 
+Run parameter_generation.py to generate all configuration files as well as 
+the parameter file except Config_data.txt.
+
 [⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
