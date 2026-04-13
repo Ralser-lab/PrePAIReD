@@ -960,7 +960,7 @@ def annotate_metadata_to_profiles(profiles, metadata_df, sample_col="Sample.ID")
     return(profiles)
 
 
-def create_imputation_table(metadata_df,sample_hierarchies,missingness_thresholds="1/3;0.3;0.25_0.3",data_df=None,metadata_sample_column="Sample.Name",default_impu_method_ProtAbsence="knn",default_impu_method_MAR="knn",default_impu_method_MNAR="minval-noise",default_impu_method_ProtAbsenceMAR="knn",default_impu_method_ProtAbsenceMNAR="minval-noise",default_knn_k=15):
+def create_imputation_table(metadata_df,sample_hierarchies,missingness_thresholds="1/3;0.3;0.25_0.3",data_df=None,metadata_sample_column="Sample.Name",default_impu_method_ProtAbsence="knn",default_impu_method_HA="knn",default_impu_method_LA="minval-noise",default_impu_method_ProtAbsenceHA="knn",default_impu_method_ProtAbsenceLA="minval-noise",default_knn_k=15):
     """
     Create a template for an involved table to define different impuation methods across sample and precursor hierarchies.
 
@@ -978,14 +978,14 @@ def create_imputation_table(metadata_df,sample_hierarchies,missingness_threshold
         Name of the column containing sample names matching to columns in data_df. The default is "Sample.Name".
     default_impu_method_ProtAbsence : str, optional
         name of the imputation method used for missingness by 'ProtAbsence'. The default is 'knn'.
-    default_impu_method_MAR : str, optional
-        name of the imputation method used for missingness by 'MAR'. The default is 'knn'.
-    default_impu_method_MNAR : str, optional
-        name of the imputation method used for missingness by 'MNAR'. The default is 'minval-noise'.
-    default_impu_method_ProtAbsenceMAR : str, optional
-        name of the imputation method used for missingness by 'ProtAbsence/MAR'. The default is 'knn'.
-    default_impu_method_ProtAbsenceMNAR : str, optional
-        name of the imputation method used for missingness by 'ProtAbsence/MNAR'. The default is 'minval-noise'.
+    default_impu_method_HA : str, optional
+        name of the imputation method used for missingness by 'HA'. The default is 'knn'.
+    default_impu_method_LA : str, optional
+        name of the imputation method used for missingness by 'LA'. The default is 'minval-noise'.
+    default_impu_method_ProtAbsenceHA : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/HA'. The default is 'knn'.
+    default_impu_method_ProtAbsenceLA : str, optional
+        name of the imputation method used for missingness by 'ProtAbsence/LA'. The default is 'minval-noise'.
     default_knn_k : int, optional
         Default value for k used for kNN imputation.
         
@@ -1014,10 +1014,10 @@ def create_imputation_table(metadata_df,sample_hierarchies,missingness_threshold
         impu_table_df = pd.concat([impu_table_df,impu_table_part_df],axis=0,ignore_index=True)
     #set default parameter
     impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence","imputation_method"] = default_impu_method_ProtAbsence
-    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MAR","imputation_method"] = default_impu_method_ProtAbsenceMAR
-    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/MNAR","imputation_method"] = default_impu_method_ProtAbsenceMNAR
-    impu_table_df.loc[impu_table_df["missingness_type"]=="MAR","imputation_method"] = default_impu_method_MAR
-    impu_table_df.loc[impu_table_df["missingness_type"]=="MNAR","imputation_method"] = default_impu_method_MNAR
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/HA","imputation_method"] = default_impu_method_ProtAbsenceHA
+    impu_table_df.loc[impu_table_df["missingness_type"]=="ProtAbsence/LA","imputation_method"] = default_impu_method_ProtAbsenceLA
+    impu_table_df.loc[impu_table_df["missingness_type"]=="HA","imputation_method"] = default_impu_method_HA
+    impu_table_df.loc[impu_table_df["missingness_type"]=="LA","imputation_method"] = default_impu_method_LA
     impu_table_df.loc[impu_table_df["imputation_method"]=="knn","k"] = default_knn_k
     return(impu_table_df)
 
