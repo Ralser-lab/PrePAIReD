@@ -1,10 +1,12 @@
 # Preprocessing Pipeline --- Nextflow
 
 This repository contains a **Nextflow-based preprocessing workflow** for
-proteomics data.
+proteomics data. For a more detailed description and other use cases
+please check out docs/Manual_alpha_version.pdf.
 
 The pipeline is designed to run reproducibly using **Docker containers**
-and requires only a small number of dependencies.
+and requires only a small number of dependencies, but each Python or R 
+code is also designed for manual execution.
 
 ------------------------------------------------------------------------
 
@@ -403,15 +405,16 @@ Your working directory must contain the following files:
 
 These files define:
 
-  File                    Purpose
-  ----------------------- --------------------------
-  parameters.txt          Pipeline parameters
-  config_evaluation.txt   Evaluation settings
-  Config_data.txt         Input/output paths
-  Config.txt              Preprocessing step order
+| File                  | Purpose                  |
+|-----------------------|--------------------------|
+| parameters.txt        | Pipeline parameters      |
+| config_evaluation.txt | Evaluation settings      |
+| Config_data.txt       | Input/output paths       |
+| Config.txt            | Preprocessing step order |
 
-Run parameter_generation.py to generate all configuration files as well as 
-the parameter file except Config_data.txt.
+IMPORTANT: Run Initialization/parameter_generation.py to generate all configuration files 
+as well as the parameter file except Config_data.txt. If NextFlow is used, you need to use
+--docker to get proper configuration paths.
 
 [⬆ Back to top](#top)
 
