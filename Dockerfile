@@ -26,8 +26,7 @@ RUN chown -R $MAMBA_USER:$MAMBA_USER /workflow
 USER $MAMBA_USER
 
 # Install a C++ compiler into the unifiedenv (do NOT wrap micromamba install in micromamba run)
-RUN micromamba install -n unifiedenv -y -c conda-forge cxx-compiler eigen && \
-    micromamba clean --all --yes
+RUN micromamba clean --all --yes
 
 RUN micromamba run -n unifiedenv bash -lc '\
   set -eux; \
