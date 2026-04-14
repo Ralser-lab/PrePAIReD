@@ -16,12 +16,13 @@ def update_log(logfile, message):
     log.close()
 
 # support functions
-def read_dataframe_header(filepath: str, log: str, header_only = False):
+def read_dataframe(filepath: str, log: str, header_only = False, column=None):
     """
     Check if filepath exists and read the dataframe header
     :param filepath: str, path to dataframe
     :param log: str, logfile
-    :param header_only: bool
+    :param header_only: bool, if True only the header will be read
+    :column: str or None, column to be read-in
     :return: column names of the dataframe
     """
     # print(filepath)
@@ -30,19 +31,25 @@ def read_dataframe_header(filepath: str, log: str, header_only = False):
         nrows = 0
     else:
         nrows = None
+        
+    if column is not None:
+        usecols = [column]
+        columns = [column]
+    else:
+        usecols = None
+        columns = None
     
     if not isinstance(filepath, str):  # check if filepath is str
-        update_log(log,f"###ERROR###: {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
     if filepath.endswith(".xlsx"):  # read excel
         #print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
-        df = pd.read_csv(filepath, sep="\t", nrows=nrows)  # read only the first line to save time
+        df = pd.read_csv(filepath, sep="\t", nrows=nrows, usecols=usecols)  # read only the first line to save time
     elif filepath.endswith(".csv"):  # read csv files
-        df = pd.read_csv(filepath, sep=",", nrows=nrows)  # read only the first line to save time
+        df = pd.read_csv(filepath, sep=",", nrows=nrows, usecols=usecols)  # read only the first line to save time
     elif filepath.endswith(".parquet"):  # read parquet files
-        df = pd.read_parquet(filepath)  
+        df = pd.read_parquet(filepath, columns=columns)  
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
         update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
@@ -233,7 +240,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             if metadata_file[:-5] == ".xlsx":
                 sheet_existence(metadata_file, value, log=log)
         if current_operation == "existence in metadata.columns":
-            metadata_df = read_dataframe_header(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log)
             check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable, log=log)
             if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
                 multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
@@ -248,7 +255,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                     raise ValueError("File names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
             if value and len(value) >= 2:
-                metadata_df = read_dataframe_header(metadata_file, log=log)
+                metadata_df = read_dataframe(metadata_file, log=log)
                 check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
                 # print(df_cols)
                 # print(value[0])
@@ -257,20 +264,21 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 # print(series)
                 check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
         if current_operation == "existence in metadata_df.columns (; separated)":
-            metadata_df = read_dataframe_header(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log)
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "elements existence in metadata.columns":
-            metadata_df = read_dataframe_header(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log)
             for val in value:
                 check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "value in metadata[sample_type_column]":
-            metadata_df = read_dataframe_header(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log)
             check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
-                data_df = read_dataframe_header(data_file, log=log)
+                # Check wheter column exists
+                data_df = read_dataframe(data_file, log=log, header_only=True)
                 check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
                 #multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
                 #if len(multiple_files) > 0:
@@ -279,11 +287,13 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 #    raise ValueError(
                 #        f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
                 #        f"times.")
+                # read in only respective column
+                data_df = read_dataframe(data_file, log=log, column=value)
                 if data_df[value].isna().any():  # check for NaN column names
                     raise ValueError("File names contain NaN column names in data.")
                 # if file names in metadata and data are unique and without nans, check that file names are same in
                 # both files
-                metadata_df = read_dataframe_header(metadata_file, log=log)
+                metadata_df = read_dataframe(metadata_file, log=log)
                 metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
                 data_set = set(data_df[user_dict["input_filename_column"]])
                 #only_in_metadata = metadata_set - data_set
@@ -296,11 +306,11 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                                      #f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
             else:
-                data_df = read_dataframe_header(data_file, log=log, header_only=True)
+                data_df = read_dataframe(data_file, log=log, header_only=True)
                 check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
 
         if current_operation == "existence in data_df.columns (; separated)":
-            data_df = read_dataframe_header(data_file, log=log, header_only=True)
+            data_df = read_dataframe(data_file, log=log, header_only=True)
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=list(data_df.columns), module=module, variable=variable, log=log)
