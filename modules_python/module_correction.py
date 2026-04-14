@@ -1073,7 +1073,7 @@ if __name__ == "__main__":
                     sys.exit(1)
 
     # Add check if some precursors are not present in every batch 
-    if parameters_dict["correct_method"] in ["combat", "harmony", "adjust_confounders_batchwise"]:
+    if parameters_dict["correct_method"] in ["combat", "harmony"]:
         if parameters_dict["check_feature_presence_batch"]:
             batch_presence_th = parameters_dict["presence_batch_threshold"]
             
