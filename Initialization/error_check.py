@@ -51,7 +51,14 @@ def read_dataframe(filepath: str, log: str, header_only = False, column=None):
     elif filepath.endswith(".csv"):  # read csv files
         df = pd.read_csv(filepath, sep=",", nrows=nrows, usecols=usecols)  # read only the first line to save time
     elif filepath.endswith(".parquet"):  # read parquet files
-        df = pd.read_parquet(filepath, columns=columns)  
+        if columns is not None:
+            df = pd.read_parquet(filepath, columns=columns)  
+        elif nrows is not None:
+            pf = ParquetFile(filepath) 
+            first_ten_rows = next(pf.iter_batches(batch_size = 1)) 
+            df = pa.Table.from_batches([first_ten_rows]).to_pandas()
+        else:
+            df = pd.read_parquet(filepath)  
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
         update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
@@ -301,9 +308,9 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 #only_in_metadata = metadata_set - data_set
                 only_in_data = data_set - metadata_set
                 if only_in_data:
-                    update_log(log, f"###ERROR###: Differences found:\n"
-                                     #f"Only in metadata: {list(only_in_metadata)}\n"
-                                     f"Only in data: {list(only_in_data)}")
+                    #update_log(log, f"###ERROR###: Differences found:\n"
+                    #                 #f"Only in metadata: {list(only_in_metadata)}\n"
+                    #                 f"Only in data: {list(only_in_data)}")
                     raise ValueError(f"Differences found:\n"
                                      #f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
