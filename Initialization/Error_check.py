@@ -40,6 +40,7 @@ def read_dataframe(filepath: str, log: str, header_only = False, column=None):
         columns = None
     
     if not isinstance(filepath, str):  # check if filepath is str
+        update_log(log,f"###ERROR###: {filepath} is not a string.") 
         raise TypeError(f"{filepath} is not a string.")
     if filepath.endswith(".xlsx"):  # read excel
         #print(filepath)
