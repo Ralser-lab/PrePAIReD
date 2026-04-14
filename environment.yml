@@ -2,9 +2,7 @@ name: unifiedenv
 channels:
   - conda-forge
   - bioconda
-  - r
   - pytorch
-  - defaults
 
 dependencies:
   # Python + scientific stack
@@ -22,8 +20,12 @@ dependencies:
   - procps-ng 
   - reportlab
   - pypdf
-   
-
+  - pyarrow
+  - fastparquet 
+  - openpyxl 
+  - cxx-compiler
+  - eigen
+  
   # PyTorch CPU builds (lock-file safe)
   - pytorch=2.4.1=cpu_*
   - torchvision=0.19.1=cpu_*
