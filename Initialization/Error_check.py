@@ -4,7 +4,8 @@
 import os
 import numpy as np
 import pandas as pd
-
+from pyarrow.parquet import ParquetFile
+import pyarrow as pa
 
 # test data
 # metadata_file = "Test_data/Metadata.xlsx"
