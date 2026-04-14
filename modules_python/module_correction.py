@@ -1217,6 +1217,7 @@ if __name__ == "__main__":
             fitsamples_idx_list=fitsamples_idx_list,
             cov_preserve_list = parameters_dict["combat_cols_preserve_meta"],
             cov_adjust_list = parameters_dict["combat_cols_adjust_meta"],
+            cov_adjust_list_dtypes = parameters_dict["combat_cols_adjust_dtypes"]
         )
         if isinstance(out, str) and "ERROR" in out:
             log_string_combat = out 
