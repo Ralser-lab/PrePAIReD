@@ -354,7 +354,10 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
     # collect associations with meta data variables
     corr_df=pd.DataFrame(index=data_df.columns)
     corr_df.sort_index(inplace=True)
-    
+
+    #define minimum number of samples needed for fitting (rule of thumb)
+    min_samples = get_min_samples(len(adjust_cols_list))
+            
     # iterate over features
     for idx in data_df.columns:
         metadata_vars = [] # collect variables that show significant associations with feature
@@ -368,9 +371,6 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
 
             samples_idx_test_list= [list(metadata_df[metadata_df[metadata_var]==x].index) for x in metadata_df[metadata_var].unique()]
             samples_idx_test_list = [list(set(x) & set(common_samples)) for x in samples_idx_test_list]
-            
-            #define minimum number of samples needed for fitting (rule of thumb)
-            min_samples = get_min_samples(len(metadata_vars))
             
             # correlation coefficient to be calculated depending on datatype
             coef_type_str = ""
@@ -387,25 +387,27 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
                 pass
 
             # check how many samples are available per feature
-            # do not check association if <5
+            # do not check association if < min_samples
             if len(common_samples) < min_samples:
                 # log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
                 #         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
+                continue
 
 
-            # check if ordinal or nomonal variable groups have at 
-            # do not check association if <5 samples per group
+            # check if ordinal or nominal variable groups have at 
+            # do not check association if < min_samples samples per group
             if (dt == "ordinal") or (dt=="nominal"):
                 if any([len(x) for x in samples_idx_test_list]) < min_samples:
-                    log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than 5 samples.\n" \
+                    log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than {min_samples} samples.\n" \
                         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
 
                     
                     # save nan if sample size was not sufficient
                     corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                     corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
+                    continue
             
             samples_test_list = [data_df.loc[x, idx] for x in samples_idx_test_list]
             #test for significant associations/correlations
