@@ -52,6 +52,7 @@ def init_module():
         raise ValueError("###ERROR###: Output path not existing")  
         sys.exit(1)
     
+    outpath = os.path.abspath(outpath)
     outfile = os.path.join(outpath,args.output_file)
     dict_path = args.dict_path
     config_file_path = os.path.join(outpath,"Config.txt")
@@ -767,7 +768,7 @@ if __name__ == "__main__":
     
     # Create evaluation config file
     write_evaluation_config(config_evaluation_file_path, setup_order, blocks_flags, outpath, counter, start, docker_setup)
-    print("The configuration file for evaluation is saved in "+config_file_path+".")
+    print("The configuration file for evaluation is saved in "+config_evaluation_file_path+".")
     
     # Print final statement
     print("IMPORTANT: Please set and confirm the parameters for every step and method!")
