@@ -43,6 +43,9 @@ import ast
 ## Clustermap with groups (before and after), multi layer (QC vs. biological)
 ## PCA with explained confounders (MPCA?)
 
+## More comments for main
+## _df for DataFrame (data, metadata, mask, mask_description)
+
 def log_legend(captions, key_figure, figure_path, addition=""):
     """
     Automatic logging of the captions for each figre
@@ -2039,8 +2042,8 @@ if __name__ == "__main__":
             sys.exit(0)
 
         workdir = askdirectory(title="Please select your working directory", initialdir=os.path.abspath(os.getcwd()))
-        meta_df_fp = askopenfilename(title="Please select the metadata file")       
-        config_fp = askopenfilename(title="Please select the evaluation config file")
+        meta_df_fp = askopenfilename(title="Please select the metadata file", initialdir=workdir)       
+        config_fp = askopenfilename(title="Please select the evaluation config file", initialdir=workdir)
         docker_setup = False
     
     else:
@@ -2064,8 +2067,11 @@ if __name__ == "__main__":
     if not steps:
         raise ValueError("Step could not be found")
         
-    if not docker_setup:    
-        captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
+    if not docker_setup:
+        try:
+            captions = pd.read_csv(os.path.join(os.path.split(os.path.abspath(__file__))[0],"Figures_Captions.tsv"), sep = "\t", index_col = 0)
+        except:
+            captions = pd.read_csv("./Figures_Captions.tsv", sep = "\t", index_col = 0)
     else:
         captions = pd.read_csv("Figures_Captions.tsv", sep = "\t", index_col = 0)
     
