@@ -268,8 +268,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
                 # print(df_cols)
                 # print(value[0])
-                series = metadata_df[value[0]]
-                series = series[value[0]].tolist()
+                series = metadata_df[value[0]].tolist()
+                #series = series[value[0]].tolist()
                 # print(series)
                 check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
         if current_operation == "existence in metadata_df.columns (; separated)":
