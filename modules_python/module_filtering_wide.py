@@ -414,7 +414,8 @@ def filter_proteins_by_precursor_count(data_df, id_mapping_df, min_precursors=1,
     return filtered_df, log
 '''
 
-
+#DEPRECATED
+'''
 def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precursor.Id", filter_col="Proteotypic", filter_value=True):
     """
     Exclude precursors in data_df with filter_col not equalling filter_value in id_mapping_df (precursor metadata). Can be used to filter i.e. all non-proteotypic precursors
@@ -452,6 +453,53 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
     
     #apply filtering
     keep_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[filter_col]==filter_value][precursor_col]))
+    return([data_df.loc[keep_precursors], log])
+'''
+
+def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precursor.Id", filter_col="Proteotypic", filter_value=True, operator="=="):
+    """
+    Exclude precursors in data_df with filter_col not equalling filter_value in id_mapping_df (precursor metadata). Can be used to filter i.e. all non-proteotypic precursors
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        wide-format profiles, columns are samples
+    id_mapping_df : pd.DataFrame
+        dataframe that stores mapping of precursors and proteins and additional metadata for precursors such as i.e. proteotypicity. 
+    precursor_col : str, optional
+        Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
+    filter_col : str, optional
+        name of column in id_mapping_df to perform filter on. The default is "Proteotypic".
+    filter_value : str/int/float/..., optional
+        value in filter_col specifying precursors to keep.
+    operator : str, optional
+        string that defines the operator for the filtering, e.g. "==" to filter for filter_col == filter_value or "!=" to filter for filter_col != filter_value
+
+    Returns
+    -------
+    filtered_df : pd.DataFrame
+        filtered wide-format profiles, columns are samples.
+
+    """
+    log = ""
+    
+    #check correct data types before running eval() for filtering
+    if type(id_mapping_df) != pd.DataFrame:
+        log += "###ERROR###: id_mapping_df provided to filter_precursors_by_metadata is not a dataframe.\n"
+    if operator not in ["==","!=","<",">","<=",">=","&","|"]:
+        log += "###ERROR###: Invalid operator provided to filter_precursors_by_metadata, please use one of ==, !=, <, >, <=, >=, &, | .\n"
+    #check if filter column is present
+    if filter_col not in id_mapping_df.columns:
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{filter_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+    if precursor_col not in id_mapping_df.columns:
+        log += f"###ERROR###: COLUMN KEY ERROR - column '{precursor_col}' not found in id_mapping_df. Returning unfiltered data.\n"
+    
+    # catch error and return
+    if "###ERRROR###" in log:
+        return data_df, log
+    
+    #apply filtering
+    keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+str(filter_value)+"][precursor_col]")))
     return([data_df.loc[keep_precursors], log])
 
 
@@ -991,7 +1039,8 @@ if __name__ == "__main__":
                                                                        id_mapping_df=id_mapping_df, 
                                                                        precursor_col=parameters_dict["precursor_col"], 
                                                                        filter_col=parameters_dict["precursor_filter_col"], 
-                                                                       filter_value=parameters_dict["precursor_filter_value"])
+                                                                       filter_value=parameters_dict["precursor_filter_value"],
+                                                                       operator=parameters_dict["filter_operator"])
                 
                 #catch errors
                 if "###ERROR###" in log:
