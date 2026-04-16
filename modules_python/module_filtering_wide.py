@@ -925,7 +925,10 @@ if __name__ == "__main__":
                     helper.logger(log_file,log)
                     if exit_module:
                         sys.exit(log)
-                    
+
+                #update mask_description_df
+                mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Peptides", value="Min. " + str(parameters_dict["min_peptides"]) + " Peptides", regex=True)
+
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
                                                                   axis='precursors', 
@@ -959,7 +962,10 @@ if __name__ == "__main__":
                     helper.logger(log_file,log)
                     if exit_module:
                         sys.exit(log)
-               
+
+                #update mask_description_df
+                mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Precursors", value="Min. " + str(parameters_dict["min_precursors"]) + " Precursors", regex=True)
+
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
                                                                   axis='precursors', 
