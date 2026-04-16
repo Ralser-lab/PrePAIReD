@@ -996,7 +996,7 @@ if __name__ == "__main__":
                 # update mask_df
                 mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
                                                                   axis='precursors', 
-                                                                  method=precursor_filter_col,
+                                                                  method=parameters_dict["precursor_filter_col"],
                                                                   mask_df=mask_df, 
                                                                   mask_description_df=mask_description_df, 
                                                                   pre_method_columns=pre_method_columns,
