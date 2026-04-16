@@ -15,6 +15,7 @@ import time
 import sys
 from tkinter.filedialog import askopenfilename, askdirectory
 import error_check
+import getpass
 
 def update_log(logfile, message):
     log = open(logfile, "a")
@@ -123,14 +124,15 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         
                         ## ERROR CHECK HERE FOR MODULES HERE##
                         if run_error_check:
-                            try:
+                            #try:
                                 module_name = module[3:]
                                 #print(f"Start Error check for {module_name}.")
                                 flag_var, flag_value_var = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log)
                                 #print(f"Error check successfully finished for {module_name}.")     
-                            except Exception as e:
-                                update_log(log, "###ERROR###: "+str(e))
-                                sys.exit(0)
+                            #except Exception as e:
+                            #    print(e)
+                            #    update_log(log, "###ERROR###: "+str(e))
+                            #    sys.exit(0)
                                 # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
         if run_error_check:
@@ -205,7 +207,7 @@ if __name__ == "__main__":
         #if script called from terminal
         parameters_txt_file, path_to_project_directory, module_order_filename, mass_spec_data_filename, metadata_filename = init_parser()
     try:
-        username = os.getlogin()
+        username = getpass.getuser()
     except:
         username = "NextFlow" ####
     preprocessed_filename = os.path.join(path_to_project_directory,"${counter}_${step}","data_${counter}.tsv")
