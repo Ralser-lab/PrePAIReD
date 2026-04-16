@@ -1320,7 +1320,7 @@ def save_data(data_processed_df, out_dir_fp, outname):
     return
 
 def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False, return_data_fp_only=False,
-                skip_parser=False, data_df_fp=None, param_fp=None, out_dir_fp=None, meta_df_fp=None, log_file=None, idmap_fp=None, counter=None, outname=None, report_folder="report_folder"):
+                skip_parser=False, data_df_fp=None, param_fp=None, out_dir_fp=None, meta_df_fp=None, log_file=None, idmap_fp=None, counter=None, outname=None):
     """
     Initialized the module and reads in all necessary data and arguments.
 
@@ -1354,9 +1354,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         If skip_parser==True required. Counter for the step, used to modfiy the seed and output file naming.
     outname : str, optional
         If skip_parser==True required. Name of the output file: data_${counter}.tsv using a two digit counter.
-	report_folder : str, optional
-        Name of the folder (just the folder, not the directory to it) for quality assesment per module. The directory will be defined as out_dir_fp / report_folder /. The default is "report_folder".
-
+	
     Returns
     -------
     data_df : pd.DataFrame()
@@ -1408,12 +1406,6 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
     else:
        parser = get_parser() 
        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
-    # Check if out_dir_fp is existent, else create
-    if not os.path.exists(out_dir_fp):
-        os.mkdir(out_dir_fp)
-    # Check if report_folder exists, if not create
-    if not os.path.exists(os.path.join(out_dir_fp,report_folder)):
-        os.mkdir(os.path.join(out_dir_fp,report_folder))
 	# Load data
     if not return_data_fp_only:
         logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + ".\n")
@@ -1504,7 +1496,7 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
     if exit_module:
         sys.exit(0)
 
-def skip_parser_init(module):
+def skip_parser_init(module, report_folder="report_folder"):
     """
     Import of neccessary files for module initialization if a module is called within python directly without parser.
 
@@ -1512,6 +1504,8 @@ def skip_parser_init(module):
     ----------
     module : str
         name of calling module, e.g. "NORMALISATION".
+	report_folder : str, optional
+        Name of the folder (just the folder, not the directory to it) for quality assesment per module. The directory will be defined as out_dir_fp / report_folder /. The default is "report_folder".
 
     Returns
     -------
@@ -1544,6 +1538,12 @@ def skip_parser_init(module):
     out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
     log_file = askopenfilename(title="Please select your log_file",initialdir=workdir_fp)
     idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
+	# Check if out_dir_fp is existent, else create
+    if not os.path.exists(out_dir_fp):
+        os.mkdir(out_dir_fp)
+    # Check if report_folder exists, if not create
+    if not os.path.exists(os.path.join(out_dir_fp,report_folder)):
+        os.mkdir(os.path.join(out_dir_fp,report_folder))
     ### TODO
     ### Implement file exist check here with if/else and askopenfilename
     outname = "data_"+"{:02d}".format(int(counter))+".tsv"
