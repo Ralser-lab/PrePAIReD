@@ -451,7 +451,7 @@ def create_logfile(logfilename,ids,savefilename,analysis_folder,profile_annotati
     
 
 #create a matrix with precursors as rows and files/runs/samples/fractions as columns to keep track of filtered and imputed precursors
-def create_filtering_matrix(file,metadata_df,min_peptides,min_precursors,values,ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
+def create_filtering_matrix(file,metadata_df,min_peptides="XXX",min_precursors="XXX",values="Precursor.Quantity",ids="Precursor.Id",filename_col="filename",diann_sample_column="File.Name"):
     """
     Creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
     
@@ -463,12 +463,12 @@ def create_filtering_matrix(file,metadata_df,min_peptides,min_precursors,values,
         DIA-NN output report.tsv.
     metadata_df : pd.DataFrame
         Metadata mapping File.Name to shorter run names.
-    min_peptides : int
-        minimum number of peptides required to quantify a protein.
-    min_precursors : int
-        minimum number of precursors required to quantify a protein.
-    values : str
-        values extracted from DIA-NN report.tsv, e.g. Precursor.Quantity.
+    min_peptides : int or str, optional
+        minimum number of peptides required to quantify a protein. The default is "XXX" used for filling the value in a later module.
+    min_precursors : int or str, optional
+        minimum number of precursors required to quantify a protein. The default is "XXX" used for filling the value in a later module.
+    values : str, optional
+        values extracted from DIA-NN report.tsv. The default is "Precursor.Quantity".
     ids : list, optional
         list of ids extracted from DIA-NN report.tsv. The default is ["Precursor.Id","Stripped.Sequence","Protein.Group","Genes"].
     filename_col : str, optional
