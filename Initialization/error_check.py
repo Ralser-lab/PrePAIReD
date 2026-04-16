@@ -519,7 +519,10 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                 else:
                     pass
         else:
-            dict_to_use = operation_dictionary[current_flag][current_flag_value][variable]
+            try:
+                dict_to_use = operation_dictionary[current_flag][current_flag_value][variable]
+            except:
+                update_log(log,f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.") 
             #print(dict_to_use)
 
    #print(value, type(value))
