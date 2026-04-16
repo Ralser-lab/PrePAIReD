@@ -251,17 +251,17 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
         if current_operation == "existence in metadata.columns":
             metadata_df = read_dataframe(metadata_file, log=log)
             check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable, log=log)
-            if variable == "metadata_filename_column":  # add check for uniqueness and nans in file.name column
+            if variable in ["metadata_filename_column","metadata_sample_column"]:  # add check for uniqueness and nans in file.name column
                 multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
                 if len(multiple_files) > 0:
-                    update_log(log, f"###ERROR###: File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                    update_log(log, f"###ERROR###: File or sample names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
                      f"times.") 
                     raise ValueError(
-                        f"File names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                        f"File or samples names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
                         f"times.")
                 if metadata_df[value].isna().any():  # check for NaN column names
-                    update_log(log, "###ERROR###: File names contain NaN column names in metadata.") 
-                    raise ValueError("File names contain NaN column names in metadata.")
+                    update_log(log, "###ERROR###: File or sample names contain NaN column names in metadata.") 
+                    raise ValueError("File or sample names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
             if value and len(value) >= 2:
                 metadata_df = read_dataframe(metadata_file, log=log)
