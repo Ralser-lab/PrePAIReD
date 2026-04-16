@@ -1001,7 +1001,7 @@ def create_imputation_table(metadata_df,sample_hierarchies,missingness_threshold
         samples = metadata_df[metadata_sample_column]
     impu_table_df = pd.DataFrame(columns=sample_hierarchies + ["missingness_thresh","missingness_type","imputation_method","k"]) #TODO #add parameters for imputation methods
     #create dataframe storing classes (integers) for different missingness types
-    missingness_types = ["ProtAbsence","MAR","MNAR","ProtAbsence/MAR","ProtAbsence/MNAR"]
+    missingness_types = ["ProtAbsence","HA","LA","ProtAbsence/HA","ProtAbsence/LA"]
     
     for s,sample_hierarchy in enumerate(sample_hierarchies):
         sample_hierarchy_values = metadata_df[metadata_df[metadata_sample_column].isin(samples)][sample_hierarchy].dropna().unique()
