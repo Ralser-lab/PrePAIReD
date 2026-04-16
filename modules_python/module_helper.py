@@ -1539,7 +1539,7 @@ def skip_parser_init(module):
         data_df_fp = askopenfilename(title="Please select your DIA-NN output report",initialdir=workdir_fp)
     else:
         data_df_fp = askopenfilename(title="Please select your wide-format data",initialdir=workdir_fp)
-    meta_df_fp = askopenfilename(title="Please select your metadata file")
+    meta_df_fp = askopenfilename(title="Please select your metadata file",initialdir=workdir_fp)
     param_fp = os.path.join(workdir_fp, "Parameter_Files", "{:02d}".format(int(counter))+"_"+module+"_Parameters.json")
     out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
     log_file = askopenfilename(title="Please select your log_file",initialdir=workdir_fp)
