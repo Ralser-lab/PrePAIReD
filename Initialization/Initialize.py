@@ -75,10 +75,10 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
             else:
                 current_parameters_file.write(line)  # add specific parameters
                 if not metadata_file:
-                    if line.split("=")[0].strip() in ["metadata_filename_column","metadata_sample_column"]:
-                        metadata_columns.append(line.split("=")[1].strip())
-                    if line.split("=")[0].strip() in ["input_filename_column"]:
-                        input_filename_column_mdg = line.split("=")[1].strip()
+                    if line.split("=", 1)[0].strip() in ["metadata_filename_column","metadata_sample_column"]:
+                        metadata_columns.append(line.split("=", 1)[1].strip())
+                    if line.split("=", 1)[0].strip() in ["input_filename_column"]:
+                        input_filename_column_mdg = line.split("=", 1)[1].strip()
 
         current_parameters_file.close()
         
