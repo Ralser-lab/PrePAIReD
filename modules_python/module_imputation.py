@@ -933,6 +933,7 @@ if __name__ == "__main__":
                 log += "\t\t\t\t" +  str(np.round(protmissing_counter[parameters_dict["missingness_type_protein_absence"]]/sum(protmissing_counter.values())*100,2)) + "% of values are defined as missing due to protein absence.\n"
             else:
                 protmissing_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+                protmissing_mask_df[pd.isna(data_df)] = "simple"
             helper.logger(log_file, module_output=log)
             if parameters_dict["eval_missingness_by_detection_threshold"]:
                 
@@ -990,11 +991,24 @@ if __name__ == "__main__":
                     regression_df.to_csv(os.path.join(out_dir_fp, "intensity_dependent_missingness_estimation_plot_data.tsv"),sep="\t")
             else:
                 ha_la_mask_df = pd.DataFrame(index=data_df.index,columns=data_df.columns,data="")
+                ha_la_mask_df[pd.isna(data_df)] = "simple"
             # combine masks if any distinguishment of missingness
             if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
+                #combine masks
                 imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + ha_la_mask_df.loc[data_df.index,data_df.columns]
+                #if one category of missingness evaluation (protein presence or ha/la) is not applied, keep "simple" imputation for precursors that do not fall into other category
+                if not parameters_dict["eval_missingness_on_protein_presence"]:
+                    imputation_mask_df = imputation_mask_df.replace({"simple/HA":"HA","simple/LA":"LA"})
+                if not parameters_dict["eval_missingness_by_detection_threshold"]:
+                    imputation_mask_df = imputation_mask_df.replace(parameters_dict["missingness_type_protein_absence"]+"/simple",parameters_dict["missingness_type_protein_absence"])
                 #replace / in beginning or end
-                imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True)
+                #imputation_mask_df = imputation_mask_df.replace(["^/","/$"],"",regex=True) #does the same but slower
+                imputation_mask_df = imputation_mask_df.replace({"/":"",
+                                                                 parameters_dict["missingness_type_protein_absence"]+"/":parameters_dict["missingness_type_protein_absence"],
+                                                                 "/HA":"HA",
+                                                                 "/LA":"LA",
+                                                                 "simple/":"simple",
+                                                                 "/simple":"simple"})    
                 #reset index to precursor id
                 imputation_mask_df.index = imputation_mask_df.index.get_level_values(parameters_dict["precursor_col"])
                 if parameters_dict["save_intermediate_output_for_QA"]:
@@ -1071,9 +1085,9 @@ if __name__ == "__main__":
                                 
                                 #IMPUTATION FUNCTION CALLS
                                 if imputation_method == "knn":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
                                 elif imputation_method == "knn-ML":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                                 elif imputation_method == "minval-noise":
                                     data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                                 elif imputation_method == "minval":
