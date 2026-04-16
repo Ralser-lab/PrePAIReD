@@ -124,15 +124,15 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         
                         ## ERROR CHECK HERE FOR MODULES HERE##
                         if run_error_check:
-                            #try:
+                            try:
                                 module_name = module[3:]
                                 #print(f"Start Error check for {module_name}.")
                                 flag_var, flag_value_var = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log)
                                 #print(f"Error check successfully finished for {module_name}.")     
-                            #except Exception as e:
-                            #    print(e)
-                            #    update_log(log, "###ERROR###: "+str(e))
-                            #    sys.exit(0)
+                            except Exception as e:
+                                #print(e)
+                                update_log(log, "###ERROR###: "+str(e))
+                                sys.exit(0)
                                 # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
         if run_error_check:
