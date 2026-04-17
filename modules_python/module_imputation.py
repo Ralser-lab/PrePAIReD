@@ -1071,9 +1071,13 @@ if __name__ == "__main__":
                                 if missingness_type == "simple":
                                     imputation_method = parameters_dict["imputation_method"]
                                     imputation_parameters = parameters_dict
+                                    if "knn" in imputation_method:
+                                        k = int(imputation_parameters["knn_k"])
                                 else:
                                     imputation_method = impu_table_df.loc[(impu_table_df[sample_hierarchy]==sample_hierarchy_value) & (impu_table_df["missingness_thresh"]==precursor_hierarchy) & (impu_table_df["missingness_type"]==missingness_type),"imputation_method"].iloc[0]
                                     imputation_parameters = impu_table_df.loc[(impu_table_df[sample_hierarchy]==sample_hierarchy_value) & (impu_table_df["missingness_thresh"]==precursor_hierarchy) & (impu_table_df["missingness_type"]==missingness_type)].iloc[0].to_dict()
+                                    if "knn" in imputation_method:
+                                        k = int(imputation_parameters["k"])
                                 # Impute all missing values for selected precursors and samples, set those which should not be imputed because of different missingness type to nan after imputation
                                 # precursors and samples with all missing values in this subset are not imputed at all in this step
                                 data_part_df = data_df.loc[precursors,samples].dropna(axis=1,how="all").dropna(axis=0,how="all")
@@ -1085,9 +1089,9 @@ if __name__ == "__main__":
                                 
                                 #IMPUTATION FUNCTION CALLS
                                 if imputation_method == "knn":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=k,weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=True)
                                 elif imputation_method == "knn-ML":
-                                    data_part_df = knn_imputation(data_df=data_part_df,k=int(imputation_parameters["knn_k"]),weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
+                                    data_part_df = knn_imputation(data_df=data_part_df,k=k,weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                                 elif imputation_method == "minval-noise":
                                     data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
                                 elif imputation_method == "minval":
