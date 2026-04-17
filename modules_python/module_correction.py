@@ -1012,6 +1012,7 @@ if __name__ == "__main__":
     metadata_df = metadata_df.loc[common_idx_list]
     # copy end
 
+    '''
     # if discrepancy between data and metadata samples, log them
     flag_sample_intersect_int = False
     warning_intersect_data_str = ""
@@ -1037,7 +1038,8 @@ if __name__ == "__main__":
     if flag_sample_intersect_int:
         log_string += time.strftime('%Y-%m-%d\t%H:%M:%S') \
                 +f"\t{metadata_df.shape[0]} sample(s) remain for analysis.\n"
-        
+    '''
+    
     # Warn user that some samples do not have a batch annotation
     if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
         for batch_col in parameters_dict["batch_cols_meta"]:
