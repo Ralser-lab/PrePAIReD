@@ -1427,6 +1427,8 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         id_mapping_df = []
     # Get seed
     seed = get_seed(parameters_dict, counter)
+	# Update seed
+    parameters_dict["seed"] = seed
     logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tSeed was fixed to "+str(seed)+".\n")
     # Write Parameters to log-file
     module_output = add_parameters_to_log(log_file, module, parameters_dict, counter)
