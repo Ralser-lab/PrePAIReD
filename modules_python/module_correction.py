@@ -141,13 +141,15 @@ def batchcorrect_combat(
     missing_values = data_df.isna()
     if missing_values.sum().sum()>0:
         log_string += time.strftime(
-                "###WARNING###: Missing values detected for ComBat. Inserting feature mean per batch temporary. The imputed values will be removed after this step.\n")
+                "###WARNING###: Missing values detected for ComBat. Inserting feature median per batch temporary. The imputed values will be removed after this step.\n")
     
     for item in metadata_df[batch_key].unique():
         indices_batch = metadata_df[metadata_df[batch_key]==item].index
         imp_tmp = data_df.loc[indices_batch]
         imp_tmp = imp_tmp.fillna(imp_tmp.median())
         data_df.loc[imp_tmp.index] = imp_tmp
+    # If a precursor is missing in full batch set it to median temporarily
+    data_df = data_df.fillna(data_df.median())
                 
     # effects to preserve during batch correction
     if cov_preserve_list is not None:
@@ -677,14 +679,13 @@ def adjust_confounders(
             estimator=loess.loess(C_fz, data_processed_df.loc[sample_index, idx])
             try:
                 estimator.fit()
+                pred_values=estimator.predict(C_z).values
+                #pred_values_f=estimator.predict(C_fz).values
+                corr_df.loc[idx,"R2_"+";".join(metadata_vars)]= metrics.r2_score(C_fz,data_processed_df.loc[sample_index, idx]) 
+                data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
             except ValueError:
                 log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped.\n"
                 continue
-            pred_values=estimator.predict(C_z).values
-            #pred_values_f=estimator.predict(C_fz).values
-            corr_df.loc[idx,"R2_"+";".join(metadata_vars)]= metrics.r2_score(C_fz,data_processed_df.loc[sample_index, idx]) 
-            data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
-
     
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
     
@@ -1185,8 +1186,10 @@ if __name__ == "__main__":
         combat_kwargs_dict = {
                 "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
                 if k.startswith("combat")}
-        if len(combat_kwargs_dict["fitsamples_meta"]) == 2:
-            fit_col, fit_level = combat_kwargs_dict["fitsamples_meta"]
+        if combat_kwargs_dict["fitsamples_meta_column"] is not None and combat_kwargs_dict["fitsamples_meta_level"] is not None:
+            fit_col = combat_kwargs_dict["fitsamples_meta_column"]
+            fit_level = combat_kwargs_dict["fitsamples_meta_level"]
+            
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S") \
@@ -1304,9 +1307,10 @@ if __name__ == "__main__":
             parameters_dict["adjust_covariates_onebyone"] = 1
             log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
         
-        if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
+        if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
             
-            fit_col, fit_level = parameters_dict["adjust_fitsamples_meta"]
+            fit_col = parameters_dict["adjust_fitsamples_meta_column"]
+            fit_level = parameters_dict["adjust_fitsamples_meta_level"]
             fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
             info_fitsamples_str = \
                     time.strftime("%Y-%m-%d%t%H:%M:%S") \
@@ -1397,19 +1401,21 @@ if __name__ == "__main__":
 
 
         fitsamples_idx_list = None
-        if len(parameters_dict["adjust_fitsamples_meta"]) == 2:
-            fit_col, fit_level = parameters_dict["adjust_fitsamples_meta"]
+        if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
+            
+            fit_col = parameters_dict["adjust_fitsamples_meta_column"]
+            fit_level = parameters_dict["adjust_fitsamples_meta_level"]
             #check if fit_col is in metadata_df
             if fit_col not in metadata_df.columns:
                 log_string += \
-                f"###ERROR###: Column '{fit_col}' as defined by 'adjust_fitsamples_meta' not found in metadata.\n"
+                f"###ERROR###: Column '{fit_col}' as defined by 'adjust_fitsamples_meta_column' not found in metadata.\n"
                 helper.logger(log_file,log_string)
                 if exit_module:
                     sys.exit(1)
             # check if fit_value is in metadata_df[fit_col]
             if fit_level not in metadata_df[fit_col].tolist():
                 log_string += \
-                f"###ERROR###: Value '{fit_level}' as defined by 'adjust_fitsamples_meta' not found in column '{fit_col}' in metadata.\n"
+                f"###ERROR###: Value '{fit_level}' as defined by 'adjust_fitsamples_meta_level' not found in column '{fit_col}' in metadata.\n"
                 helper.logger(log_file,log_string)
                 if exit_module:
                     sys.exit(1)
