@@ -337,8 +337,10 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
         metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data_index]
         if shuffle:
             np.random.seed(seed)
-            for item in metadata_values_:
-                np.random.shuffle(item)
+            for i, item in enumerate(metadata_values_):
+                shuffled = np.array(item, copy=True)
+                np.random.shuffle(shuffled)
+                metadata_values_[i] = shuffled
         if data_type == "continuous":
             stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
         elif data_type == "ordinal":
