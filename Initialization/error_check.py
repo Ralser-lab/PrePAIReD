@@ -284,6 +284,12 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
         if current_operation == "value in metadata[sample_type_column]":
             metadata_df = read_dataframe(metadata_file, log=log)
             check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
+        if current_operation == "value in metadata[combat_fitsamples_meta_column]":
+            metadata_df = read_dataframe(metadata_file, log=log)
+            check_for_existence(value, l=list(metadata_df[user_dict["combat_fitsamples_meta_column"]]), module=module, variable=variable, log=log)
+        if current_operation == "value in metadata[adjust_fitsamples_meta_column]":
+            metadata_df = read_dataframe(metadata_file, log=log)
+            check_for_existence(value, l=list(metadata_df[user_dict["adjust_fitsamples_meta_column"]]), module=module, variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
                 # Check wheter column exists
