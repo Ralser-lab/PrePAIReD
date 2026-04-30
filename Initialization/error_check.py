@@ -1,5 +1,14 @@
 # created on 15.01.26 by Dominik Bierbaum
-# error check for correct input variables
+# error check for correct input variables, contains folling functions:
+# read_dataframe:  Check if filepath exists and read the dataframe header
+# check_for_existence: Check if value exists in list
+# check_for_range: Check if a value is in the range of allowed values
+# check_for_path_existence: Check if filepath exists
+# check_for_length: Check if l is a list and return its length
+# sheet_existence: Find the metadata sheet in an Excel file
+# allowed_values_conversion: Convert allowed values string for comparison to user input
+# operation_selection: Run the correct operation for every value
+# error_check: This function checks parameters and values from the user input for right datatype, default values and allowed ranges for the called modules
 
 import os
 import numpy as np
@@ -96,7 +105,7 @@ def check_for_existence(value, l: list, module: str, variable: str, log: str):
 
 def check_for_range(value, lower_limit, upper_limit, lower_inclusive, upper_inclusive, module: str, variable: str, log: str):
     """
-    check if a value is in the range of allowed values
+    Check if a value is in the range of allowed values
     :param value: float, needs to be between lower_inclusive and upper_inclusive
     :param lower_limit: int or float, smallest possible value
     :param upper_limit: int or float, biggest possible value
@@ -230,7 +239,7 @@ def allowed_values_conversion(range_options: list, log: str):
 def operation_selection(value, target_dict: dict, operation_dictionary: dict, user_dict: dict, operation: str,
                         module: str, variable: str, metadata_file: str, data_file: str, log: str):
     """
-    run the correct operation for every value
+    Run the correct operation for every value
     :param value: user input
     :param target_dict: dict, nested dict entries for variable, will be used to identify allowed values
     :param operation_dictionary: dict, operation dict to
