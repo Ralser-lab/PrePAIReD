@@ -71,9 +71,10 @@ def init_module():
 
 def get_setup_order(setup_str, counter):
     # Account for different seperators
-    setup_str = setup_str.replace(" ",",").replace("\t",",").replace(";",",").replace("\n",",").replace("/",",").replace("\\",",")
+    setup_str = setup_str.replace("\n",",").replace(" ",",").replace("\t",",").replace(";",",").replace("/",",").replace("\\",",")
     while ",," in setup_str:
         setup_str = setup_str.replace(",,",",")
+    setup_str = setup_str.strip(",")
     setup_str = setup_str.replace("NORMALIZATION","NORMALISATION").replace("SUMMARIZATION","SUMMARISATION").replace("FILTERINGLONG","FILTERING_LONG").replace("FILTERINGWIDE","FILTERING_WIDE")
     # Get step order
     setup_order = setup_str.split(",")
