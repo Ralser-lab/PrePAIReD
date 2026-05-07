@@ -499,7 +499,14 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
         return data_df, log
     
     #apply filtering
-    keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+str(filter_value)+"][precursor_col]")))
+    try:
+        keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+str(filter_value)+"][precursor_col]")))
+    except:
+        try:
+            keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+repr(filter_value)+"][precursor_col]")))
+        except:
+            log += "###ERROR###: Filtering on metadata failed for "+f"id_mapping_df[id_mapping_df[{filter_col}]{operator}{str(filter_value)}]{[precursor_col]}"+".\n"
+            log += "###ERROR###: Filtering on metadata failed for "+f"id_mapping_df[id_mapping_df[{filter_col}]{operator}{repr(filter_value)}]{[precursor_col]}"+".\n"
     return([data_df.loc[keep_precursors], log])
 
 
