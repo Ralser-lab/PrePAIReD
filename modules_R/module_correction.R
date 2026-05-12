@@ -2,7 +2,7 @@
 # Batch correction module in R
 # Provides the following options for batch correction:
 # limma, combat_r
-# Author: Roza S. Mizrak @rozsurmiz (pipeline style refactor by LCN)
+# Author: Roza Mizrak @rozsurmiz (pipeline style refactor by LCN)
 ###############################################################################
 
 suppressPackageStartupMessages({
