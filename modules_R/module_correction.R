@@ -2,7 +2,7 @@
 # Batch correction module in R
 # Provides the following options for batch correction:
 # limma, combat_r
-# Author: Roza Mizrak @rozsurmiz (pipeline style refactor by LCN)
+# Author: Roza S. Mizrak @rozsurmiz (pipeline style refactor by LCN)
 ###############################################################################
 
 suppressPackageStartupMessages({
@@ -99,7 +99,7 @@ batch_correct <- function(datapath, parampath, outpath,
         tolower(method),
         "limma"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
         "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list)
-        #"harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list)
+        #"harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list) # harmony excluded from the wrapper
     )
     
     corrected_df <- run_with_logging(main_batch, log_file)
