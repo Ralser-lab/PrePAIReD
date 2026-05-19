@@ -141,6 +141,9 @@ def normalize_median_scaling(df, out_dir_fp, module_output, normalization_on_int
         abs_nan_intersect_thresh=int(nan_intersect_thresh*df.shape[1])
         intersect_precursors=df.replace(0,np.nan).dropna(thresh=abs_nan_intersect_thresh).index
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+str(len(intersect_precursors)) + " precursors that are present in " + str(nan_intersect_thresh*100) + "% of all samples are used for normalization across samples"+"\n"
+        if len(intersect_precursors)==0:
+            module_output += "###WARNING: No intersecting precursors found. All precursors are used.\n"
+            intersect_precursors=df.index
     else:
         intersect_precursors=df.index
     #calculate normalization factors
