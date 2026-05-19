@@ -1488,8 +1488,8 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
     # Update log file
     logger(log_file, module_output=module_output)
 	# Check for empty DataFrame
-	if data_processed_df.empty:
-		looger(log_file, "###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
+    if data_processed_df.empty:
+        logger(log_file, "###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
     # Save data
     save_data(data_processed_df, out_dir_fp, outname)
     # Save mask
