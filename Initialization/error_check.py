@@ -497,12 +497,22 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     #print(module)
     #print(flag_dictionary[module].keys())
     if variable in flag_dictionary[module].keys():
+        if current_flag is not None:  # check the parameters from user file for completeness with dictionary variables when the current flag changes
+            mandatory_parameters = [key for key in operation_dictionary[current_flag][flag_value]]
+            if set(mandatory_parameters) == set(parameters_list):
+                pass
+            else:
+                missing = set(mandatory_parameters) - set(parameters_list)
+                update_log(log, f"###ERROR###: Missing parameter(s) in parameters file for flag {current_flag}: {missing}") 
+                raise KeyError(f"###ERROR###: Missing parameter(s) in parameters file for flag {current_flag}: {missing}")
+        else:
+            pass
         #print(f"{variable} is in Flag dictionary")
         dict_to_use = flag_dictionary[module][variable]  # get the current flag information
         #print(dict_to_use)
         current_flag = variable
         current_flag_value = str(value)
-
+        parameters_list = [] # empty list to collect all parameters assinged to flag value
     else:
         #print(f"{variable} is in Operation dictionary")
         if current_flag_value is None:
@@ -515,6 +525,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                 if variable in operation_dictionary[current_flag][flag_value]:
                     #print(flag_value, variable)
                     dict_to_use = operation_dictionary[current_flag][flag_value][variable]
+                    parameters_list.append(variable) # add current parameter to flag list
                     #print(value, type(value))
                     #print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
@@ -536,6 +547,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
         else:
             try:
                 dict_to_use = operation_dictionary[current_flag][current_flag_value][variable]
+                parameters_list.append(variable) # add current parameter to flag list
             except:
                 update_log(log,f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.") 
             #print(dict_to_use)
