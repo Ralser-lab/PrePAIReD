@@ -498,7 +498,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     #print(flag_dictionary[module].keys())
     if variable in flag_dictionary[module].keys():
         if current_flag is not None:  # check the parameters from user file for completeness with dictionary variables when the current flag changes
-            mandatory_parameters = [key for key in operation_dictionary[current_flag][flag_value]]
+            mandatory_parameters = [key for key in operation_dictionary[current_flag][current_flag]]
             if set(mandatory_parameters) == set(parameters_list):
                 pass
             else:
