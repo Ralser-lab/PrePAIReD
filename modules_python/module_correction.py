@@ -837,6 +837,7 @@ def adjust_confounders_batchwise(
                     corr_dfs_covariate_list.append(corr_df_batch.drop("pval_" + covariate,axis=1))
                 else:
                     corr_df_batch.columns = [col + "_batch"+str(batch) for col in corr_df_batch.columns]
+                    corr_dfs_covariate_list.append(corr_df_batch)
                 processed_batch_df_list.append(data_processed_batch_df)
             #combine corrected data over batches
             data_processed_df = pd.concat(processed_batch_df_list,axis=0)
