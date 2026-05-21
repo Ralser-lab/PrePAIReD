@@ -29,6 +29,7 @@ import pandas as pd
 import numpy as np
 import time
 import os
+from tqdm import tqdm
 
 #statistics and modelling
 import pycombat #CoAxLab
@@ -813,7 +814,7 @@ def adjust_confounders_batchwise(
             else:
                 corr_df_covariate = None
             #batchwise correction
-            for batch in batch_levels:
+            for batch in tqdm(batch_levels):
                 idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
                 fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
                 if correct_over_same_ids_per_batch:
@@ -871,7 +872,7 @@ def adjust_confounders_batchwise(
         else:
             corr_pre_df = None
         #batchwise correction
-        for batch in batch_levels:
+        for batch in tqdm(batch_levels):
             #subset fitsamples to fitsamples in given batch
             idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
             fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
