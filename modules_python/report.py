@@ -34,18 +34,18 @@ from reportlab.platypus import (
 # ================================================================
 
 def find_single_params_file(workdir: Path) -> Path:
-    matches = sorted(workdir.glob("*_parameters.json"))
+    matches = sorted(workdir.glob("*_Parameters.json"))
     if not matches:
-        raise FileNotFoundError(f"No '*_parameters.json' found in {workdir.resolve()}")
+        raise FileNotFoundError(f"No '*_Parameters.json' found in {workdir.resolve()}")
     if len(matches) > 1:
         raise RuntimeError(
-            "Multiple '*_parameters.json' files found:\n"
+            "Multiple '*_Parameters.json' files found:\n"
             + "\n".join(f"  - {p.name}" for p in matches)
         )
     return matches[0]
 
 def infer_title_from_params_file(params_path: Path) -> str:
-    suffix = "_parameters.json"
+    suffix = "_Parameters.json"
     name = params_path.name
     return name[: -len(suffix)] if name.endswith(suffix) else params_path.stem
 

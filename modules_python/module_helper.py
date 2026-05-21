@@ -1341,7 +1341,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
     data_df_fp : str, optional
         If skip_parser==True required. File path to input data that should be processed.
     param_fp : str, optional
-        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_parameters.json
+        Directory containing parameter files. Parameter file is called as ${param_fp}/${out_dir_fp}_Parameters.json
     out_If skip_parser==True required. dir_fp : str, optional
         If skip_parser==True required. Directory for files generated during the module.
     meta_df_fp : str, optional
