@@ -806,364 +806,372 @@ if __name__ == "__main__":
                                                                                                                                                                outname=outname)
  
 
-    # Check if loading was successful, else pass error to log and exit   
-    helper.logger(log_file,log)
-    if metadata_df is None:
-        helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
-        if exit_module:
-            sys.exit("###ERROR###: Metadata loading failed.")
-    if "###WARNING###" in log:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
-        if exit_module:
-            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
-    
-    #helper functions
-    timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
-    
-    # Log parameters
-    #log = f"{timestamp()}\tFiltering Wide Format\n"
-    #log += "\nParameters\n------------\n"
-    #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
-    #log += "\n------------\n"  
-    #helper.logger(log_file, module_output=log)
-    
-    #parameter extraction
-    methods = parameters_dict['filtering_wide_methods'].replace(" ", "").split(";")
-    data_processed_df = data_df
-    
-    #create filtering metadata to remember excluded samples, excluded precursors will be flagged in id_mapping_df
-    sample_filters_df = pd.DataFrame(index=data_processed_df.columns)
-    sample_filters_df.index.name = parameters_dict['metadata_sample_column']
-    
-    if methods == []:
-        log = "###WARNING###: No filtering methods provided. Skipping filtering on wide format.\n"
+    try:
+        # Check if loading was successful, else pass error to log and exit   
         helper.logger(log_file,log)
-    else:
-        for method in methods:
-            
-            # snapshot BEFORE this method
-            pre_method_columns = data_processed_df.columns
-            pre_method_rows = data_processed_df.index
-            
-            # SAMPLE FILTERS
-            if method == "filter_samples_based_on_metadata":
-                #for every column specified for exclusion by metadata
-                for k,key_column in enumerate(parameters_dict['metadata_exclusion_columns'].split(";")):
-                    # snapshot BEFORE this method
-                    pre_method_columns = data_processed_df.columns
-                    pre_method_rows = data_processed_df.index
-                    
-                    #select corresponding value for exclusion in the given key_column
-                    key_value = eval(parameters_dict["metadata_exclusion_values_types"].split(";")[k])(str(parameters_dict['metadata_exclusion_values']).split(";")[k])
-                    
+        if metadata_df is None:
+            helper.logger(log_file,"###ERROR###: Metadata loading failed.\n")
+            if exit_module:
+                sys.exit("###ERROR###: Metadata loading failed.")
+        if "###WARNING###" in log:
+            helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"]+"\n")
+            if exit_module:
+                sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        
+        #helper functions
+        timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
+        
+        # Log parameters
+        #log = f"{timestamp()}\tFiltering Wide Format\n"
+        #log += "\nParameters\n------------\n"
+        #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
+        #log += "\n------------\n"  
+        #helper.logger(log_file, module_output=log)
+        
+        #parameter extraction
+        methods = parameters_dict['filtering_wide_methods'].replace(" ", "").split(";")
+        data_processed_df = data_df
+        
+        #create filtering metadata to remember excluded samples, excluded precursors will be flagged in id_mapping_df
+        sample_filters_df = pd.DataFrame(index=data_processed_df.columns)
+        sample_filters_df.index.name = parameters_dict['metadata_sample_column']
+        
+        if methods == []:
+            log = "###WARNING###: No filtering methods provided. Skipping filtering on wide format.\n"
+            helper.logger(log_file,log)
+        else:
+            for method in methods:
+                
+                # snapshot BEFORE this method
+                pre_method_columns = data_processed_df.columns
+                pre_method_rows = data_processed_df.index
+                
+                # SAMPLE FILTERS
+                if method == "filter_samples_based_on_metadata":
+                    #for every column specified for exclusion by metadata
+                    for k,key_column in enumerate(parameters_dict['metadata_exclusion_columns'].split(";")):
+                        # snapshot BEFORE this method
+                        pre_method_columns = data_processed_df.columns
+                        pre_method_rows = data_processed_df.index
+                        
+                        #select corresponding value for exclusion in the given key_column
+                        key_value = eval(parameters_dict["metadata_exclusion_values_types"].split(";")[k])(str(parameters_dict['metadata_exclusion_values']).split(";")[k])
+                        
+                        #log filtering method
+                        log = f"{timestamp()}\tExcluding samples from data with {key_value} in metadata column {key_column}.\n"
+                        helper.logger(log_file,log)
+                        #apply filtering based on metadata
+                        data_processed_df, log  = filter_samples_based_on_metadata(data_df=data_processed_df, 
+                                                                                   metadata_df=metadata_df, 
+                                                                                   index_column=parameters_dict['metadata_sample_column'], 
+                                                                                   key_column=key_column,
+                                                                                   key_value=key_value)
+                        #catch errors
+                        if "###ERROR###" in log:
+                            helper.logger(log_file,log)
+                            if exit_module:
+                                sys.exit(log)
+                        if not "###WARNING###" in log:
+                            # update mask_df
+                            mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                              axis='samples', 
+                                                                              method=key_column+"="+str(key_value),
+                                                                              mask_df=mask_df, 
+                                                                              mask_description_df=mask_description_df, 
+                                                                              pre_method_columns=pre_method_columns,
+                                                                              pre_method_rows=pre_method_rows)
+                            
+                            #remember excluded samples
+                            sample_filters_df.loc[flags,key_column+"="+str(key_value)] = True
+                            
+                            #log filtering progress
+                            num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
+                            log += f"\t\t\t\t{num_excluded_samples} samples excluded by {key_value} in metadata_column {key_column}.\n"
+                        helper.logger(log_file,log)
+                        
+                elif method == "filter_samples_by_detection_proportion":
                     #log filtering method
-                    log = f"{timestamp()}\tExcluding samples from data with {key_value} in metadata column {key_column}.\n"
+                    log = f"{timestamp()}\tFiltering samples from data by missingness threshold.\n"
                     helper.logger(log_file,log)
-                    #apply filtering based on metadata
-                    data_processed_df, log  = filter_samples_based_on_metadata(data_df=data_processed_df, 
-                                                                               metadata_df=metadata_df, 
-                                                                               index_column=parameters_dict['metadata_sample_column'], 
-                                                                               key_column=key_column,
-                                                                               key_value=key_value)
+                    #apply filtering of samples by detecction proportion (missingness)
+                    data_processed_df, log = filter_samples_by_detection_proportion(data_df=data_processed_df, 
+                                                                                    sample_thresh=parameters_dict['sample_missingness_thresh'], 
+                                                                                    sample_alpha=parameters_dict['sample_missingness_alpha'])
                     #catch errors
                     if "###ERROR###" in log:
                         helper.logger(log_file,log)
                         if exit_module:
                             sys.exit(log)
-                    if not "###WARNING###" in log:
-                        # update mask_df
-                        mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                          axis='samples', 
-                                                                          method=key_column+"="+str(key_value),
-                                                                          mask_df=mask_df, 
-                                                                          mask_description_df=mask_description_df, 
-                                                                          pre_method_columns=pre_method_columns,
-                                                                          pre_method_rows=pre_method_rows)
                         
-                        #remember excluded samples
-                        sample_filters_df.loc[flags,key_column+"="+str(key_value)] = True
-                        
-                        #log filtering progress
-                        num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
-                        log += f"\t\t\t\t{num_excluded_samples} samples excluded by {key_value} in metadata_column {key_column}.\n"
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='samples', 
+                                                                      method='sample missingness',
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded samples
+                    sample_filters_df.loc[flags,"sample missingness"] = True
+                    
+                    #log filtering progress
+                    num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
+                    percent_excluded_samples = np.round(num_excluded_samples/len(data_processed_df.columns)*100,2)
+                    log += f"\t\t\t\t{num_excluded_samples} ({percent_excluded_samples}%) samples filtered due to too many missing values.\n"
+                    helper.logger(log_file,log)
+                
+                elif method == "filter_by_normalization_factors":
+                    pass #TODO
+                    
+                    
+                # PRECURSOR FILTERS
+                elif method == "filter_precursors_by_detection_proportion":
+                    #log filtering method
+                    log = f"{timestamp()}\tFiltering precursors from data by missingness threshold.\n"
+                    helper.logger(log_file,log)
+    
+                    #apply filtering of precursors by detection proportion (missingness)
+                    data_processed_df, log = filter_precursors_by_detection_proportion(data_df=data_processed_df, 
+                                                                                       id_mapping_df=id_mapping_df,
+                                                                                       precursor_thresh=parameters_dict["precursor_missingness_thresh"], 
+                                                                                       precursor_alpha=parameters_dict["precursor_missingness_alpha"],
+                                                                                       filter_per_protein=parameters_dict["proteinwise_precursor_missingness"],
+                                                                                       protein_col=parameters_dict["protein_col"],
+                                                                                       precursor_col=parameters_dict["precursor_col"])
+                    #catch errors
+                    if "###ERROR###" in log:
+                        helper.logger(log_file,log)
+                        if exit_module:
+                            sys.exit(log)
+                    
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method='precursor missingness',
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded precursors in id_mapping_df
+                    id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), 'precursor missingness'] = True
+                    id_mapping_df['precursor missingness'] = id_mapping_df['precursor missingness'].fillna(False)
+    
+                    #log filtering progress
+                    num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
+                    percent_excluded_precursors = np.round(num_excluded_precursors/len(pre_method_rows)*100,2)
+                    log += f"\t\t\t\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
+                    helper.logger(log_file,log)
+    
+                elif method == "filter_proteins_by_peptide_count":
+                    #log filtering method
+                    log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_peptides']} peptides per protein.\n"
+                    helper.logger(log_file,log)
+                    #apply filtering by minimum number of precursors per protein
+                    data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
+                                                                                id_mapping_df=id_mapping_df, 
+                                                                                min_ids=parameters_dict["min_peptides"], 
+                                                                                protein_col=parameters_dict["protein_col"], 
+                                                                                precursor_col=parameters_dict["precursor_col"],
+                                                                                id_col=parameters_dict["peptide_col"])
+                    
+                    #catch errors
+                    if "###ERROR###" in log:
+                        helper.logger(log_file,log)
+                        if exit_module:
+                            sys.exit(log)
+    
+                    #update mask_description_df
+                    mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Peptides", value="Min. " + str(parameters_dict["min_peptides"]) + " Peptides", regex=True)
+    
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method="Min. " + str(parameters_dict["min_peptides"]) + " Peptides",
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded precursors in id_mapping_df
+                    id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Less than " + str(parameters_dict["min_peptides"]) + " Peptides"] = True
+                    id_mapping_df["Less than " + str(parameters_dict["min_peptides"]) + " Peptides"] = id_mapping_df["Less than " + str(parameters_dict["min_peptides"]) + " Peptides"].fillna(False)
+                    
+                    #log filtering progress
                     helper.logger(log_file,log)
                     
-            elif method == "filter_samples_by_detection_proportion":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering samples from data by missingness threshold.\n"
-                helper.logger(log_file,log)
-                #apply filtering of samples by detecction proportion (missingness)
-                data_processed_df, log = filter_samples_by_detection_proportion(data_df=data_processed_df, 
-                                                                                sample_thresh=parameters_dict['sample_missingness_thresh'], 
-                                                                                sample_alpha=parameters_dict['sample_missingness_alpha'])
-                #catch errors
-                if "###ERROR###" in log:
+                elif method == "filter_proteins_by_precursor_count":
+                    #log filtering method
+                    log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_precursors']} precursors per protein.\n"
                     helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-                    
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='samples', 
-                                                                  method='sample missingness',
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded samples
-                sample_filters_df.loc[flags,"sample missingness"] = True
-                
-                #log filtering progress
-                num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
-                percent_excluded_samples = np.round(num_excluded_samples/len(data_processed_df.columns)*100,2)
-                log += f"\t\t\t\t{num_excluded_samples} ({percent_excluded_samples}%) samples filtered due to too many missing values.\n"
-                helper.logger(log_file,log)
-            
-            elif method == "filter_by_normalization_factors":
-                pass #TODO
-                
-                
-            # PRECURSOR FILTERS
-            elif method == "filter_precursors_by_detection_proportion":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering precursors from data by missingness threshold.\n"
-                helper.logger(log_file,log)
-
-                #apply filtering of precursors by detection proportion (missingness)
-                data_processed_df, log = filter_precursors_by_detection_proportion(data_df=data_processed_df, 
-                                                                                   id_mapping_df=id_mapping_df,
-                                                                                   precursor_thresh=parameters_dict["precursor_missingness_thresh"], 
-                                                                                   precursor_alpha=parameters_dict["precursor_missingness_alpha"],
-                                                                                   filter_per_protein=parameters_dict["proteinwise_precursor_missingness"],
-                                                                                   protein_col=parameters_dict["protein_col"],
-                                                                                   precursor_col=parameters_dict["precursor_col"])
-                #catch errors
-                if "###ERROR###" in log:
-                    helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-                
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method='precursor missingness',
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded precursors in id_mapping_df
-                id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), 'precursor missingness'] = True
-                id_mapping_df['precursor missingness'] = id_mapping_df['precursor missingness'].fillna(False)
-
-                #log filtering progress
-                num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
-                percent_excluded_precursors = np.round(num_excluded_precursors/len(pre_method_rows)*100,2)
-                log += f"\t\t\t\t{num_excluded_precursors} ({percent_excluded_precursors}%) precursors excluded by exceeding missingness threshold.\n"
-                helper.logger(log_file,log)
-
-            elif method == "filter_proteins_by_peptide_count":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_peptides']} peptides per protein.\n"
-                helper.logger(log_file,log)
-                #apply filtering by minimum number of precursors per protein
-                data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
-                                                                            id_mapping_df=id_mapping_df, 
-                                                                            min_ids=parameters_dict["min_peptides"], 
-                                                                            protein_col=parameters_dict["protein_col"], 
-                                                                            precursor_col=parameters_dict["precursor_col"],
-                                                                            id_col=parameters_dict["peptide_col"])
-                
-                #catch errors
-                if "###ERROR###" in log:
-                    helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-
-                #update mask_description_df
-                mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Peptides", value="Min. " + str(parameters_dict["min_peptides"]) + " Peptides", regex=True)
-
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method="Min. " + str(parameters_dict["min_peptides"]) + " Peptides",
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded precursors in id_mapping_df
-                id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Less than " + str(parameters_dict["min_peptides"]) + " Peptides"] = True
-                id_mapping_df["Less than " + str(parameters_dict["min_peptides"]) + " Peptides"] = id_mapping_df["Less than " + str(parameters_dict["min_peptides"]) + " Peptides"].fillna(False)
-                
-                #log filtering progress
-                helper.logger(log_file,log)
-                
-            elif method == "filter_proteins_by_precursor_count":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_precursors']} precursors per protein.\n"
-                helper.logger(log_file,log)
-                #apply filtering by minimum number of precursors per protein
-                data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
-                                                                     id_mapping_df=id_mapping_df, 
-                                                                     min_ids=parameters_dict["min_precursors"], 
-                                                                     protein_col=parameters_dict["protein_col"], 
-                                                                     precursor_col=parameters_dict["precursor_col"],
-                                                                     id_col=parameters_dict["precursor_col"])
-                
-                #catch errors
-                if "###ERROR###" in log:
-                    helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-
-                #update mask_description_df
-                mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Precursors", value="Min. " + str(parameters_dict["min_precursors"]) + " Precursors", regex=True)
-
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method="Min. " + str(parameters_dict["min_precursors"]) + " Precursors",
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded precursors in id_mapping_df
-                id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Less than " + str(parameters_dict["min_precursors"]) + " Precursors"] = True
-                id_mapping_df["Less than " + str(parameters_dict["min_precursors"]) + " Precursors"] = id_mapping_df["Less than " + str(parameters_dict["min_precursors"]) + " Precursors"].fillna(False)
-                
-                #log filtering progress
-                helper.logger(log_file,log)
-
-            elif method == "filter_precursors_by_metadata":
-                #log filtering method
-                log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['precursor_filter_col']} not {parameters_dict['precursor_filter_value']}.\n"
-                helper.logger(log_file,log)
-                #apply exclusion of selected precursors
-                data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
-                                                                       id_mapping_df=id_mapping_df, 
-                                                                       precursor_col=parameters_dict["precursor_col"], 
-                                                                       filter_col=parameters_dict["precursor_filter_col"], 
-                                                                       filter_value=parameters_dict["precursor_filter_value"],
-                                                                       operator=parameters_dict["filter_operator"])
-                
-                #catch errors
-                if "###ERROR###" in log:
-                    helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-                    
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method=parameters_dict["precursor_filter_col"],
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #log filtering progress
-                helper.logger(log_file,log)
-                
-            elif method == "filter_precursors_by_exclusion_list":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering {parameters_dict['exclusion_list_id_col']} from data as provided by {parameters_dict['exclusion_list_fp']}.\n"
-                helper.logger(log_file,log)
-                # Load exclusion list
-                if os.path.exists(parameters_dict["exclusion_list_fp"]):
-                    id_list = pd.read_csv(parameters_dict["exclusion_list_fp"],header=None)[0].to_list()
-                #apply filtering by exclusion list
-                data_processed_df, log = filter_precursors_by_exclusionlist(data_df=data_processed_df,
-                                                                            id_mapping_df=id_mapping_df,
-                                                                            id_col=parameters_dict["exclusion_list_id_col"],
-                                                                            exclusion_id_list=id_list,
-                                                                            precursor_col=parameters_dict["precursor_col"])
-                #catch errors
-                if "###ERROR###" in log:
-                    helper.logger(log_file,log)
-                    if exit_module:
-                        sys.exit(log)
-                
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method="Exclusion by "+parameters_dict["exclusion_list_fp"],
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded precursors in id_mapping_df
-                id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Exclusion by "+parameters_dict["exclusion_list_fp"]] = True
-                id_mapping_df["Exclusion by "+parameters_dict["exclusion_list_fp"]] = id_mapping_df["Exclusion by "+parameters_dict["exclusion_list_fp"]].fillna(False)
-                
-                #log filtering progress
-                helper.logger(log_file,log)
-                
-            elif method == "filter_precursors_by_peptide_labels":
-                #log filtering method
-                log = f"{timestamp()}\tFiltering precursors from data by defined precursor labels.\n"
-                helper.logger(log_file,log)
-                #apply filtering by pre-defined precursor labels
-                data_processed_df, log = filter_precursors_by_peptide_labels(data_df=data_processed_df, 
-                                                                             remove_label=parameters_dict["remove_label"], 
-                                                                             regex=parameters_dict["is_remove_label_regex"])
-                
-                # update mask_df
-                mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
-                                                                  axis='precursors', 
-                                                                  method='precursor label: '+parameters_dict['remove_label'],
-                                                                  mask_df=mask_df, 
-                                                                  mask_description_df=mask_description_df, 
-                                                                  pre_method_columns=pre_method_columns,
-                                                                  pre_method_rows=pre_method_rows)
-                
-                #remember excluded precursors in id_mapping_df
-                id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), 'precursor label: '+parameters_dict['remove_label']] = True
-                id_mapping_df['precursor label: '+parameters_dict['remove_label']] = id_mapping_df['precursor label: '+parameters_dict['remove_label']].fillna(False)
-                
-                #log filtering progress
-                helper.logger(log_file,log)
-            
-            # PRECURSOR RENAMING
-            elif method == "replace_labelled_precursors":
-                #log
-                log = f"{timestamp()}\tReplacing precursors names in data with defined precursor labels.\n"
-                helper.logger(log_file,log)
-                
-                target_labels = parameters_dict["target_labels"].split(";")
-                replace_labels = parameters_dict["replace_labels"].split(";")
-                for i in range(len(target_labels)):
-                    data_processed_df, log = replace_labelled_precursors(data_df=data_processed_df, 
-                                                                         id_mapping_df=id_mapping_df,
-                                                                         mask_df=mask_df,
+                    #apply filtering by minimum number of precursors per protein
+                    data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
+                                                                         id_mapping_df=id_mapping_df, 
+                                                                         min_ids=parameters_dict["min_precursors"], 
+                                                                         protein_col=parameters_dict["protein_col"], 
                                                                          precursor_col=parameters_dict["precursor_col"],
-                                                                         target_label=target_labels[i], 
-                                                                         replace_label=replace_labels[i])
-                    #log progress
+                                                                         id_col=parameters_dict["precursor_col"])
+                    
+                    #catch errors
+                    if "###ERROR###" in log:
+                        helper.logger(log_file,log)
+                        if exit_module:
+                            sys.exit(log)
+    
+                    #update mask_description_df
+                    mask_description_df.index = mask_description_df.index.to_series().replace(to_replace= r"Min. .* Precursors", value="Min. " + str(parameters_dict["min_precursors"]) + " Precursors", regex=True)
+    
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method="Min. " + str(parameters_dict["min_precursors"]) + " Precursors",
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded precursors in id_mapping_df
+                    id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Less than " + str(parameters_dict["min_precursors"]) + " Precursors"] = True
+                    id_mapping_df["Less than " + str(parameters_dict["min_precursors"]) + " Precursors"] = id_mapping_df["Less than " + str(parameters_dict["min_precursors"]) + " Precursors"].fillna(False)
+                    
+                    #log filtering progress
+                    helper.logger(log_file,log)
+    
+                elif method == "filter_precursors_by_metadata":
+                    #log filtering method
+                    log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['precursor_filter_col']} not {parameters_dict['precursor_filter_value']}.\n"
+                    helper.logger(log_file,log)
+                    #apply exclusion of selected precursors
+                    data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
+                                                                           id_mapping_df=id_mapping_df, 
+                                                                           precursor_col=parameters_dict["precursor_col"], 
+                                                                           filter_col=parameters_dict["precursor_filter_col"], 
+                                                                           filter_value=parameters_dict["precursor_filter_value"],
+                                                                           operator=parameters_dict["filter_operator"])
+                    
+                    #catch errors
+                    if "###ERROR###" in log:
+                        helper.logger(log_file,log)
+                        if exit_module:
+                            sys.exit(log)
+                        
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method=parameters_dict["precursor_filter_col"],
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #log filtering progress
+                    helper.logger(log_file,log)
+                    
+                elif method == "filter_precursors_by_exclusion_list":
+                    #log filtering method
+                    log = f"{timestamp()}\tFiltering {parameters_dict['exclusion_list_id_col']} from data as provided by {parameters_dict['exclusion_list_fp']}.\n"
+                    helper.logger(log_file,log)
+                    # Load exclusion list
+                    if os.path.exists(parameters_dict["exclusion_list_fp"]):
+                        id_list = pd.read_csv(parameters_dict["exclusion_list_fp"],header=None)[0].to_list()
+                    #apply filtering by exclusion list
+                    data_processed_df, log = filter_precursors_by_exclusionlist(data_df=data_processed_df,
+                                                                                id_mapping_df=id_mapping_df,
+                                                                                id_col=parameters_dict["exclusion_list_id_col"],
+                                                                                exclusion_id_list=id_list,
+                                                                                precursor_col=parameters_dict["precursor_col"])
+                    #catch errors
+                    if "###ERROR###" in log:
+                        helper.logger(log_file,log)
+                        if exit_module:
+                            sys.exit(log)
+                    
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method="Exclusion by "+parameters_dict["exclusion_list_fp"],
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded precursors in id_mapping_df
+                    id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), "Exclusion by "+parameters_dict["exclusion_list_fp"]] = True
+                    id_mapping_df["Exclusion by "+parameters_dict["exclusion_list_fp"]] = id_mapping_df["Exclusion by "+parameters_dict["exclusion_list_fp"]].fillna(False)
+                    
+                    #log filtering progress
+                    helper.logger(log_file,log)
+                    
+                elif method == "filter_precursors_by_peptide_labels":
+                    #log filtering method
+                    log = f"{timestamp()}\tFiltering precursors from data by defined precursor labels.\n"
+                    helper.logger(log_file,log)
+                    #apply filtering by pre-defined precursor labels
+                    data_processed_df, log = filter_precursors_by_peptide_labels(data_df=data_processed_df, 
+                                                                                 remove_label=parameters_dict["remove_label"], 
+                                                                                 regex=parameters_dict["is_remove_label_regex"])
+                    
+                    # update mask_df
+                    mask_df, mask_description_df, flags = update_mask(data_df=data_processed_df,
+                                                                      axis='precursors', 
+                                                                      method='precursor label: '+parameters_dict['remove_label'],
+                                                                      mask_df=mask_df, 
+                                                                      mask_description_df=mask_description_df, 
+                                                                      pre_method_columns=pre_method_columns,
+                                                                      pre_method_rows=pre_method_rows)
+                    
+                    #remember excluded precursors in id_mapping_df
+                    id_mapping_df.loc[id_mapping_df['Precursor.Id'].isin(flags), 'precursor label: '+parameters_dict['remove_label']] = True
+                    id_mapping_df['precursor label: '+parameters_dict['remove_label']] = id_mapping_df['precursor label: '+parameters_dict['remove_label']].fillna(False)
+                    
+                    #log filtering progress
                     helper.logger(log_file,log)
                 
-            else:
-                log = f"###WARNING###: Unknown filtering method: {method} — skipping.\n"
-                helper.logger(log_file,log)
-
-
-   
+                # PRECURSOR RENAMING
+                elif method == "replace_labelled_precursors":
+                    #log
+                    log = f"{timestamp()}\tReplacing precursors names in data with defined precursor labels.\n"
+                    helper.logger(log_file,log)
+                    
+                    target_labels = parameters_dict["target_labels"].split(";")
+                    replace_labels = parameters_dict["replace_labels"].split(";")
+                    for i in range(len(target_labels)):
+                        data_processed_df, log = replace_labelled_precursors(data_df=data_processed_df, 
+                                                                             id_mapping_df=id_mapping_df,
+                                                                             mask_df=mask_df,
+                                                                             precursor_col=parameters_dict["precursor_col"],
+                                                                             target_label=target_labels[i], 
+                                                                             replace_label=replace_labels[i])
+                        #log progress
+                        helper.logger(log_file,log)
+                    
+                else:
+                    log = f"###WARNING###: Unknown filtering method: {method} — skipping.\n"
+                    helper.logger(log_file,log)
     
-   
-    #sort mask_description_df 
-    mask_description_df.sort_values(by="value",inplace=True)
-    module_output = ""
-    #save sample_filters_df and fillna with False
-    if not sample_filters_df.empty:
-        sample_filters_df.fillna(False,inplace=True)
-        sample_filters_df.to_csv(os.path.join(out_dir_fp, "filtered_samples.tsv"), sep="\t")
-        module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {os.path.join(out_dir_fp, 'filtered_samples.tsv')}\n"
-    #save id_mapping_df
-    id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t") # is this the correct location #???
-    module_output += f"{timestamp()}\tInformation about filtered precursors saved to {os.path.join(out_dir_fp, 'id_mapping.tsv')}\n"
     
-    #close module
-    helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
+       
+        
+       
+        #sort mask_description_df 
+        mask_description_df.sort_values(by="value",inplace=True)
+        module_output = ""
+        #save sample_filters_df and fillna with False
+        if not sample_filters_df.empty:
+            sample_filters_df.fillna(False,inplace=True)
+            sample_filters_df.to_csv(os.path.join(out_dir_fp, "filtered_samples.tsv"), sep="\t")
+            module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {os.path.join(out_dir_fp, 'filtered_samples.tsv')}\n"
+        #save id_mapping_df
+        id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t") # is this the correct location #???
+        module_output += f"{timestamp()}\tInformation about filtered precursors saved to {os.path.join(out_dir_fp, 'id_mapping.tsv')}\n"
+        
+        #close module
+        helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
+    except Exception as e:
+        e_type, e_obj, e_tb = sys.exc_info()
+        script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+        if exit_module:
+            sys.exit("Filtering_wide exited with an error.")
+            
