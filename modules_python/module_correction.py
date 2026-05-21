@@ -1154,298 +1154,304 @@ if __name__ == "__main__":
     # Perform Correction                                                 #
     # -------------------------------------------------------------------------#
     
-
-    if parameters_dict["correct_method"] == "harmony":
-
-        # translate harmony parameter from dict 
-        harmony_kwargs_dict = {
-                "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
-                if k.startswith("harmony")}
-
-        data_processed_df, log_string_harmony = batchcorrect_harmony(
-            data_df, metadata_df, 
-            parameters_dict["batch_cols_meta"],
-            seed=seed, 
-            **harmony_kwargs_dict
-        )
-        log_string += log_string_harmony
-
-    elif parameters_dict["correct_method"] == "combat":
-
-        # Check if only one batch col is defined!
-        if len(parameters_dict["batch_cols_meta"]) > 1:
-            info_batch_str = \
-                    "###ERROR###: COMBAT is only implemented for one batch variable.\n"\
-                    +f"\n\t\t\t\t{len(parameters_dict['batch_cols_meta'])} levels are provided: {parameters_dict['batch_cols_meta']}"
-            log_string += info_batch_str
-            helper.logger(log_file,log_string)
-            if exit_module:
-                sys.exit(1)
-
-        # translate combat parameter from dict 
-        combat_kwargs_dict = {
-                "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
-                if k.startswith("combat")}
-        if combat_kwargs_dict["fitsamples_meta_column"] is not None and combat_kwargs_dict["fitsamples_meta_level"] is not None:
-            fit_col = combat_kwargs_dict["fitsamples_meta_column"]
-            fit_level = combat_kwargs_dict["fitsamples_meta_level"]
+    try:
+                if parameters_dict["correct_method"] == "harmony":
             
-            fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
-            info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
-                    +f"\tCOMBAT will be fitted on {len(fitsamples_idx_list)} samples."\
-                    +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit COMBAT Model."  + "\n"
-            log_string += info_fitsamples_str
-
-            # Check whether the same batch levels are defined in samples
-            # fitting combat and the ones and the rest of the dataset
-
-            levels_fitsamples = set(
-                metadata_df.loc[
-                    fitsamples_idx_list, parameters_dict["batch_cols_meta"][0]])
-            levels_data = set(
-                metadata_df[parameters_dict["batch_cols_meta"][0]])
-            if len(levels_data) != len(levels_fitsamples):
-                info_fitsamples_str = \
-                    f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit COMBAT model (n={len(levels_fitsamples)})."\
-                    +f"\n\t\t\t\tLevel(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
-                log_string += info_fitsamples_str
-            # Remove samples of batch levels do not appear in fit samples
-            metadata_df = metadata_df[
-                ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
-                    list(levels_data-levels_fitsamples))]
-            data_df = data_df.loc[metadata_df.index]
-
-
-        out = batchcorrect_combat(
-            data_df = data_df,# possibly data_imputed_df
-            metadata_df = metadata_df,
-            batch_key = parameters_dict["batch_cols_meta"][0],
-            fitsamples_idx_list=fitsamples_idx_list,
-            cov_preserve_list = parameters_dict["combat_cols_preserve_meta"],
-            cov_adjust_list = parameters_dict["combat_cols_adjust_meta"],
-            cov_adjust_list_dtypes = parameters_dict["combat_cols_adjust_dtypes"]
-        )
-        if isinstance(out, str) and "ERROR" in out:
-            log_string_combat = out 
-            log_string += log_string_combat
-            helper.logger(log_file, log_string)
-            if exit_module:
-                sys.exit(1)
-        else:
-            (data_processed_df, log_string_combat) = out
-            log_string += log_string_combat
-
-    elif parameters_dict["correct_method"] == "adjust_confounders":
-
-        # check if number of cols and datatypes have same length
-        if not len(parameters_dict["adjust_cols"]) == len(parameters_dict["adjust_cols_dtypes"]):
-            log_string += "###ERROR###: Number of columns for adjustment and number of datatypes are different.\n"
-            helper.logger(log_file, log_string)
-            if exit_module:
-                sys.exit(1)
-
-        
-        valid_dtypes_list = ["continuous", "nominal", "ordinal"]
-        invalid_dtypes_list = []
-        for dt in parameters_dict["adjust_cols_dtypes"]:
-            if dt not in valid_dtypes_list:
-                invalid_dtypes_list.append(dt)
-        
-        if len(invalid_dtypes_list) > 0:
-            log_string += f"###ERROR###: The following datatypes are not valid: {invalid_dtypes_list}.\n"
-            helper.logger(log_file, log_string)
-            if exit_module:
-                sys.exit(1)
-
-
-        # Check for missing values in columns for adjustment
-        for var in parameters_dict["adjust_cols"]:
-            if metadata_df[var].isna().any():
-                n_na = metadata_df[metadata_df[var].isna()].shape[0]
-                log_string += f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
-        if "###ERROR###" in log_string:
-            helper.logger(log_file, log_string)
-            if exit_module:
-                sys.exit(1)
-
-
-
-        # Check if datatype can be casted to float or string
-        for var, dt in zip (
-            parameters_dict["adjust_cols"], 
-            parameters_dict["adjust_cols_dtypes"]):
-            if dt == "continuous":
-                try:
-                    metadata_df[var] = metadata_df[var].astype(float)
-                except:
-                    log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
-
-            elif dt == "ordinal":
-                try:
-                    metadata_df[var] = metadata_df[var].astype(int)
-                except:
-                    log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                    # translate harmony parameter from dict 
+                    harmony_kwargs_dict = {
+                            "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
+                            if k.startswith("harmony")}
             
-            elif dt == "nominal":
-                #nominal variable should be casted to string -> object in pandas
-                try:
-                    metadata_df[var] = metadata_df[var].astype(str)
-                except:
-                    log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
-            else:
-                log_string += "###ERROR###: Datatype not valid.\n"                
-
-        # Check if requested model is implemented
-        if parameters_dict["adjust_model"].lower() not in [
-                "ols","ridge","lasso","elasticnet","huber","bayesian","loess"]:
-                
-                log_string += f"###ERROR###: Model {parameters_dict['adjust_model']} not implemented, no correction applied.\n"                
-        
-        #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
-        if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
-            parameters_dict["adjust_covariates_onebyone"] = 1
-            log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
-        
-        if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
+                    data_processed_df, log_string_harmony = batchcorrect_harmony(
+                        data_df, metadata_df, 
+                        parameters_dict["batch_cols_meta"],
+                        seed=seed, 
+                        **harmony_kwargs_dict
+                    )
+                    log_string += log_string_harmony
             
-            fit_col = parameters_dict["adjust_fitsamples_meta_column"]
-            fit_level = parameters_dict["adjust_fitsamples_meta_level"]
-            fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
-            info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
-                    +f"\tAdjustment models will be fitted on {len(fitsamples_idx_list)} samples."\
-                    +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to adjust samples."  + "\n"
-            log_string += info_fitsamples_str
-
-            # Check whether the same levels are defined in samples #DO WE NEEDED? Does not work for continuous variables anyway #???
-            """
-            levels_fitsamples = set(
-                metadata_df.loc[
-                    fitsamples_idx_list, parameters_dict["adjust_cols"][0]])
-            levels_data = set(
-                metadata_df[parameters_dict["adjust_cols"][0]])
-            if len(levels_data) != len(levels_fitsamples):
-                info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
-                    +f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit adjustment model (n={len(levels_fitsamples)}).\n"\
-                    +f"Level(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
-                log_string += info_fitsamples_str
-            # Remove samples of batch levels do not appear in fit samples
-            metadata_df = metadata_df[
-                ~metadata_df[parameters_dict["adjust_cols"][0]].isin(
-                    list(levels_data-levels_fitsamples))]
-            data_df = data_df.loc[metadata_df.index]
-            """
+                elif parameters_dict["correct_method"] == "combat":
             
-        if "ERROR" in log_string:
-            # Exit module because of error
-            helper.logger(log_file,log_string)
-            if exit_module:
-                sys.exit(1)
-        
-        else:
-            if parameters_dict["adjust_covariates_onebyone"]:   
-                data_processed_df = data_df
-                corr_df, log_str = get_ids_for_correction(data_df=data_processed_df,
-                                                          metadata_df=metadata_df,
-                                                          adjust_cols_list=parameters_dict["adjust_cols"],
-                                                          adjust_cols_dtypes_list=parameters_dict["adjust_cols_dtypes"],
-                                                          fitsamples_idx_list=fitsamples_idx_list,
-                                                          alpha_significance=parameters_dict["adjust_alpha"])
-                log_string += log_str
-                for c in range(len(parameters_dict["adjust_cols"])):
-                    data_processed_df, log_string_adjust, corr_df = adjust_confounders(
-                        data_df = data_processed_df,
+                    # Check if only one batch col is defined!
+                    if len(parameters_dict["batch_cols_meta"]) > 1:
+                        info_batch_str = \
+                                "###ERROR###: COMBAT is only implemented for one batch variable.\n"\
+                                +f"\n\t\t\t\t{len(parameters_dict['batch_cols_meta'])} levels are provided: {parameters_dict['batch_cols_meta']}"
+                        log_string += info_batch_str
+                        helper.logger(log_file,log_string)
+                        if exit_module:
+                            sys.exit(1)
+            
+                    # translate combat parameter from dict 
+                    combat_kwargs_dict = {
+                            "_".join(k.split("_")[1:]):v for k,v in parameters_dict.items()
+                            if k.startswith("combat")}
+                    if combat_kwargs_dict["fitsamples_meta_column"] is not None and combat_kwargs_dict["fitsamples_meta_level"] is not None:
+                        fit_col = combat_kwargs_dict["fitsamples_meta_column"]
+                        fit_level = combat_kwargs_dict["fitsamples_meta_level"]
+                        
+                        fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
+                        info_fitsamples_str = \
+                                time.strftime("%Y-%m-%d%t%H:%M:%S") \
+                                +f"\tCOMBAT will be fitted on {len(fitsamples_idx_list)} samples."\
+                                +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit COMBAT Model."  + "\n"
+                        log_string += info_fitsamples_str
+            
+                        # Check whether the same batch levels are defined in samples
+                        # fitting combat and the ones and the rest of the dataset
+            
+                        levels_fitsamples = set(
+                            metadata_df.loc[
+                                fitsamples_idx_list, parameters_dict["batch_cols_meta"][0]])
+                        levels_data = set(
+                            metadata_df[parameters_dict["batch_cols_meta"][0]])
+                        if len(levels_data) != len(levels_fitsamples):
+                            info_fitsamples_str = \
+                                f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit COMBAT model (n={len(levels_fitsamples)})."\
+                                +f"\n\t\t\t\tLevel(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
+                            log_string += info_fitsamples_str
+                        # Remove samples of batch levels do not appear in fit samples
+                        metadata_df = metadata_df[
+                            ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
+                                list(levels_data-levels_fitsamples))]
+                        data_df = data_df.loc[metadata_df.index]
+            
+            
+                    out = batchcorrect_combat(
+                        data_df = data_df,# possibly data_imputed_df
                         metadata_df = metadata_df,
-                        model_string = parameters_dict['adjust_model'],
-                        adjust_cols_list = [parameters_dict["adjust_cols"][c]],
-                        adjust_cols_dtypes_list = [parameters_dict["adjust_cols_dtypes"][c]],
-                        random_state = seed,
-                        fitsamples_idx_list = fitsamples_idx_list,
-                        alpha_significance = parameters_dict["adjust_alpha"],
-                        alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
-                        corr_df = corr_df)
-                    log_string += log_string_adjust
+                        batch_key = parameters_dict["batch_cols_meta"][0],
+                        fitsamples_idx_list=fitsamples_idx_list,
+                        cov_preserve_list = parameters_dict["combat_cols_preserve_meta"],
+                        cov_adjust_list = parameters_dict["combat_cols_adjust_meta"],
+                        cov_adjust_list_dtypes = parameters_dict["combat_cols_adjust_dtypes"]
+                    )
+                    if isinstance(out, str) and "ERROR" in out:
+                        log_string_combat = out 
+                        log_string += log_string_combat
+                        helper.logger(log_file, log_string)
+                        if exit_module:
+                            sys.exit(1)
+                    else:
+                        (data_processed_df, log_string_combat) = out
+                        log_string += log_string_combat
+            
+                elif parameters_dict["correct_method"] == "adjust_confounders":
+            
+                    # check if number of cols and datatypes have same length
+                    if not len(parameters_dict["adjust_cols"]) == len(parameters_dict["adjust_cols_dtypes"]):
+                        log_string += "###ERROR###: Number of columns for adjustment and number of datatypes are different.\n"
+                        helper.logger(log_file, log_string)
+                        if exit_module:
+                            sys.exit(1)
+            
                     
-            else:
-                data_processed_df, log_string_adjust, corr_df = adjust_confounders(
-                    data_df = data_df,
-                    metadata_df = metadata_df,
-                    model_string = parameters_dict['adjust_model'],
-                    adjust_cols_list = parameters_dict["adjust_cols"],
-                    adjust_cols_dtypes_list = parameters_dict["adjust_cols_dtypes"],
-                    random_state = seed,
-                    fitsamples_idx_list = fitsamples_idx_list,
-                    alpha_significance = parameters_dict["adjust_alpha"],
-                    alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
-                    corr_df = None)
+                    valid_dtypes_list = ["continuous", "nominal", "ordinal"]
+                    invalid_dtypes_list = []
+                    for dt in parameters_dict["adjust_cols_dtypes"]:
+                        if dt not in valid_dtypes_list:
+                            invalid_dtypes_list.append(dt)
+                    
+                    if len(invalid_dtypes_list) > 0:
+                        log_string += f"###ERROR###: The following datatypes are not valid: {invalid_dtypes_list}.\n"
+                        helper.logger(log_file, log_string)
+                        if exit_module:
+                            sys.exit(1)
             
-            #save dataframe with association pvalues, effect sizes and R2 after correction
-            corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
-
-    elif parameters_dict["correct_method"] == "adjust_confounders_batchwise":
-        
-        if parameters_dict["adjust_cols"] is None:
-            warning_batch_level_str = \
-                "###ERROR###: No correction variable defined \n"
-            log_string += warning_batch_level_str
-            helper.logger(log_file, log_string)
-            if exit_module:
-                sys.exit(1)
-        
-        #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
-        if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
-            parameters_dict["adjust_covariates_onebyone"] = 1
-            log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
-
-
-        fitsamples_idx_list = None
-        if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
             
-            fit_col = parameters_dict["adjust_fitsamples_meta_column"]
-            fit_level = parameters_dict["adjust_fitsamples_meta_level"]
-            #check if fit_col is in metadata_df
-            if fit_col not in metadata_df.columns:
-                log_string += \
-                f"###ERROR###: Column '{fit_col}' as defined by 'adjust_fitsamples_meta_column' not found in metadata.\n"
-                helper.logger(log_file,log_string)
+                    # Check for missing values in columns for adjustment
+                    for var in parameters_dict["adjust_cols"]:
+                        if metadata_df[var].isna().any():
+                            n_na = metadata_df[metadata_df[var].isna()].shape[0]
+                            log_string += f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
+                    if "###ERROR###" in log_string:
+                        helper.logger(log_file, log_string)
+                        if exit_module:
+                            sys.exit(1)
+            
+            
+            
+                    # Check if datatype can be casted to float or string
+                    for var, dt in zip (
+                        parameters_dict["adjust_cols"], 
+                        parameters_dict["adjust_cols_dtypes"]):
+                        if dt == "continuous":
+                            try:
+                                metadata_df[var] = metadata_df[var].astype(float)
+                            except:
+                                log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+            
+                        elif dt == "ordinal":
+                            try:
+                                metadata_df[var] = metadata_df[var].astype(int)
+                            except:
+                                log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                        
+                        elif dt == "nominal":
+                            #nominal variable should be casted to string -> object in pandas
+                            try:
+                                metadata_df[var] = metadata_df[var].astype(str)
+                            except:
+                                log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                        else:
+                            log_string += "###ERROR###: Datatype not valid.\n"                
+            
+                    # Check if requested model is implemented
+                    if parameters_dict["adjust_model"].lower() not in [
+                            "ols","ridge","lasso","elasticnet","huber","bayesian","loess"]:
+                            
+                            log_string += f"###ERROR###: Model {parameters_dict['adjust_model']} not implemented, no correction applied.\n"                
+                    
+                    #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
+                    if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
+                        parameters_dict["adjust_covariates_onebyone"] = 1
+                        log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+                    
+                    if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
+                        
+                        fit_col = parameters_dict["adjust_fitsamples_meta_column"]
+                        fit_level = parameters_dict["adjust_fitsamples_meta_level"]
+                        fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
+                        info_fitsamples_str = \
+                                time.strftime("%Y-%m-%d%t%H:%M:%S") \
+                                +f"\tAdjustment models will be fitted on {len(fitsamples_idx_list)} samples."\
+                                +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to adjust samples."  + "\n"
+                        log_string += info_fitsamples_str
+            
+                        # Check whether the same levels are defined in samples #DO WE NEEDED? Does not work for continuous variables anyway #???
+                        """
+                        levels_fitsamples = set(
+                            metadata_df.loc[
+                                fitsamples_idx_list, parameters_dict["adjust_cols"][0]])
+                        levels_data = set(
+                            metadata_df[parameters_dict["adjust_cols"][0]])
+                        if len(levels_data) != len(levels_fitsamples):
+                            info_fitsamples_str = \
+                                time.strftime("%Y-%m-%d%t%H:%M:%S: ") \
+                                +f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit adjustment model (n={len(levels_fitsamples)}).\n"\
+                                +f"Level(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
+                            log_string += info_fitsamples_str
+                        # Remove samples of batch levels do not appear in fit samples
+                        metadata_df = metadata_df[
+                            ~metadata_df[parameters_dict["adjust_cols"][0]].isin(
+                                list(levels_data-levels_fitsamples))]
+                        data_df = data_df.loc[metadata_df.index]
+                        """
+                        
+                    if "ERROR" in log_string:
+                        # Exit module because of error
+                        helper.logger(log_file,log_string)
+                        if exit_module:
+                            sys.exit(1)
+                    
+                    else:
+                        if parameters_dict["adjust_covariates_onebyone"]:   
+                            data_processed_df = data_df
+                            corr_df, log_str = get_ids_for_correction(data_df=data_processed_df,
+                                                                      metadata_df=metadata_df,
+                                                                      adjust_cols_list=parameters_dict["adjust_cols"],
+                                                                      adjust_cols_dtypes_list=parameters_dict["adjust_cols_dtypes"],
+                                                                      fitsamples_idx_list=fitsamples_idx_list,
+                                                                      alpha_significance=parameters_dict["adjust_alpha"])
+                            log_string += log_str
+                            for c in range(len(parameters_dict["adjust_cols"])):
+                                data_processed_df, log_string_adjust, corr_df = adjust_confounders(
+                                    data_df = data_processed_df,
+                                    metadata_df = metadata_df,
+                                    model_string = parameters_dict['adjust_model'],
+                                    adjust_cols_list = [parameters_dict["adjust_cols"][c]],
+                                    adjust_cols_dtypes_list = [parameters_dict["adjust_cols_dtypes"][c]],
+                                    random_state = seed,
+                                    fitsamples_idx_list = fitsamples_idx_list,
+                                    alpha_significance = parameters_dict["adjust_alpha"],
+                                    alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
+                                    corr_df = corr_df)
+                                log_string += log_string_adjust
+                                
+                        else:
+                            data_processed_df, log_string_adjust, corr_df = adjust_confounders(
+                                data_df = data_df,
+                                metadata_df = metadata_df,
+                                model_string = parameters_dict['adjust_model'],
+                                adjust_cols_list = parameters_dict["adjust_cols"],
+                                adjust_cols_dtypes_list = parameters_dict["adjust_cols_dtypes"],
+                                random_state = seed,
+                                fitsamples_idx_list = fitsamples_idx_list,
+                                alpha_significance = parameters_dict["adjust_alpha"],
+                                alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
+                                corr_df = None)
+                        
+                        #save dataframe with association pvalues, effect sizes and R2 after correction
+                        corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
+            
+                elif parameters_dict["correct_method"] == "adjust_confounders_batchwise":
+                    
+                    if parameters_dict["adjust_cols"] is None:
+                        warning_batch_level_str = \
+                            "###ERROR###: No correction variable defined \n"
+                        log_string += warning_batch_level_str
+                        helper.logger(log_file, log_string)
+                        if exit_module:
+                            sys.exit(1)
+                    
+                    #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
+                    if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
+                        parameters_dict["adjust_covariates_onebyone"] = 1
+                        log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+            
+            
+                    fitsamples_idx_list = None
+                    if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
+                        
+                        fit_col = parameters_dict["adjust_fitsamples_meta_column"]
+                        fit_level = parameters_dict["adjust_fitsamples_meta_level"]
+                        #check if fit_col is in metadata_df
+                        if fit_col not in metadata_df.columns:
+                            log_string += \
+                            f"###ERROR###: Column '{fit_col}' as defined by 'adjust_fitsamples_meta_column' not found in metadata.\n"
+                            helper.logger(log_file,log_string)
+                            if exit_module:
+                                sys.exit(1)
+                        # check if fit_value is in metadata_df[fit_col]
+                        if fit_level not in metadata_df[fit_col].tolist():
+                            log_string += \
+                            f"###ERROR###: Value '{fit_level}' as defined by 'adjust_fitsamples_meta_level' not found in column '{fit_col}' in metadata.\n"
+                            helper.logger(log_file,log_string)
+                            if exit_module:
+                                sys.exit(1)
+                        fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
+                        info_fitsamples_str = \
+                                time.strftime("%Y-%m-%d%t%H:%M:%S") \
+                                +f"\tCorrection model will be fitted on {len(fitsamples_idx_list)} samples."\
+                                +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
+                        log_string += info_fitsamples_str
+                    
+                    data_processed_df, log_string, corr_df = adjust_confounders_batchwise(
+                        data_df=data_df,
+                        metadata_df=metadata_df, 
+                        model_string=parameters_dict["adjust_model"], 
+                        batch_level=parameters_dict["batch_cols_meta"], 
+                        random_state=seed, 
+                        covariates=parameters_dict["adjust_cols"], 
+                        covariates_dtypes_list=parameters_dict["adjust_cols_dtypes"],
+                        alpha_significance=parameters_dict["adjust_alpha"], 
+                        alphas_models=parameters_dict["adjust_alphas_models"],
+                        fitsamples_idx_list=fitsamples_idx_list, 
+                        correct_one_by_one=parameters_dict["adjust_covariates_onebyone"],
+                        correct_over_same_ids_per_batch=parameters_dict["adjust_covariates_over_same_ids_per_batch"])
+                    
+                    #save dataframe with association pvalues, effect sizes and R2 after correction
+                    corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
+                    
+                else:
+                    data_processed_df = data_df
+                    log_string += f"###WARNING###: Unknown correction method: {parameters_dict['correct_method']} — skipping.\n"
+    except Exception as e:
+                e_type, e_obj, e_tb = sys.exc_info()
+                script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+                helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
                 if exit_module:
-                    sys.exit(1)
-            # check if fit_value is in metadata_df[fit_col]
-            if fit_level not in metadata_df[fit_col].tolist():
-                log_string += \
-                f"###ERROR###: Value '{fit_level}' as defined by 'adjust_fitsamples_meta_level' not found in column '{fit_col}' in metadata.\n"
-                helper.logger(log_file,log_string)
-                if exit_module:
-                    sys.exit(1)
-            fitsamples_idx_list = list(metadata_df[metadata_df[fit_col]==fit_level].index)
-            info_fitsamples_str = \
-                    time.strftime("%Y-%m-%d%t%H:%M:%S") \
-                    +f"\tCorrection model will be fitted on {len(fitsamples_idx_list)} samples."\
-                    +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
-            log_string += info_fitsamples_str
-        
-        data_processed_df, log_string, corr_df = adjust_confounders_batchwise(
-            data_df=data_df,
-            metadata_df=metadata_df, 
-            model_string=parameters_dict["adjust_model"], 
-            batch_level=parameters_dict["batch_cols_meta"], 
-            random_state=seed, 
-            covariates=parameters_dict["adjust_cols"], 
-            covariates_dtypes_list=parameters_dict["adjust_cols_dtypes"],
-            alpha_significance=parameters_dict["adjust_alpha"], 
-            alphas_models=parameters_dict["adjust_alphas_models"],
-            fitsamples_idx_list=fitsamples_idx_list, 
-            correct_one_by_one=parameters_dict["adjust_covariates_onebyone"],
-            correct_over_same_ids_per_batch=parameters_dict["adjust_covariates_over_same_ids_per_batch"])
-        
-        #save dataframe with association pvalues, effect sizes and R2 after correction
-        corr_df.to_csv(os.path.join(out_dir_fp,"precursor_associations.tsv"),sep="\t")
-        
-    else:
-        data_processed_df = data_df
-        log_string += f"###WARNING###: Unknown correction method: {parameters_dict['correct_method']} — skipping.\n"
+                    sys.exit("Correction exited with an error.")
 
     data_processed_df = data_processed_df.T
 
