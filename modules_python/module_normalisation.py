@@ -719,10 +719,11 @@ if __name__ == "__main__":
         
         module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Normalization finished\n"
     except Exception as e:
-        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
-        helper.logger(log_file, "###ERROR###: "+str(e)+"\n")
+        e_type, e_obj, e_tb = sys.exc_info()
+        script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
         if exit_module:
-            sys.exit(1)
+            sys.exit("Normalisation exited with an error.")
 
     # Comparison for mask and logger what changed between both files
     """
