@@ -817,6 +817,7 @@ if __name__ == "__main__":
         idmap_fp = None
         counter = None
         outname = None
+    exit_module = not skip_parser
     
     data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter = helper.init_module(module = module, 
                                                                                                                                                                            get_metadata=False, 
@@ -842,7 +843,8 @@ if __name__ == "__main__":
     
     if data_df is None:
         helper.logger(log_file,"###ERROR###: Input data file could not be loaded")
-        sys.exit("###ERROR###: Input data file could not be loaded")
+        if exit_module:
+            sys.exit("###ERROR###: Input data file could not be loaded")
     
     #if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
     #    masked_df = helper.load_mask(data_df_fp)
@@ -883,9 +885,11 @@ if __name__ == "__main__":
             data_processed_df = data_df
             module_output += f"###WARNING###: Unknown summarization method: {parameters_dict['summarization_method']} — skipping.\n"
     except Exception as e:
-        helper.logger(log_file, "###ERROR###: Module ran into an error.\n")
-        helper.logger(log_file, "###ERROR###: "+str(e)+"\n")
-        sys.exit(1)
+        e_type, e_obj, e_tb = sys.exc_info()
+        script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+        if exit_module:
+            sys.exit("Summarisation exited with an error.\n")
     #except ValueError:
     #    raise(ValueError)
 
