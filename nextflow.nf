@@ -234,10 +234,24 @@ ordered.each { item ->
   def codeDirRel = (engine == 'py') ? (params.code_py as String) : (params.code_r as String)
   def ext        = (engine == 'py') ? 'py' : 'R'
 
-  def scriptPath = resolveCode("${codeDirRel}/module_${base}.${ext}")
-  // def paramPath  = resolveInstance("${params.param_dir}/${counter}_${base}_parameters.json")
+  def scriptDir = new File(resolveCode(codeDirRel))
+  if( !scriptDir.exists() )
+      die("Script directory not found: ${scriptDir}")
+
+  def targetName = "module_${base}.${ext}".toLowerCase()
+
+  def scriptFile = scriptDir.listFiles()
+      ?.find { it.name.toLowerCase() == targetName }
+
+  if( !scriptFile )
+      die("Missing step script for ${item} (case-insensitive search failed in ${scriptDir})")
+
+  def scriptPath = scriptFile.getAbsolutePath()
+
   
-  def paramRel = "${counter}_${base}_parameters.json"
+  // def paramPath  = resolveInstance("${params.param_dir}/${counter}_${base}_Parameters.json")
+  
+  def paramRel = "${counter}_${base}_Parameters.json"
   
   mustExist(scriptPath, "step script for ${item}")
   // mustExist(paramPath,  "param JSON for ${item}")
@@ -497,7 +511,7 @@ def w = new File(wfPath).newWriter()
 w << "nextflow.enable.dsl=2\n\n"
 
 w << "include { INIT_PARAMS } from '${modulePath}'\n"
-stepsResolved.eachWithIndex { _, i ->
+stepsResolved.eachWithIndex { step, i ->
   def idx = String.format('%02d', i+1)
   w << "include { RUN_MODULE as RUN_${idx} } from '${modulePath}'\n"
 }
@@ -582,7 +596,7 @@ stepsResolved.eachWithIndex { s, i ->
           "${maxlfqso}",
           file("${figscptn.getAbsolutePath()}"),
           data,
-          file("${param_dir}/${s.counter}_${s.base}_parameters.json"),
+          file("${param_dir}/${s.counter}_${s.base}_Parameters.json"),
           meta,
           id,
           mask,
@@ -601,12 +615,24 @@ w << "}\n"
 w.close()
 
 // -------------------- include and run generated workflow --------------------
-include { GENERATED } from "${wfPath}"
+// -------------------- run generated workflow as separate Nextflow execution --------------------
 
-workflow {
-  GENERATED()
+def generatedCmd = "NXF_SYNTAX_PARSER=v1 nextflow run '${wfPath}' -entry GENERATED -c '${projectDir}/nextflow.config'"
+println "Running generated workflow:"
+println generatedCmd
+
+def generatedProc = ["bash", "-lc", generatedCmd].execute()
+generatedProc.in.eachLine { println it }
+generatedProc.err.eachLine { System.err.println(it) }
+generatedProc.waitFor()
+
+if( generatedProc.exitValue() != 0 ) {
+  throw new RuntimeException("Generated workflow failed with exit code ${generatedProc.exitValue()}")
 }
 
+workflow {
+  Channel.empty()
+}
 
 workflow.onError {
     println ""
