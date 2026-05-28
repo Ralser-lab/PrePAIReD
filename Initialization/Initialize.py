@@ -97,6 +97,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                       not module.startswith(".") and re.match(r"^[0-9]", module[0])] # check for order and numbers
     # print(module_folders)
     dict_all_parameters = {} # dict where all parameters are stored for error check
+    parameters_list = [] # list of parameters with a flag dependency to check for completeness
     for module in modules:  # loop over modules to generate the json files
         if run_error_check:
             update_log(log, f"Start Error check for {module}.")
@@ -106,6 +107,9 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
             #flag_value_var = None
             if module == general_filename:  # create the general file as starting file for other modules
                 dict1 = {}
+                flag_var = None
+                flag_value_var = None
+
                 with open(f"{params_folder}/{module}_Parameters.json", "w") as out_file:
                     for line in txt_to_json:
                         # print(line)
@@ -130,7 +134,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         if run_error_check:
                             module_name = module[3:]
                             #print(f"Start Error check for {module_name}.")
-                            flag_var, flag_value_var = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log)
+                            flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list)
                     # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
 
@@ -157,13 +161,13 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                             pass
                         dict1[command.strip()] = description  # generate dictionary
                         dict_all_parameters[command.strip()] = description
-                        
+
                         ## ERROR CHECK HERE FOR MODULES HERE##
                         if run_error_check:
                             try:
                                 module_name = module[3:]
                                 #print(f"Start Error check for {module_name}.")
-                                flag_var, flag_value_var = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log)
+                                flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list)
                                 #print(f"Error check successfully finished for {module_name}.")     
                             except Exception as e:
                                 #print(e)
