@@ -870,7 +870,13 @@ if __name__ == "__main__":
              #helper.logger(log_file, module_output=log)
                   
              # Extract variables from parameters, which need adjustment
-             ids_list = parameters_dict["input_ids_columns"].split(";")
+             if parameters_dict["input_origin"]=="diann":
+                 if parameters_dict["input_ids_columns"] is not None:
+                     ids_list = "Precursor.Id;Stripped.Sequence;Protein.Group;Genes".split(";")+[col for col in parameters_dict["input_ids_columns"].split(";") if col not in "Precursor.Id;Stripped.Sequence;Protein.Group;Genes".split(";")]
+                 else:
+                     ids_list = "Precursor.Id;Stripped.Sequence;Protein.Group;Genes".split(";")
+             else:
+                 ids_list = ["to_be_filled"]
              input_id_col = ids_list[0]
              
              #DIA-NN
