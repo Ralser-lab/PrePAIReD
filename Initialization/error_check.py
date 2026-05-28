@@ -458,7 +458,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
 
 # main function #
 # read DIANN file header, metadata
-def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict, metadata_file: str, data_file: str, log: str,
+def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict,
+                metadata_file: str, data_file: str, log: str, parameters_list: list,
                 current_flag=None, current_flag_value=None):
     """
     This function checks parameters and values from the user input for right datatype, default
@@ -475,17 +476,18 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     :param metadata_file: str, metadata filename
     :param data_file: str, proteomics filename, f.e. DIA-NN output
     :param log: str, logfile
+    :param parameters_list: list, contains all user-derived parameters to cross-check with mandatory values
     :return current_flag, current_flag_value, str, both is needed to identify certain variables in operation dict
     """
 
     # check all arguments for right type
-    #if not isinstance(variable, str):  # check if variable is really a str
+    # if not isinstance(variable, str):  # check if variable is really a str
     #    raise TypeError(f"{variable} is not a string.")
-    #if not isinstance(module, str):  # check if module is really a str
+    # if not isinstance(module, str):  # check if module is really a str
     #    raise TypeError(f"{module} is not a string.")
-    #if not isinstance(flag_dictionary, dict):  # check if dict is really a dict
+    # if not isinstance(flag_dictionary, dict):  # check if dict is really a dict
     #    raise TypeError(f"{flag_dictionary} is not a dictionary.")
-    #if not isinstance(operation_dictionary, dict):  # check if dict is really a dict
+    # if not isinstance(operation_dictionary, dict):  # check if dict is really a dict
     #    raise TypeError(f"{operation_dictionary} is not a dictionary.")
 
     # identify value via module and parameter and compare to dict hit
@@ -493,38 +495,78 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     # try: store flag as flag_var and flag_value as flag_value_var for temporary variables, example input_origin = Flag,
     # diann = Flag_value, get operations from flag_dict
     # except: if no flag and flag_value is found, use temporary flag and value to check in parameter dict
-    #print(variable)
-    #print(module)
-    #print(flag_dictionary[module].keys())
+
     if variable in flag_dictionary[module].keys():
-        #print(f"{variable} is in Flag dictionary")
+        # print(f"{variable} is in Flag dictionary")
+        # print(f"Latest flag: {current_flag}, latest flag value: {current_flag_value}, "
+        #       f"variable: {variable}, value: {value}, module: {module}")
+        # print(f"current parameters list: {parameters_list}")
+        if current_flag is None:  # exception for first run
+            pass
+        else:
+            if len(parameters_list) == 0:  # look only at parameters which are present
+                pass
+            else:
+                if len([key for key in operation_dictionary[current_flag].keys()]) > 1:  # some flag values don't need to be checked before there is a parameter
+                    if ";" in current_flag_value:
+                        flag_values = current_flag_value.split(";")
+                        for flag_value in flag_values:
+                            mandatory_parameters = [key for key in operation_dictionary[current_flag][flag_value].keys()]  # get mandatory parameters
+                            mandatory_parameters.remove("Language")  # Language is not used in analysis
+                            # print(f" mandatory parameters: {mandatory_parameters}")
+                            if set(mandatory_parameters).issubset(set(parameters_list)):  # check if mandatory parameters are in list
+                                # print("All parameters found.")
+                                # parameters_list = []
+                            else:
+                                missing = set(mandatory_parameters) - set(parameters_list)  # get missing prarameters
+                                # print(f"Parameters missing: {missing}")
+                                update_log(log,
+                                           f"###ERROR###: Missing parameters for {current_flag} and {current_flag_value}: {missing}")
+                                raise ValueError(f"###ERROR###: Missing parameters for {current_flag} and {current_flag_value}: "
+                                                 f"{missing}")
+                    else:
+                        mandatory_parameters = [key for key in operation_dictionary[current_flag][current_flag_value].keys()]
+                        mandatory_parameters.remove("Language")
+                        # print(f" mandatory parameters: {mandatory_parameters}")
+                        if set(mandatory_parameters).issubset(set(parameters_list)):
+                            # print("All parameters found.")
+                            # parameters_list = []
+                        else:
+                            missing = set(mandatory_parameters) - set(parameters_list)
+                            # print(f"Parameters missing: {missing}")
+                            update_log(log,
+                                       f"###ERROR###: Missing parameters for {current_flag} and {current_flag_value}: {missing}")
+                            raise ValueError(
+                                f"###ERROR###: Missing parameters for {current_flag} and {current_flag_value}: {missing}")
         dict_to_use = flag_dictionary[module][variable]  # get the current flag information
-        #print(dict_to_use)
+        # print(dict_to_use)
         current_flag = variable
         current_flag_value = str(value)
 
     else:
-        #print(f"{variable} is in Operation dictionary")
+        # print(f"{variable} is in Operation dictionary")
         if current_flag_value is None:
-            update_log(log,"###ERROR###: Flag values can not be None.") 
+            update_log(log, "###ERROR###: Flag values can not be None.")
             raise ValueError("Flag values can not be None.")
         if ";" in current_flag_value:  # make exceptions if you have to loop over several flag values seperated by ;
             flag_values = current_flag_value.split(";")
             # dict_to_use = operation_dictionary[current_flag][flag_values[0]][variable]
             for flag_value in flag_values:
                 if variable in operation_dictionary[current_flag][flag_value]:
-                    #print(flag_value, variable)
+                    # print(flag_value, variable)
                     dict_to_use = operation_dictionary[current_flag][flag_value][variable]
-                    #print(value, type(value))
-                    #print(dict_to_use["Default"], type(dict_to_use["Default"]))
+                    parameters_list.append(variable)
+                    # print(value, type(value))
+                    # print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
                     current_operation = dict_to_use["Check Operation"]  # get the current operation to do
-                    if str(value).strip() == dict_to_use["Default"] and "existence" not in current_operation:  # check for default
-                        #print(f"{value} is default value.")
+                    if str(value).strip() == dict_to_use[
+                        "Default"] and "existence" not in current_operation:  # check for default
+                        # print(f"{value} is default value.")
                         pass
                     else:
-                        #print(f"{value} is not default")
-                        #current_operation = dict_to_use["Check Operation"]  # get the current operation to do
+                        # print(f"{value} is not default")
+                        # current_operation = dict_to_use["Check Operation"]  # get the current operation to do
                         # print(current_operation)
                         operation_selection(value=value, target_dict=dict_to_use,
                                             operation_dictionary=operation_dictionary,
@@ -536,35 +578,37 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
         else:
             try:
                 dict_to_use = operation_dictionary[current_flag][current_flag_value][variable]
+                parameters_list.append(variable)
             except:
-                update_log(log,f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.") 
-            #print(dict_to_use)
+                update_log(log,
+                           f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.")
+                # print(dict_to_use)
 
-   #print(value, type(value))
-   #print(dict_to_use["Default"], type(dict_to_use["Default"]))
+    # print(value, type(value))
+    # print(dict_to_use["Default"], type(dict_to_use["Default"]))
 
     current_operation = dict_to_use["Check Operation"]
     if str(value) == str(dict_to_use["Default"]) and "existence" not in current_operation:  # check for default
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
-            update_log(log,f"###ERROR###: {variable} can not be None.") 
+            update_log(log, f"###ERROR###: {variable} can not be None.")
             raise ValueError(f"{variable} can not be None.")
         else:
-            #print(f"{value} is default value.")
+            # print(f"{value} is default value.")
             pass
 
     else:
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
-            update_log(log,f"###ERROR###: {variable} can not be None.") 
+            update_log(log, f"###ERROR###: {variable} can not be None.")
             raise ValueError(f"{variable} can not be None.")
-        #print(f"{value} is not default")
-        #current_operation = dict_to_use["Check Operation"]  # get the current operation to do
+        # print(f"{value} is not default")
+        # current_operation = dict_to_use["Check Operation"]  # get the current operation to do
         # print(current_operation)
         operation_selection(value=value, target_dict=dict_to_use, operation_dictionary=operation_dictionary,
                             operation=current_operation, module=module, variable=variable, user_dict=user_dict,
                             metadata_file=metadata_file, data_file=data_file, log=log)
 
-    #print(current_flag, current_flag_value)
-    #print("Works so far")
+    # print(current_flag, current_flag_value)
+    # print("Works so far")
 
-    return current_flag, current_flag_value
+    return current_flag, current_flag_value, parameters_list
 
