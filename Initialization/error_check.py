@@ -516,6 +516,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                             # print(f" mandatory parameters: {mandatory_parameters}")
                             if set(mandatory_parameters).issubset(set(parameters_list)):  # check if mandatory parameters are in list
                                 # print("All parameters found.")
+                                pass
                                 # parameters_list = []
                             else:
                                 missing = set(mandatory_parameters) - set(parameters_list)  # get missing prarameters
@@ -530,6 +531,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                         # print(f" mandatory parameters: {mandatory_parameters}")
                         if set(mandatory_parameters).issubset(set(parameters_list)):
                             # print("All parameters found.")
+                            pass
                             # parameters_list = []
                         else:
                             missing = set(mandatory_parameters) - set(parameters_list)
