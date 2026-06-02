@@ -464,13 +464,13 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
                                 variable=variable, log=log)
         if current_operation == "elements existence in input_ids_columns or Proteotypic":
-            print("New operation here")
+            # print("New operation here")
             values = value.split(";")
             # print(user_dict)
             id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]
             input_ids_columns = user_dict["input_ids_columns"]
             input_ids_columns = input_ids_columns.split(";")
-            print(input_ids_columns)
+            # print(input_ids_columns)
             input_ids_columns = list(set(input_ids_columns + id_columns))
             for val in values:
                 check_for_existence(val, l=input_ids_columns, module=module, variable=variable, log=log)
