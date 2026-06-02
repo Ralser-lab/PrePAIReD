@@ -58,7 +58,16 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
     metadata_columns = []
     with open(txt_file, "r") as pf:
         module_names = []  # list for each module name
-        for line in pf:
+        lines = pf.readlines()
+        for encoding_line in lines: # get metadata encoding first to read the file
+            if encoding_line.startswith("metadata_encoding"):
+                _, encoding = encoding_line.split("=", 1)  # split between parameter and value
+                metadata_encoding = encoding.strip()  # remove whitespaces
+                # print(f"encoding: {metadata_encoding}")
+            else:
+                pass
+
+        for line in lines:
             # skip comments and empty lines
             if (line[0] == "#") | (line[0] == "\n"):
                 continue
@@ -134,7 +143,7 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                         if run_error_check:
                             module_name = module[3:]
                             #print(f"Start Error check for {module_name}.")
-                            flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list)
+                            flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list, metadata_encoding=metadata_encoding)
                     # print(dict1)
                     json.dump(dict1, out_file, indent=4, sort_keys=False)  # write to module
 
@@ -167,8 +176,8 @@ def read_parameters_file(txt_file=str, path_to_project_directory=str, metadata_f
                             try:
                                 module_name = module[3:]
                                 #print(f"Start Error check for {module_name}.")
-                                flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list)
-                                #print(f"Error check successfully finished for {module_name}.")     
+                                flag_var, flag_value_var, parameters_list = error_check.error_check(value=description, variable=command, module=module_name, flag_dictionary=flags_dict, operation_dictionary=operation_dict, current_flag=flag_var, current_flag_value=flag_value_var, user_dict=dict_all_parameters, metadata_file=metadata_file, data_file=data_file, log=log, parameters_list=parameters_list, metadata_encoding=metadata_encoding)
+                                # print(f"Error check successfully finished for {module_name}.")
                             except Exception as e:
                                 #print(e)
                                 update_log(log, "###ERROR###: "+str(e))
