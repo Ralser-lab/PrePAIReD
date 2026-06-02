@@ -616,10 +616,10 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                            f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.")
                 # print(dict_to_use)
 
-    print(module)
-    print(variable)
-    print(value, type(value))
-    # print(dict_to_use["Default"], type(dict_to_use["Default"]))
+    # print(module)
+    # print(variable)
+    # print(value)
+    # print(dict_to_use)
     current_operation = dict_to_use["Check Operation"]
     if str(value) == str(dict_to_use["Default"]) and "existence" not in current_operation:  # check for default
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
@@ -645,4 +645,3 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     # print("Works so far")
 
     return current_flag, current_flag_value, parameters_list
-
