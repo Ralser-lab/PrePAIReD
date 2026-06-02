@@ -26,57 +26,56 @@ def update_log(logfile, message):
     log.close()
 
 # support functions
-def read_dataframe(filepath: str, log: str, header_only = False, column=None):
+def read_dataframe(filepath: str, log: str, encoding: str or None, header_only=False, column=None):
     """
     Check if filepath exists and read the dataframe header
     :param filepath: str, path to dataframe
     :param log: str, logfile
     :param header_only: bool, if True only the header will be read
-    :column: str or None, column to be read-in
+    :param column: str or None, column to be read-in
+    :param encoding: str, encoding for metadata file, None for proteomics data
     :return: column names of the dataframe
     """
-    # print(filepath)
-    
     if header_only:
         nrows = 0
     else:
         nrows = None
-        
     if column is not None:
         usecols = [column]
         columns = [column]
     else:
         usecols = None
         columns = None
-    
+    # print(encoding)
     if not isinstance(filepath, str):  # check if filepath is str
-        update_log(log,f"###ERROR###: {filepath} is not a string.") 
+        update_log(log, f"###ERROR###: {filepath} is not a string.")
         raise TypeError(f"{filepath} is not a string.")
     if filepath.endswith(".xlsx"):  # read excel
-        #print(filepath)
+        # print(filepath)
         df = pd.read_excel(filepath)  # read only the first 10 lines to save time
     elif filepath.endswith(".txt") or filepath.endswith(".tsv"):  # read tsv files
-        df = pd.read_csv(filepath, sep="\t", nrows=nrows, usecols=usecols)  # read only the first line to save time
+        df = pd.read_csv(filepath, sep="\t", nrows=nrows, usecols=usecols, encoding=encoding)  # read only the first line to save time
     elif filepath.endswith(".csv"):  # read csv files
-        df = pd.read_csv(filepath, sep=",", nrows=nrows, usecols=usecols)  # read only the first line to save time
+        df = pd.read_csv(filepath, sep=",", nrows=nrows, usecols=usecols, encoding=encoding)  # read only the first line to save time
     elif filepath.endswith(".parquet"):  # read parquet files
         if columns is not None:
-            df = pd.read_parquet(filepath, columns=columns)  
+            df = pd.read_parquet(filepath, columns=columns)
         elif nrows is not None:
-            pf = ParquetFile(filepath) 
-            first_ten_rows = next(pf.iter_batches(batch_size = 1)) 
+            pf = ParquetFile(filepath)
+            first_ten_rows = next(pf.iter_batches(batch_size=1))
             df = pa.Table.from_batches([first_ten_rows]).to_pandas()
         else:
-            df = pd.read_parquet(filepath)  
+            df = pd.read_parquet(filepath)
     multiple_columns = df.columns[df.columns.duplicated()].unique()  # check for uniqueness
     if len(multiple_columns) > 0:
-        update_log(log,f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
-                         f"times.") 
+        update_log(log,
+                   f"###ERROR###: Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
+                   f"times.")
         raise ValueError(f"Dataframe columns are not unique in metadata, {list(multiple_columns)} exist(s) multiple "
                          f"times.")
     if df.columns.isna().any():  # check for NaN column names
-        update_log(log,f"###ERROR###: Dataframe columns contains NaN column names in metadata at position "
-                         f"{df.columns[df.columns.isna()]}.") 
+        update_log(log, f"###ERROR###: Dataframe columns contains NaN column names in metadata at position "
+                        f"{df.columns[df.columns.isna()]}.")
         raise ValueError(f"Dataframe columns contains NaN column names in metadata at position "
                          f"{df.columns[df.columns.isna()]}.")
     else:
@@ -237,9 +236,11 @@ def allowed_values_conversion(range_options: list, log: str):
 
 
 def operation_selection(value, target_dict: dict, operation_dictionary: dict, user_dict: dict, operation: str,
-                        module: str, variable: str, metadata_file: str, data_file: str, log: str):
+                        module: str, variable: str, metadata_file: str, data_file: str, log: str,
+                        metadata_encoding: str):
     """
     Run the correct operation for every value
+
     :param value: user input
     :param target_dict: dict, nested dict entries for variable, will be used to identify allowed values
     :param operation_dictionary: dict, operation dict to
@@ -250,107 +251,117 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
     :param metadata_file: str, metadata filename
     :param data_file: str, proteomics filename, f.e. DIA-NN output
     :param log: str, logfile
+    :param metadata_encoding: str, encoding for metadata file
     """
-    #print(value)
+    # print(value)
     current_operation = operation
+    metadata_encoding = metadata_encoding
     if value is not None:  # skip operations if a value is nan
         if current_operation == "sheet existence if xls(x)":
             if metadata_file[:-5] == ".xlsx":
                 sheet_existence(metadata_file, value, log=log)
         if current_operation == "existence in metadata.columns":
-            metadata_df = read_dataframe(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
             check_for_existence(value, l=list(metadata_df.columns), module=module, variable=variable, log=log)
-            if variable in ["metadata_filename_column","metadata_sample_column"]:  # add check for uniqueness and nans in file.name column
-                multiple_files = metadata_df.loc[metadata_df[value].duplicated(), value].unique()  # check for uniqueness
+            if variable in ["metadata_filename_column",
+                            "metadata_sample_column"]:  # add check for uniqueness and nans in file.name column
+                multiple_files = metadata_df.loc[
+                    metadata_df[value].duplicated(), value].unique()  # check for uniqueness
                 if len(multiple_files) > 0:
-                    update_log(log, f"###ERROR###: File or sample names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
-                     f"times.") 
+                    update_log(log,
+                               f"###ERROR###: File or sample names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
+                               f"times.")
                     raise ValueError(
                         f"File or samples names are not unique in metadata, {list(multiple_files)} exist(s) multiple "
                         f"times.")
                 if metadata_df[value].isna().any():  # check for NaN column names
-                    update_log(log, "###ERROR###: File or sample names contain NaN column names in metadata.") 
+                    update_log(log, "###ERROR###: File or sample names contain NaN column names in metadata.")
                     raise ValueError("File or sample names contain NaN column names in metadata.")
         if current_operation == "existence in metadata.columns and value in metadata[column]":
             if value and len(value) >= 2:
-                metadata_df = read_dataframe(metadata_file, log=log)
+                metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
                 check_for_existence(value[0], l=list(metadata_df.columns), module=module, variable=variable, log=log)
                 # print(df_cols)
                 # print(value[0])
                 series = metadata_df[value[0]].tolist()
-                #series = series[value[0]].tolist()
+                # series = series[value[0]].tolist()
                 # print(series)
                 check_for_existence(value[1], l=series, module=module, variable=variable, log=log)
         if current_operation == "existence in metadata_df.columns (; separated)":
-            metadata_df = read_dataframe(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "elements existence in metadata.columns":
-            metadata_df = read_dataframe(metadata_file, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
             for val in value:
                 check_for_existence(val, l=list(metadata_df.columns), module=module, variable=variable, log=log)
         if current_operation == "value in metadata[sample_type_column]":
-            metadata_df = read_dataframe(metadata_file, log=log)
-            check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module, variable=variable, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
+            check_for_existence(value, l=list(metadata_df[user_dict["sample_type_column"]]), module=module,
+                                variable=variable, log=log)
         if current_operation == "value in metadata[combat_fitsamples_meta_column]":
-            metadata_df = read_dataframe(metadata_file, log=log)
-            check_for_existence(value, l=list(metadata_df[user_dict["combat_fitsamples_meta_column"]]), module=module, variable=variable, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
+            check_for_existence(value, l=list(metadata_df[user_dict["combat_fitsamples_meta_column"]]), module=module,
+                                variable=variable, log=log)
         if current_operation == "value in metadata[adjust_fitsamples_meta_column]":
-            metadata_df = read_dataframe(metadata_file, log=log)
-            check_for_existence(value, l=list(metadata_df[user_dict["adjust_fitsamples_meta_column"]]), module=module, variable=variable, log=log)
+            metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
+            check_for_existence(value, l=list(metadata_df[user_dict["adjust_fitsamples_meta_column"]]), module=module,
+                                variable=variable, log=log)
         if current_operation == "existence in data_df.columns":
             if variable == "input_filename_column":  # add check for uniqueness and nans in file.name column
                 # Check wheter column exists
-                data_df = read_dataframe(data_file, log=log, header_only=True)
+                data_df = read_dataframe(data_file, log=log, header_only=True, encoding=None)
                 check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
-                #multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
-                #if len(multiple_files) > 0:
+                # multiple_files = data_df.loc[data_df[value].duplicated(), value].unique()  # check for uniqueness
+                # if len(multiple_files) > 0:
                 #    update_log(log, f"###ERROR###: File names are not unique in data, {list(multiple_files)} exist(s) multiple "
-                #    f"times.") 
+                #    f"times.")
                 #    raise ValueError(
                 #        f"File names are not unique in data, {list(multiple_files)} exist(s) multiple "
                 #        f"times.")
                 # read in only respective column
-                data_df = read_dataframe(data_file, log=log, column=value)
+                data_df = read_dataframe(data_file, log=log, column=value, encoding=None)
                 if data_df[value].isna().any():  # check for NaN column names
                     raise ValueError("File names contain NaN column names in data.")
                 # if file names in metadata and data are unique and without nans, check that file names are same in
                 # both files
-                metadata_df = read_dataframe(metadata_file, log=log)
+                metadata_df = read_dataframe(metadata_file, log=log, encoding=metadata_encoding)
                 metadata_set = set(metadata_df[user_dict["metadata_filename_column"]])
                 data_set = set(data_df[user_dict["input_filename_column"]])
-                #only_in_metadata = metadata_set - data_set
+                # only_in_metadata = metadata_set - data_set
                 only_in_data = data_set - metadata_set
                 if only_in_data:
-                    #update_log(log, f"###ERROR###: Differences found:\n"
+                    # update_log(log, f"###ERROR###: Differences found:\n"
                     #                 #f"Only in metadata: {list(only_in_metadata)}\n"
                     #                 f"Only in data: {list(only_in_data)}")
                     raise ValueError(f"Differences found:\n"
-                                     #f"Only in metadata: {list(only_in_metadata)}\n"
+                                     # f"Only in metadata: {list(only_in_metadata)}\n"
                                      f"Only in data: {list(only_in_data)}")
             else:
-                data_df = read_dataframe(data_file, log=log, header_only=True)
+                data_df = read_dataframe(data_file, log=log, header_only=True, encoding=None)
                 check_for_existence(value, l=list(data_df.columns), module=module, variable=variable, log=log)
 
         if current_operation == "existence in data_df.columns (; separated)":
-            data_df = read_dataframe(data_file, log=log, header_only=True)
+            data_df = read_dataframe(data_file, log=log, header_only=True, encoding=None)
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=list(data_df.columns), module=module, variable=variable, log=log)
         if current_operation == "existence in input_ids_columns":
             # print(user_dict)
+            id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]
             input_ids_columns = user_dict["input_ids_columns"]
-            #print(input_ids_columns)
             input_ids_columns = input_ids_columns.split(";")
-            #print(input_ids_columns)
+            input_ids_columns = list(set(input_ids_columns + id_columns))
+            # print(input_ids_columns)
             check_for_existence(value, l=input_ids_columns, module=module, variable=variable, log=log)
         if current_operation == "existence in input_ids_columns or Proteotypic":
             # print(user_dict)
+            id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]
             input_ids_columns = user_dict["input_ids_columns"]
-            #print(input_ids_columns)
+            # print(input_ids_columns)
             input_ids_columns = input_ids_columns.split(";")
-            input_ids_columns.append("Proteotypic")
+            input_ids_columns = list(set(input_ids_columns + id_columns))
             input_ids_columns.append("include_correction")
             check_for_existence(value, l=input_ids_columns, module=module, variable=variable, log=log)
         if current_operation == "existence of path":
@@ -365,12 +376,13 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             length_dtypes = check_for_length(value, module=module, variable=variable, log=log)
             if length_cols != length_dtypes:
                 update_log(log, f"###ERROR###: for variable {variable}: Length of dtypes ({length_dtypes}) "
-                                 f"and adjusted columns ({length_cols}) is different")
-                raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
-                                 f"and adjusted columns ({length_cols}) is different")
+                                f"and adjusted columns ({length_cols}) is different")
+                raise ValueError(
+                    f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                    f"and adjusted columns ({length_cols}) is different")
             for val in value:
-                check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)   
-        if current_operation == "check len(combat_cols_adjust_meta) and el in AllowedValues if existence of combat_cols_adjust_meta":   
+                check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)
+        if current_operation == "check len(combat_cols_adjust_meta) and el in AllowedValues if existence of combat_cols_adjust_meta":
             if user_dict["combat_cols_adjust_meta"]:
                 adjust_cols = user_dict["combat_cols_adjust_meta"]  # get the list with column names
                 allowed_values = operation_dictionary["correct_method"]["combat"]["combat_cols_adjust_dtypes"][
@@ -379,18 +391,20 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
                 length_dtypes = check_for_length(value, module=module, variable=variable, log=log)
                 if length_cols != length_dtypes:
                     update_log(log, f"###ERROR###: for variable {variable}: Length of dtypes ({length_dtypes}) "
-                                     f"and adjusted columns ({length_cols}) is different")
-                    raise ValueError(f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
-                                     f"and adjusted columns ({length_cols}) is different")
+                                    f"and adjusted columns ({length_cols}) is different")
+                    raise ValueError(
+                        f"Error in module: {module} for variable: {variable}: Length of dtypes ({length_dtypes}) "
+                        f"and adjusted columns ({length_cols}) is different")
                 for val in value:
-                    check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)              
+                    check_for_existence(val, l=allowed_values, module=module, variable=variable, log=log)
         if current_operation == "check elements":
             values = value.split(";")
             for val in values:
                 check_for_existence(val, l=target_dict["Options"], module=module, variable=variable, log=log)
         if current_operation == "check range":
             allowed_values = target_dict["Options"]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values,
+                                                                                                   log=log)
             check_for_range(value=value, lower_limit=lower_limit, upper_limit=upper_limit,
                             lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
                             variable=variable, log=log)
@@ -399,7 +413,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values,
+                                                                                                   log=log)
             if check_for_length(value, module=module, variable=variable, log=log) != 2:
                 update_log(log, f"###ERROR###: for variable {variable}: {value} is supposed to have only 2 elements!")
                 raise ValueError(
@@ -414,7 +429,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values,
+                                                                                                   log=log)
             if check_for_length(value, module=module, variable=variable, log=log) != 3:
                 update_log(log, f"###ERROR###: for variable {variable}: {value} is supposed to have only 3 elements!")
                 raise ValueError(
@@ -428,7 +444,8 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             values = str(value).split(";")
             values = [el for item in values for el in item.split("_")]
             allowed_values = target_dict["Options"]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values,
+                                                                                                   log=log)
             for val in values:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
@@ -439,12 +456,24 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             allowed_values = allowed_values[0].split("in ")
             allowed_values = allowed_values[-1]
             allowed_values = [allowed_values.strip()]
-            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values, log=log)
+            lower_inclusive, upper_inclusive, lower_limit, upper_limit = allowed_values_conversion(allowed_values,
+                                                                                                   log=log)
             for val in value:
                 val = float(val)
                 check_for_range(value=val, lower_limit=lower_limit, upper_limit=upper_limit,
                                 lower_inclusive=lower_inclusive, upper_inclusive=upper_inclusive, module=module,
                                 variable=variable, log=log)
+        if current_operation == "elements existence in input_ids_columns or Proteotypic":
+            print("New operation here")
+            values = value.split(";")
+            # print(user_dict)
+            id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]
+            input_ids_columns = user_dict["input_ids_columns"]
+            input_ids_columns = input_ids_columns.split(";")
+            print(input_ids_columns)
+            input_ids_columns = list(set(input_ids_columns + id_columns))
+            for val in values:
+                check_for_existence(val, l=input_ids_columns, module=module, variable=variable, log=log)
 
     else:  # check if NoneType is allowed
         allowed_types = target_dict["Type"]
@@ -459,7 +488,7 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
 # main function #
 # read DIANN file header, metadata
 def error_check(value, variable: str, module: str, flag_dictionary: dict, operation_dictionary: dict, user_dict: dict,
-                metadata_file: str, data_file: str, log: str, parameters_list: list,
+                metadata_file: str, data_file: str, log: str, parameters_list: list, metadata_encoding: str,
                 current_flag=None, current_flag_value=None):
     """
     This function checks parameters and values from the user input for right datatype, default
@@ -477,6 +506,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
     :param data_file: str, proteomics filename, f.e. DIA-NN output
     :param log: str, logfile
     :param parameters_list: list, contains all user-derived parameters to cross-check with mandatory values
+    :param metadata_encoding: str, encoding for metadata file
     :return current_flag, current_flag_value, str, both is needed to identify certain variables in operation dict
     """
 
@@ -515,8 +545,8 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                             mandatory_parameters.remove("Language")  # Language is not used in analysis
                             # print(f" mandatory parameters: {mandatory_parameters}")
                             if set(mandatory_parameters).issubset(set(parameters_list)):  # check if mandatory parameters are in list
-                                # print("All parameters found.")
                                 pass
+                                # print("All parameters found.")
                                 # parameters_list = []
                             else:
                                 missing = set(mandatory_parameters) - set(parameters_list)  # get missing prarameters
@@ -530,8 +560,8 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                         mandatory_parameters.remove("Language")
                         # print(f" mandatory parameters: {mandatory_parameters}")
                         if set(mandatory_parameters).issubset(set(parameters_list)):
-                            # print("All parameters found.")
                             pass
+                            # print("All parameters found.")
                             # parameters_list = []
                         else:
                             missing = set(mandatory_parameters) - set(parameters_list)
@@ -574,7 +604,7 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                                             operation_dictionary=operation_dictionary,
                                             operation=current_operation, module=module, variable=variable,
                                             user_dict=user_dict, metadata_file=metadata_file, data_file=data_file,
-                                            log=log)
+                                            log=log, metadata_encoding=metadata_encoding)
                 else:
                     pass
         else:
@@ -586,9 +616,10 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
                            f"###ERROR###: {variable} is not present for flag {current_flag}={current_flag_value}. Please remove manually to avoid any unwanted inconsistencies later on.")
                 # print(dict_to_use)
 
-    # print(value, type(value))
+    print(module)
+    print(variable)
+    print(value, type(value))
     # print(dict_to_use["Default"], type(dict_to_use["Default"]))
-
     current_operation = dict_to_use["Check Operation"]
     if str(value) == str(dict_to_use["Default"]) and "existence" not in current_operation:  # check for default
         if str(value) == "None" and not "None" in dict_to_use["Type"].split(";"):
@@ -607,7 +638,8 @@ def error_check(value, variable: str, module: str, flag_dictionary: dict, operat
         # print(current_operation)
         operation_selection(value=value, target_dict=dict_to_use, operation_dictionary=operation_dictionary,
                             operation=current_operation, module=module, variable=variable, user_dict=user_dict,
-                            metadata_file=metadata_file, data_file=data_file, log=log)
+                            metadata_file=metadata_file, data_file=data_file, log=log,
+                            metadata_encoding=metadata_encoding)
 
     # print(current_flag, current_flag_value)
     # print("Works so far")
