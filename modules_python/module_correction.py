@@ -1220,7 +1220,7 @@ if __name__ == "__main__":
 
 
                     if parameters_dict["combat_cols_adjust_dtypes"] is None:
-                                parameters_dict["combat_cols_adjust_dtypes"] = []
+                        parameters_dict["combat_cols_adjust_dtypes"] = []
             
                     out = batchcorrect_combat(
                         data_df = data_df,# possibly data_imputed_df
