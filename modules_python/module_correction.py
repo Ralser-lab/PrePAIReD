@@ -1217,7 +1217,10 @@ if __name__ == "__main__":
                             ~metadata_df[parameters_dict["batch_cols_meta"][0]].isin(
                                 list(levels_data-levels_fitsamples))]
                         data_df = data_df.loc[metadata_df.index]
-            
+
+
+                    if parameters_dict["combat_cols_adjust_dtypes"] is None:
+                                parameters_dict["combat_cols_adjust_dtypes"] = []
             
                     out = batchcorrect_combat(
                         data_df = data_df,# possibly data_imputed_df
