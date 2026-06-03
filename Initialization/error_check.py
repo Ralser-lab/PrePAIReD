@@ -182,7 +182,7 @@ def check_for_path_existence(filepath: str, log: str):
         raise ValueError(f"{filepath} does not exist.")
 
 
-def check_for_length(l: list, module: str, variable: str, log: str):
+def check_for_length(l: list or tuple, module: str, variable: str, log: str):
     """
     Check if l is a list and return its length
     :param l: list, contains the allowed values
@@ -191,10 +191,11 @@ def check_for_length(l: list, module: str, variable: str, log: str):
     :param log: str, logfile
     :return: length of l
     """
-    if not isinstance(l, list):  # check if list is a list
-        update_log(log,f"###ERROR###: for variable {variable}: {l} is not a list.") 
-        raise TypeError(f"Error in module: {module} for variable: {variable}: {l} is not a list.")
+    if not (isinstance(l, list) or isinstance(l, tuple)):  # check if value is a list or tuple
+        update_log(log, f"###ERROR###: for variable {variable}: {l} is not a list or tuple.")
+        raise TypeError(f"Error in module: {module} for variable: {variable}: {l} is not a list or tuple.")
     return len(l)
+
 
 
 def sheet_existence(excel_file: str, sheet_name: str, log: str):
