@@ -507,6 +507,21 @@ def callout(title: str, items: List[str], kind: str, styles) -> Table:
     )
     return t
 
+def limit_messages(items: List[str], max_items: int, label: str, log_path: Path) -> List[str]:
+    if len(items) <= max_items:
+        return items
+
+    shown = items[:max_items]
+    hidden = len(items) - max_items
+
+    log_uri = log_path.resolve().as_uri()
+    shown.append(
+        f'{hidden} additional {label} were raised. '
+        f'Please check the full log file: <a href="{escape(log_uri)}">open log file</a>'
+    )
+
+    return shown
+    
 # ================================================================
 # Per-module PDF chunk (NO PageBreak here)
 # ================================================================
@@ -519,6 +534,7 @@ def build_module_pdf(
     method_sections: List[Tuple[str, MethodDoc]],
     method_references: List[str],
     out_pdf: Path,
+    log_path: Path,
     figures_dir: Optional[Path] = None,
     figure_captions: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> None:
@@ -695,11 +711,22 @@ def build_module_pdf(
 
     # Errors & Warnings  <-- comes AFTER Results
     story.append(section_heading("Errors & Warnings", sec_no, styles))
+
+    display_errors = errors
+    display_warnings = limit_messages(
+        warnings,
+        max_items=5,
+        label="warnings",
+        log_path=log_path,
+    )
+
     if errors:
-        story.append(callout(f"Errors ({len(errors)})", errors, "error", styles))
+        story.append(callout(f"Errors ({len(errors)})", display_errors, "error", styles))
         story.append(Spacer(1, 8))
+
     if warnings:
-        story.append(callout(f"Warnings ({len(warnings)})", warnings, "warning", styles))
+        story.append(callout(f"Warnings ({len(warnings)})", display_warnings, "warning", styles))
+
     if not errors and not warnings:
         story.append(callout("Status", ["No tagged warnings or errors found."], "info", styles))
 
@@ -735,7 +762,7 @@ def main() -> None:
     print("cwd:", os.getcwd())
     print("__file__:", Path(__file__).resolve())
     print("script_dir:", Path(__file__).resolve().parent)
-    
+
     ap = argparse.ArgumentParser(description="Pipeline PDF report step")
     ap.add_argument("--log", default="log.txt", help="Path to log.txt")
     ap.add_argument("--in_pdf", default=None, help="Existing report to append")
@@ -745,16 +772,28 @@ def main() -> None:
 
     workdir = Path(".").resolve()
     params_path = find_single_params_file(workdir)
+
     title = infer_title_from_params_file(params_path)
     step = infer_step_from_title(title).upper()
+
+    counter_str = title.split("_", 1)[0]
+    counter_int = int(counter_str)
 
     log_path = Path(args.log).resolve()
     if not log_path.exists():
         raise FileNotFoundError(f"log file not found: {log_path}")
 
     params = load_params_json(params_path)
-    warnings, errors = extract_tagged_warnings_errors(log_path)
 
+    base_seed = int(params.get("seed", 0))
+    effective_seed = base_seed + counter_int
+
+    params["counter"] = counter_str
+    params["seed"] = effective_seed
+
+    warnings, errors = extract_tagged_warnings_errors(log_path)
+	
+    
     # Figures (optional)
     figures_dir = workdir / "report_folder"
     figure_caps_path = workdir / "Figures_Captions.tsv"
@@ -822,6 +861,7 @@ def main() -> None:
             errors=errors,
             method_sections=method_sections,
             method_references=references_ordered,
+            log_path=log_path,
             figures_dir=figures_dir,
             figure_captions=figure_captions,
             out_pdf=chunk,

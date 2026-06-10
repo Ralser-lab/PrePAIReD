@@ -1,296 +1,74 @@
 nextflow.enable.dsl=2
 
-def pget = { k, d -> params.keySet().contains(k) ? params[k] : d }
-params.config_data    = pget('config_data','Config_data.txt')
-// params.config_file    = pget('config_file','Config.txt')
-// params.param_dir      = pget('param_dir','Parameter_Files')
-// params.initial_dir    = pget('initial_dir','Data')
-// params.meta_path      = pget('meta_path', params.initial_dir)
-params.code_py        = pget('code_py','modules_python')
-params.code_r         = pget('code_r','modules_R')
-params.method_doc     = pget('method_doc','docs/Method_description.tsv')
-params.keep_generated = pget('keep_generated', false)
-params.qa_script   = pget('qa_script', 'modules_python/module_quality_assessment.py')
-
-params.cleanup_aggressive = pget('cleanup_aggressive', false)
-
-params.eval_config = pget('eval_config', 'Config_evaluation.txt')
-
-params.maxlfq_dll = pget('maxlfq_dll', 'modules_python/maxlfq.dll')
-params.maxlfq_dylib = pget('maxlfq_dylilb', 'modules_python/maxlfq.dylib')
-params.maxlfq_so = pget('maxlfq_so', '/workflow/modules_python/maxlfq_docker.so')
-
-params.figs_cptn = pget('figs_cptn', 'modules_python/Figures_Captions.tsv')
-
-
-def PARAM_DIR_NAME = "Parameter_Files"
-
-
-def die = { msg -> throw new RuntimeException(msg as String) }
-
-def dieSoft = { String msg ->
-  log.error(msg)     // prints nicely in Nextflow logs
-  System.err.println("\n[FATAL] " + msg + "\n")
-  System.exit(1)     // clean stop before running tasks
-}
-// --- path helpers
-
-def parseKeyValueFile = { String path ->
-  def m = [:]
-  def f = new File(path)
-  if( !f.exists() ) die("Missing config_data file: ${path}")
-  f.eachLine { line ->
-    def s = line.trim()
-    if( !s || s.startsWith('#') ) return
-    def parts = s.split('=',2)
-    if( parts.size() == 2 )
-      m[parts[0].trim()] = parts[1].trim().replaceAll(/^["']|["']$/, '')
-  }
-  return m
+def pget(String key, Object defaultValue) {
+    return params.containsKey(key) ? params[key] : defaultValue
 }
 
-def resolveLaunch = { String p ->
-  def f = new File(p)
-  f.isAbsolute() ? f.getAbsolutePath() : new File(launchDir.toString(), p).getAbsolutePath()
-}
-def resolveFrom = { String base, String p ->
-  def f = new File(p)
-  f.isAbsolute() ? f.getAbsolutePath() : new File(base, p).getAbsolutePath()
-}
-def resolveCode = { String p ->
-  def f = new File(p)
-  f.isAbsolute() ? f.getAbsolutePath() : new File(projectDir.toString(), p).getAbsolutePath()
+def die(String msg) {
+    throw new RuntimeException(msg)
 }
 
-def cfgDataPath = resolveLaunch(params.config_data as String)
-def cfgData     = parseKeyValueFile(cfgDataPath)
+Map parseKeyValueFile(String path) {
+    def m = [:]
+    def f = new File(path)
+    if( !f.exists() ) die("Missing config_data file: ${path}")
 
-def WORKING_PATH = cfgData.get('WORKING_PATH') ?: '.'
-def WORKDIR_ABS  = resolveFrom(launchDir.toString(), WORKING_PATH)
-
-
-// everything instance-relative goes here
-def resolveInstance = { String p ->
-  def f = new File(p)
-  f.isAbsolute() ? f.getAbsolutePath() : new File(WORKDIR_ABS, p).getAbsolutePath()
-}
-
-// --- file helpers
-def mustExist = { String path, String label ->
-  def f = new File(path)
-  if( !f.exists() ) die("Missing ${label}: ${path}")
-  return f
-}
-
-def ensureExistsOrCreateEmpty = { String path, String label ->
-  def f = new File(path)
-  if( !f.exists() ) {
-    f.parentFile?.mkdirs()
-    f.text = ""
-    println "Created empty ${label}: ${path}"
-  }
-  return f
-}
-
-// Always inside working dir:
-// def PARAM_DIR_ABS   = new File(WORKDIR_ABS, "Parameter_Files").getAbsolutePath()
-def CONFIG_TXT_ABS  = new File(WORKDIR_ABS, "Config.txt").getAbsolutePath()
-
-// Data/metadata can be absolute or relative-to-workingdir
-def ORIGINALDATA_ABS = cfgData.get('ORIGINALDATA') ? resolveFrom(WORKDIR_ABS, cfgData['ORIGINALDATA']) : null
-def METADATA_ABS     = cfgData.get('METADATA')     ? resolveFrom(WORKDIR_ABS, cfgData['METADATA'])     : null
-
-params.config_file = CONFIG_TXT_ABS
-// params.param_dir   = PARAM_DIR_ABS
-params.initial_dir = new File(WORKDIR_ABS, "Data").getAbsolutePath()
-params.meta_path   = params.initial_dir
-
-
-// -------------------- parse config --------------------
-def cfgFile = mustExist(params.config_file as String, "Config.txt")
-
-def lines = cfgFile.readLines()
-def run_value = lines.find { it.trim().toLowerCase().startsWith('run') }?.split('=',2)?.getAt(1)?.trim()
-if( !run_value ) die("Config file missing 'Run =' entry")
-
-def order_line = lines.find { it.trim().toLowerCase().startsWith('order') }
-if( !order_line ) die("Config file missing 'Order =' entry")
-
-def ordered = order_line.split('=',2)[1].replaceAll(/\s+/,'').split(',').findAll{it}.toList()
-
-println "Run mode          : ${run_value}"
-println "Ordered processes : ${ordered}"
-
-// -------------------- rerun handling --------------------
-def start_dir
-def precounter
-if( run_value.toLowerCase() == 'new' ) {
-  start_dir  = WORKDIR_ABS
-  precounter = "00"
-} else {
-  // remove trailing _py or _r from Run value for folder lookup
-  def rerun_name = run_value.replaceFirst(/_(?i)(py|r)$/, '')
-  
-  def rerun_folder = new File(WORKDIR_ABS, rerun_name)
-  if( !rerun_folder.isDirectory() )
-      die("Rerun folder '${rerun_name}' not found (resolved to ${rerun_folder})")
-  start_dir  = rerun_folder.getAbsolutePath()
-  precounter = rerun_name.split('_',2)[0]
-  
-  // --- PRE-FLIGHT CHECK: block rerun if the chosen step contains ###ERROR###
-  def stepLog = new File(rerun_folder, "step_log.txt")
-  if( stepLog.exists() ) {
-    def bad = stepLog.readLines().any { it.contains('###ERROR###') }
-    if( bad ) {
-      def hits = stepLog.readLines()
-                        .withIndex()
-                        .findAll { line, idx -> line.contains('###ERROR###') }
-                        .takeRight(20)
-                        .collect { line, idx -> "${idx+1}: ${line}" }
-                        .join('\n')
-
-      dieSoft(
-        "Cannot rerun from '${rerun_name}' because it contains error markers in step_log.txt.\n" +
-        "Fix that step (or choose an earlier step), then rerun.\n\n" +
-        "---- ###ERROR### lines (last 20) ----\n${hits}\n" +
-        "-------------------------------------"
-      )
+    f.eachLine { line ->
+        def s = line.trim()
+        if( !s || s.startsWith('#') ) return
+        def parts = s.split('=', 2)
+        if( parts.size() == 2 ) {
+            m[parts[0].trim()] = parts[1].trim().replaceAll(/^["']|["']$/, '')
+        }
     }
-  } else {
-    // optional: if missing step_log should also block rerun
-    // dieSoft("Cannot rerun from '${rerun_name}' because step_log.txt is missing in ${rerun_folder}")
-    println "[WARN] step_log.txt not found in ${rerun_folder} (skipping pre-flight error check)"
-  }
+
+    return m
 }
 
-println "Start dir         : ${start_dir}"
-println "Precounter        : ${precounter}"
-
-// -------------------- validation --------------------
-// def seed_data   = mustExist(new File(start_dir, "data_${precounter}.tsv").getAbsolutePath(), "seed data")
-def seed_data_path = run_value.equalsIgnoreCase('new')
-  ? ORIGINALDATA_ABS
-  : new File(start_dir, "data_${precounter}.tsv").getAbsolutePath()
-
-def seed_data = mustExist(seed_data_path, "seed data")
-
-// always original
-def original_data = mustExist(ORIGINALDATA_ABS, "ORIGINALDATA")
-
-// def seed_mask   = mustExist(new File(start_dir, "data_${precounter}_mask.tsv").getAbsolutePath(), "seed mask")
-// def seed_maskdp = mustExist(new File(start_dir, "data_${precounter}_mask_description.tsv").getAbsolutePath(), "seed mask description")
-
-def seed_idmap_path  = new File(start_dir, "id_mapping.tsv").getAbsolutePath()
-
-def seed_mask_path   = new File(start_dir, "data_${precounter}_mask.tsv").getAbsolutePath()
-def seed_maskdp_path = new File(start_dir, "data_${precounter}_mask_description.tsv").getAbsolutePath()
-
-def seed_mask   = ensureExistsOrCreateEmpty(seed_mask_path,   "seed mask (auto-created)")
-def seed_maskdp = ensureExistsOrCreateEmpty(seed_maskdp_path, "seed mask description (auto-created)")
-// def seed_idmap = ensureExistsOrCreateEmpty(seed_idmap_path, "seed idmap (auto-created)")
-def seed_idmap = (run_value.toLowerCase() == 'new')
-  ? ensureExistsOrCreateEmpty(seed_idmap_path, "seed idmap (auto-created)")
-  : mustExist(seed_idmap_path, "seed idmap (id_mapping.tsv)")
-  
-  
-def logSeed = ensureExistsOrCreateEmpty(resolveInstance("pipeline_log.txt"), "pipeline_log.txt")
-
-def reportSeed = ensureExistsOrCreateEmpty(new File(start_dir, "report.pdf").getAbsolutePath(), "report seed")
-println "Using report seed : ${reportSeed}"
-
-// def metaFile  = mustExist(resolveInstance("${params.meta_path}/Metadata.tsv"), "Metadata.tsv")
-
-def meta_path = (run_value.equalsIgnoreCase('new') && METADATA_ABS)
-  ? METADATA_ABS
-  : resolveInstance("${params.meta_path}/Metadata.tsv")
-
-// def metaFile = mustExist(meta_path, "Metadata.tsv")
-
-def metaFile = mustExist(
-    run_value.equalsIgnoreCase('new') ? METADATA_ABS : METADATA_ABS,
-    "Metadata.tsv"
-)
-
-def methodDoc = mustExist(resolveCode(params.method_doc as String), "method doc TSV")
-def reportPy  = mustExist(resolveCode("${params.code_py}/report.py"), "modules_python/report.py")
-
-def qaScript   = mustExist(resolveCode(params.qa_script as String), "QA script")
-def evalConfig = mustExist(resolveInstance(params.eval_config as String), "Config_evaluation.txt")
-
-def maxlfqdll    = mustExist(resolveCode(params.maxlfq_dll as String), "maxlfq dll")
-def maxlfqdylib  = mustExist(resolveCode(params.maxlfq_dylib as String), "maxlfq dylib")
-def maxlfqso     = params.maxlfq_so as String
-
-def figscptn = mustExist(resolveCode(params.figs_cptn as String), "Figures Captions")
-
-// validate steps
-def stepsResolved = []
-ordered.each { item ->
-  def (counter, rest) = item.split('_',2)
-  def suffix = rest.tokenize('_')[-1].toLowerCase()
-  def engine = (suffix == 'r') ? 'r' : 'py'
-  def base   = rest.replaceAll(/_(?i)(py|r)$/,'')
-
-  def codeDirRel = (engine == 'py') ? (params.code_py as String) : (params.code_r as String)
-  def ext        = (engine == 'py') ? 'py' : 'R'
-
-  def scriptDir = new File(resolveCode(codeDirRel))
-  if( !scriptDir.exists() )
-      die("Script directory not found: ${scriptDir}")
-
-  def targetName = "module_${base}.${ext}".toLowerCase()
-
-  def scriptFile = scriptDir.listFiles()
-      ?.find { it.name.toLowerCase() == targetName }
-
-  if( !scriptFile )
-      die("Missing step script for ${item} (case-insensitive search failed in ${scriptDir})")
-
-  def scriptPath = scriptFile.getAbsolutePath()
-
-  
-  // def paramPath  = resolveInstance("${params.param_dir}/${counter}_${base}_Parameters.json")
-  
-  def paramRel = "${counter}_${base}_Parameters.json"
-  
-  mustExist(scriptPath, "step script for ${item}")
-  // mustExist(paramPath,  "param JSON for ${item}")
-
-  stepsResolved << [counter:counter, base:base, engine:engine, script:scriptPath, paramRel:paramRel] //, param:paramPath]
+String resolveLaunch(String p) {
+    def f = new File(p)
+    return f.isAbsolute() ? f.absolutePath : new File(launchDir.toString(), p).absolutePath
 }
 
-println "Working path      : ${WORKDIR_ABS}"
-println "Original data     : ${ORIGINALDATA_ABS}"
-println "Metadata          : ${METADATA_ABS}"
-def param_dir = new File(WORKDIR_ABS, "Parameter_Files").getAbsolutePath()
-
-// -------------------- temp generation dir --------------------
-def genDir = new File("${workDir}/_generated_${System.currentTimeMillis()}")
-genDir.mkdirs()
-
-workflow.onComplete {
-  if( params.keep_generated ) {
-    println "Generated files kept at: ${genDir}"
-  } else {
-    try { genDir.deleteDir() } catch(e) { }
-  }
+String resolveFrom(String base, String p) {
+    def f = new File(p)
+    return f.isAbsolute() ? f.absolutePath : new File(base, p).absolutePath
 }
 
-def modulePath = new File(genDir, "RUN_MODULE.nf").getAbsolutePath()
-def wfPath     = new File(genDir, "workflow_generated.nf").getAbsolutePath()
+String resolveCode(String p) {
+    def f = new File(p)
+    return f.isAbsolute() ? f.absolutePath : new File(projectDir.toString(), p).absolutePath
+}
 
-// -------------------- module file (container comes from the config/profile) --------------------
-new File(modulePath).text = '''\
-nextflow.enable.dsl=2
+File mustExist(String path, String label) {
+    def f = new File(path)
+    if( !f.exists() ) die("Missing ${label}: ${path}")
+    return f
+}
+
+File ensureExistsOrCreateEmpty(String path, String label) {
+    def f = new File(path)
+    if( !f.exists() ) {
+        f.parentFile?.mkdirs()
+        f.text = ''
+        println "Created empty ${label}: ${path}"
+    }
+    return f
+}
+
+String bashQuote(String s) {
+    return s.replace("'", "'\\''")
+}
+
 
 process INIT_PARAMS {
 
-  tag "INIT_PARAMS"
-  maxForks 1
+    tag "INIT_PARAMS"
+    maxForks 1
 
-  publishDir { "${publish_root}" }, mode: 'copy', overwrite: true
+    publishDir { publish_root }, mode: 'copy', overwrite: true
 
-  input:
+    input:
     tuple val(publish_root),
           path(init_script),
           path(flags_pkl),
@@ -298,65 +76,67 @@ process INIT_PARAMS {
           path(params_txt),
           path(original_data),
           path(meta_file)
-          
-          
-  output:
+
+    output:
     tuple path("Parameter_Files"), path("logfile_setup.txt"), path("init.done")
 
-  script:
-  """
-  set -uo pipefail
+    script:
+    """
+    set -uo pipefail
 
-  py_exit=0
-  python "${init_script}" \\
-    -w "." \\
-    -m "\${meta_file}" \\
-    -d "\${original_data}" || py_exit=\\$?
+    set +e
+    python "${init_script}" \\
+      -w "." \\
+      -m "${meta_file}" \\
+      -d "${original_data}"
+    py_exit=\$?
+    set -e
 
-  test -f logfile_setup.txt
+    mkdir -p "${publish_root}"
 
-  # If initialization failed, always copy the logfile first
-  if [ "\\$py_exit" -ne 0 ]; then
-      mkdir -p "${publish_root}"
-      cp -f logfile_setup.txt "\${publish_root}/"
+    if [ -f logfile_setup.txt ]; then
+        cp -f logfile_setup.txt "${publish_root}/"
+    fi
 
-      if [ -d Parameter_Files ]; then
-          cp -r Parameter_Files "\${publish_root}/"
-      fi
+    if [ -d Parameter_Files ]; then
+        cp -r Parameter_Files "${publish_root}/"
+    fi
 
-      if grep -Fq '###ERROR###' logfile_setup.txt; then
-          echo "Found ###ERROR### in logfile_setup.txt"
-      else
-          echo "Initialization failed without ###ERROR### marker"
-      fi
+    if [ "\$py_exit" -ne 0 ]; then
+        echo "[FATAL] Initialize.py failed with exit code \$py_exit" >&2
+        exit 100
+    fi
 
-      exit 100
-  fi
+    if [ ! -f logfile_setup.txt ]; then
+        echo "[FATAL] logfile_setup.txt was not created by Initialize.py" >&2
+        exit 100
+    fi
 
-  test -d Parameter_Files
-  touch init.done
-  """
+    if grep -Fq '###ERROR###' logfile_setup.txt; then
+        echo "[FATAL] Initialize.py produced ###ERROR### in logfile_setup.txt" >&2
+        exit 100
+    fi
+
+    if [ ! -d Parameter_Files ]; then
+        echo "[FATAL] Parameter_Files was not created by Initialize.py" >&2
+        exit 100
+    fi
+
+    touch init.done
+    """
 }
 
 
-process RUN_MODULE {
+process RUN_ALL_MODULES {
 
-  tag { "${counter}_${step_name}" }
-  maxForks 1
+    tag "RUN_ALL_MODULES"
+    maxForks 1
 
-  publishDir { "${publish_root}/${counter}_${step_name}" }, mode:'copy', saveAs: { fname ->
-      if( fname in ['log.txt','pipeline_log.txt'] ) return null
-      return fname
-    }
-
-  input:
+    input:
     tuple val(publish_root),
-          val(engine),
-          val(counter),
-          val(step_name),
-          val(param_dir),
-          path(paramdir),
-          path(script),
+          val(steps_tsv),
+          path(code_py_dir),
+          path(code_r_dir),
           path(report_script),
           path(qa_script),
           path(eval_cfg),
@@ -364,355 +144,438 @@ process RUN_MODULE {
           path(maxlfqdylib),
           val(maxlfqso),
           path(figscptn),
-          path(data_file),
-          path(param_file),
+          path(seed_data),
           path(meta_file),
           path(id_file),
           path(mask_file),
           path(mask_dp_file),
           path(log_file),
           path(prev_report),
-          path(doc_tsv)
+          path(doc_tsv),
+          path(paramdir)
 
-  output:
-    tuple path("data_${counter}.tsv"),
-          path("id_mapping.tsv"),
-          path("data_${counter}_mask.tsv", optional: true),
-          path("data_${counter}_mask_description.tsv", optional: true),
-          path(log_file),
-          path("step_log.txt"),
-          path("report_folder"),
-          path("report.pdf"),
-          val(param_dir)
+    output:
+    path("pipeline.done")
 
-  script:
-  """
-  set -euo pipefail
-  mkdir -p report_folder
-  : > step_log.txt
+    script:
+    """
+    set -euo pipefail
 
-  echo "----- MODULE START (${counter}_${step_name}) -----" >> step_log.txt
-  
-  cp -f /workflow/modules_python/maxlfq_docker.so ./maxlfq_docker.so
-  test -f ./maxlfq_docker.so || { echo "maxlfq_docker.so not found in container"; exit 1; }
+    BASE="\$PWD"
 
-  set +e
-  if [ "${engine}" = "py" ]; then
-    python "${script}" \\
-      -d "${data_file}" \\
-      -p "${param_file}" \\
-      -o . \\
-      -m "${meta_file}" \\
-      -l step_log.txt \\
-      -i "${id_file}" \\
-      -c "${counter}" >> step_log.txt 2>&1
-  else
-    Rscript "${script}" \\
-      -d "${data_file}" \\
-      -p "${param_file}" \\
-      -o . \\
-      -m "${meta_file}" \\
-      -l step_log.txt \\
-      -i "${id_file}" \\
-      -c "${counter}" >> step_log.txt 2>&1
-  fi
-  mod_rc=\\$?
-  set -e
+    cat > steps.tsv <<'EOF_STEPS'
+${steps_tsv}
+EOF_STEPS
 
-  if [ \\$mod_rc -ne 0 ]; then
-    echo "###MOD_ERROR### module failed (exit=\\$mod_rc) for ${counter}_${step_name}" >> step_log.txt
-    touch MOD.fail
-  else
-    touch MOD.ok
-  fi
+    current_data="\$BASE/${seed_data}"
+    current_id="\$BASE/${id_file}"
+    current_mask="\$BASE/${mask_file}"
+    current_mask_dp="\$BASE/${mask_dp_file}"
+    current_log="\$BASE/${log_file}"
+    current_report="\$BASE/${prev_report}"
 
-  echo "----- MODULE END -----" >> step_log.txt
+    while IFS=\$'\\t' read -r counter base engine script_name param_name; do
 
+        step_name="\${base}"
+        cd "\$BASE"
 
-  echo "" >> step_log.txt
-  echo "----- QA START (${counter}_${step_name}) -----" >> step_log.txt
+        mkdir -p report_folder
+        : > step_log.txt
 
-  set +e
-  python "${qa_script}" \\
-    -w "." \\
-    -m "${meta_file}" \\
-    -s "${counter}_${step_name}" \\
-    -e "${eval_cfg}" \\
-    --docker >> step_log.txt 2>&1
-  qa_rc=\\$?
-  set -e
+        echo "----- MODULE START (\${counter}_\${step_name}) -----" >> step_log.txt
 
-  if [ \\$qa_rc -ne 0 ]; then
-    echo "###QA_ERROR### QA failed (exit=\\$qa_rc) for ${counter}_${step_name}" >> step_log.txt
-    echo "[WARN] QA failed but continuing" >> step_log.txt
-    touch QA.fail
-  else
-    touch QA.ok
-  fi
+        cp -f "${maxlfqso}" ./maxlfq_docker.so
+        test -f ./maxlfq_docker.so || {
+            echo "maxlfq_docker.so not found: ${maxlfqso}" >> step_log.txt
+            exit 100
+        }
 
-  echo "----- QA END -----" >> step_log.txt
+        if [ "\$engine" = "py" ]; then
+            script_path="\$BASE/${code_py_dir}/\${script_name}"
+            runner="python"
+        else
+            script_path="\$BASE/${code_r_dir}/\${script_name}"
+            runner="Rscript"
+        fi
 
+        param_file="\$BASE/${paramdir}/\${param_name}"
 
-  echo "" >> step_log.txt
-  echo "----- REPORT START (${counter}_${step_name}) -----" >> step_log.txt
+        test -f "\$script_path" || {
+            echo "Missing module script: \$script_path" >> step_log.txt
+            exit 100
+        }
 
-  set +e
-  if [ -f "${prev_report}" ] && [ -s "${prev_report}" ]; then
-    python "${report_script}" \\
-      --log step_log.txt \\
-      --in_pdf "${prev_report}" \\
-      --out report_new.pdf \\
-      --doc_tsv "${doc_tsv}" >> step_log.txt 2>&1
-  else
-    python "${report_script}" \\
-      --log step_log.txt \\
-      --out report_new.pdf \\
-      --doc_tsv "${doc_tsv}" >> step_log.txt 2>&1
-  fi
-  rep_rc=\\$?
-  set -e
+        cp -f "\$param_file" .
+        
+        test -f "\$param_file" || {
+            echo "Missing parameter file: \$param_file" >> step_log.txt
+            exit 100
+        }
 
-  if [ \\$rep_rc -ne 0 ]; then
-    echo "###REP_ERROR### report failed (exit=\\$rep_rc) for ${counter}_${step_name}" >> step_log.txt
-    touch REP.fail
-  else
-    mv report_new.pdf report.pdf
-    touch REP.ok
-  fi
+        set +e
+        "\$runner" "\$script_path" \\
+          -d "\$current_data" \\
+          -p "\$param_file" \\
+          -o . \\
+          -m "\$BASE/${meta_file}" \\
+          -l step_log.txt \\
+          -i "\$current_id" \\
+          -c "\$counter" >> step_log.txt 2>&1
+        mod_rc=\$?
+        set -e
 
-  echo "----- REPORT END -----" >> step_log.txt
+        if [ \$mod_rc -ne 0 ]; then
+            echo "###MOD_ERROR### module failed exit=\\\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
+            touch MOD.fail
+        else
+            touch MOD.ok
+        fi
 
+        echo "----- MODULE END -----" >> step_log.txt
 
-  touch "${log_file}"
-  {
-    echo ""
-    echo "===== ${counter}_${step_name} (${engine}) ====="
-    cat step_log.txt
-  } >> "${log_file}"
+        echo "" >> step_log.txt
+        echo "----- QA START (\${counter}_\${step_name}) -----" >> step_log.txt
 
-  cp -f step_log.txt log.txt
+        set +e
+        python "\$BASE/${qa_script}" \\
+          -w . \\
+          -m "\$BASE/${meta_file}" \\
+          -s "\${counter}_\${step_name}" \\
+          -e "\$BASE/${eval_cfg}" \\
+          --docker >> step_log.txt 2>&1
+        qa_rc=\$?
+        set -e
 
+        if [ \$qa_rc -ne 0 ]; then
+            echo "###QA_ERROR### QA failed exit=\\\$qa_rc for \${counter}_\${step_name}" >> step_log.txt
+            echo "[WARN] QA failed but continuing" >> step_log.txt
+            touch QA.fail
+        else
+            touch QA.ok
+        fi
 
-  # STOP only on module/report errors
-  if grep -Eq "###MOD_ERROR###|###REP_ERROR###" step_log.txt; then
-    echo "[FATAL] ${counter}_${step_name}: module/report failed; see step_log.txt" >&2
-    exit 100
-  fi
+        echo "----- QA END -----" >> step_log.txt
 
-  # QA errors: warn only
-  if grep -q "###QA_ERROR###" step_log.txt; then
-    echo "[WARN] ${counter}_${step_name}: QA failed; continuing" >&2
-  fi
-  """
-}
-'''
-// -------------------- workflow file with aliases + named workflow component + main: --------------------
-def w = new File(wfPath).newWriter()
-w << "nextflow.enable.dsl=2\n\n"
+        echo "" >> step_log.txt
+        echo "----- REPORT START (\${counter}_\${step_name}) -----" >> step_log.txt
 
-w << "include { INIT_PARAMS } from '${modulePath}'\n"
-stepsResolved.eachWithIndex { step, i ->
-  def idx = String.format('%02d', i+1)
-  w << "include { RUN_MODULE as RUN_${idx} } from '${modulePath}'\n"
-}
+        set +e
+        if [ -f "\$current_report" ] && [ -s "\$current_report" ]; then
+            python "\$BASE/${report_script}" \\
+              --log step_log.txt \\
+              --in_pdf "\$current_report" \\
+              --out report_new.pdf \\
+              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
+        else
+            python "\$BASE/${report_script}" \\
+              --log step_log.txt \\
+              --out report_new.pdf \\
+              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
+        fi
+        rep_rc=\$?
+        set -e
 
-w << """
+        if [ \$rep_rc -ne 0 ]; then
+            echo "###REP_ERROR### report failed exit=\\\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
+            touch REP.fail
+        else
+            mv report_new.pdf report.pdf
+            touch REP.ok
+        fi
 
-/*
- * === AUTO-GENERATED (in workDir) ===
- * Source config : ${cfgFile}
- * Start dir     : ${start_dir}
- * Precounter    : ${precounter}
- * Steps         : ${stepsResolved.size()}
- */
+        echo "----- REPORT END -----" >> step_log.txt
 
+        touch "\$current_log"
+        {
+            echo ""
+            echo "===== \${counter}_\${step_name} (\${engine}) ====="
+            cat step_log.txt
+        } >> "\$current_log"
 
-workflow GENERATED {
+        cp -f step_log.txt log.txt
 
-  main:
+        publish_step="${publish_root}/\${counter}_\${step_name}"
+        mkdir -p "\$publish_step"
 
-    def meta       = file("${metaFile.getAbsolutePath()}")
-    def log        = file("${logSeed.getAbsolutePath()}")
-    def report0    = file("${reportSeed.getAbsolutePath()}")
-    def method_doc = file("${methodDoc.getAbsolutePath()}")
-    
-    def init_ch = INIT_PARAMS(
-      Channel.of( tuple(
-        "${WORKDIR_ABS}",
-        file("${projectDir}/Initialization/Initialize.py"),
-        file("${projectDir}/Initialization/dict_flags.pkl"),
-        file("${projectDir}/Initialization/dict_parameters.pkl"),
-        file("${WORKDIR_ABS}/Parameters.txt"),
-        file("${original_data.getAbsolutePath()}"),
-        meta
-      ))
-    )
-    
-    def ch0 = init_ch.map { param_dir, init_done, setup_log ->
-      [
-        file("${seed_data.getAbsolutePath()}"),
-        file("${seed_idmap.getAbsolutePath()}"),
-        file("${seed_mask.getAbsolutePath()}"),
-        file("${seed_maskdp.getAbsolutePath()}"),
-        file("${logSeed.getAbsolutePath()}"),
-        null,
-        null,
-        report0,
-        param_dir
-      ]
-    }
-    def ch00 = ch0//init_ch.map { param_dir, init_done -> ch0 + [param_dir] }
-    
-    //def ch00 = ch0.combine(init_ch).map { base_tuple, init_tuple ->
-     // def (data, id, mask, mask_dp, log_fp, step_log, report_dir, report_pdf) = base_tuple
-      // def (param_dir, init_done) = init_tuple
-      // pass param_dir forward by appending it
-      //[data, id, mask, mask_dp, log_fp, step_log, report_dir, report_pdf, param_dir]
-    //}
-    
+        cp -f step_log.txt "\$publish_step/"
+        cp -f log.txt "\$publish_step/" || true
+        cp -f report.pdf "\$publish_step/" || true
+        cp -rf report_folder "\$publish_step/" || true
+        cp -f data_\${counter}.tsv "\$publish_step/" || true
+        cp -f id_mapping.tsv "\$publish_step/" || true
+        cp -f data_\${counter}_mask.tsv "\$publish_step/" || true
+        cp -f data_\${counter}_mask_description.tsv "\$publish_step/" || true
+        [ -f Normalization_factors.tsv ] && cp -f Normalization_factors.tsv "\$publish_step/" || true
 
-"""
+        if grep -Eq "###MOD_ERROR###|###REP_ERROR###" step_log.txt; then
+            echo "[FATAL] \${counter}_\${step_name}: module/report failed; see step_log.txt" >&2
+            exit 100
+        fi
 
-stepsResolved.eachWithIndex { s, i ->
-  def idx  = String.format('%02d', i+1)
-  def prev = (i == 0) ? '00' : String.format('%02d', i)
+        if grep -q "###QA_ERROR###" step_log.txt; then
+            echo "[WARN] \${counter}_\${step_name}: QA failed; continuing" >&2
+        fi
 
-  w << """\
-    def ch${idx} = RUN_${idx}(
-      ch${prev}.map { data, id, mask, mask_dp, log_fp, step_log, report_dir, report_pdf, param_dir ->
-        [
-          '${WORKDIR_ABS}',
-          '${s.engine}',
-          '${s.counter}',
-          '${s.base}',
-          param_dir,
-          param_dir,
-          file("${s.script}"),
-          file("${reportPy.getAbsolutePath()}"),
-          file("${qaScript.getAbsolutePath()}"),
-          file("${evalConfig.getAbsolutePath()}"),
-          file("${maxlfqdll.getAbsolutePath()}"),
-          file("${maxlfqdylib.getAbsolutePath()}"),
-          "${maxlfqso}",
-          file("${figscptn.getAbsolutePath()}"),
-          data,
-          file("${param_dir}/${s.counter}_${s.base}_Parameters.json"),
-          meta,
-          id,
-          mask,
-          mask_dp,
-          log_fp,
-          report_pdf,
-          method_doc
-        ]
-      }
-    )
+        current_data="\$BASE/data_\${counter}.tsv"
+        current_id="\$BASE/id_mapping.tsv"
+        current_report="\$BASE/report.pdf"
+        current_norm=""
+        
+        if [ -f "\$BASE/data_\${counter}_mask.tsv" ]; then
+            current_mask="\$BASE/data_\${counter}_mask.tsv"
+        fi
 
-"""
+        if [ -f "\$BASE/data_\${counter}_mask_description.tsv" ]; then
+            current_mask_dp="\$BASE/data_\${counter}_mask_description.tsv"
+        fi
+
+        if [ -f "Normalization_factors.tsv" ]; then
+            current_norm="\$BASE/Normalization_factors.tsv"
+        fi
+        
+        cd "\$BASE"
+
+    done < steps.tsv
+
+    touch pipeline.done
+    """
 }
 
-w << "}\n"
-w.close()
-
-// -------------------- include and run generated workflow --------------------
-// -------------------- run generated workflow as separate Nextflow execution --------------------
-
-def generatedCmd = "NXF_SYNTAX_PARSER=v1 nextflow run '${wfPath}' -entry GENERATED -c '${projectDir}/nextflow.config'"
-println "Running generated workflow:"
-println generatedCmd
-
-def generatedProc = ["bash", "-lc", generatedCmd].execute()
-generatedProc.in.eachLine { println it }
-generatedProc.err.eachLine { System.err.println(it) }
-generatedProc.waitFor()
-
-if( generatedProc.exitValue() != 0 ) {
-  throw new RuntimeException("Generated workflow failed with exit code ${generatedProc.exitValue()}")
-}
 
 workflow {
-  Channel.empty()
-}
 
-workflow.onError {
-    println ""
-    println "[PIPELINE FAILED]"
-    println ""
-}
+    main:
+    
+    def config_data = pget('config_data', 'Config_data.txt')
+    def code_py = pget('code_py', 'modules_python')
+    def code_r = pget('code_r', 'modules_R')
+    def method_doc = pget('method_doc', 'docs/Method_description.tsv')
+    def qa_script_param = pget('qa_script', 'modules_python/module_quality_assessment.py')
+    def eval_config_param = pget('eval_config', 'Config_evaluation.txt')
+    def maxlfq_dll_param = pget('maxlfq_dll', 'modules_python/maxlfq.dll')
+    def maxlfq_dylib_param = pget('maxlfq_dylib', 'modules_python/maxlfq.dylib')
+    def maxlfq_so_param = pget('maxlfq_so', '/workflow/modules_python/maxlfq_docker.so')
+    def figs_cptn_param = pget('figs_cptn', 'modules_python/Figures_Captions.tsv')
+    def cleanup_aggressive = pget('cleanup_aggressive', false)
 
-workflow.onComplete {
+    cfgDataPath = resolveLaunch(config_data as String)
+    cfgData = parseKeyValueFile(cfgDataPath)
 
-  def runCmd = { String label, String cmd ->
-    try {
-      println "[CLEANUP] ${label}"
-      def proc = ["bash","-lc", cmd].execute()
-      proc.waitFor()
-      if( proc.exitValue() != 0 ) {
-        println "[CLEANUP] WARN: ${label} failed (exit=${proc.exitValue()})"
-        def err = proc.err?.text
-        if( err ) println err
-      }
-    } catch(e) {
-      println "[CLEANUP] WARN: ${label} exception: ${e}"
+    WORKING_PATH = cfgData.get('WORKING_PATH') ?: '.'
+    WORKDIR_ABS = resolveFrom(launchDir.toString(), WORKING_PATH)
+
+    CONFIG_TXT_ABS = new File(WORKDIR_ABS, 'Config.txt').absolutePath
+
+    ORIGINALDATA_ABS = cfgData.get('ORIGINALDATA') ? resolveFrom(WORKDIR_ABS, cfgData['ORIGINALDATA']) : null
+    METADATA_ABS = cfgData.get('METADATA') ? resolveFrom(WORKDIR_ABS, cfgData['METADATA']) : null
+
+    cfgFile = mustExist(CONFIG_TXT_ABS, 'Config.txt')
+
+    lines = cfgFile.readLines()
+
+    run_value = lines.find {
+        it.trim().toLowerCase().startsWith('run')
+    }?.split('=', 2)?.getAt(1)?.trim()
+
+    if( !run_value ) {
+        die("Config file missing 'Run =' entry")
     }
-  }
 
-  def q = { String s -> s.replace("'", "'\\''") }  // simple single-quote escape for bash strings
+    order_line = lines.find {
+        it.trim().toLowerCase().startsWith('order')
+    }
 
-  // --------------------
-  // SAFE CLEANUP (default)
-  // --------------------
+    if( !order_line ) {
+        die("Config file missing 'Order =' entry")
+    }
 
-  // A) Remove your generated NF modules (safe; they are recreated every run)
-  runCmd("Remove _generated_* folders in workDir",
-    "find '${q(workDir.toString())}' -maxdepth 1 -type d -name '_generated_*' -print -exec rm -rf {} + || true"
-  )
+    ordered = order_line.split('=', 2)[1]
+        .replaceAll(/\s+/, '')
+        .split(',')
+        .findAll { it }
+        .toList()
 
-  // B) Remove 0-byte files ONLY from the user-facing output tree (NOT from workDir)
-  runCmd("Remove 0-byte files from WORKDIR_ABS",
-    "find '${q(WORKDIR_ABS.toString())}' -type f -size 0 -print -delete || true"
-  )
+    println "Run mode          : ${run_value}"
+    println "Ordered processes : ${ordered}"
 
-  // C) Remove common OS “hidden junk” files from user-facing output tree
-  // (Keeps Nextflow internals and logs intact.)
-  runCmd("Remove common hidden junk files from WORKDIR_ABS",
-    """
-      set -euo pipefail
-      find '${q(WORKDIR_ABS.toString())}' -type f \\( \
-        -name '.DS_Store' -o \
-        -name '._*' -o \
-        -name 'Thumbs.db' \
-      \\) -print -delete || true
-    """.stripIndent().trim()
-  )
+    if( run_value.toLowerCase() == 'new' ) {
+        start_dir = WORKDIR_ABS
+        precounter = '00'
+    }
+    else {
+        rerun_name = run_value.replaceFirst(/_(?i)(py|r)$/, '')
+        rerun_folder = new File(WORKDIR_ABS, rerun_name)
 
-  // --------------------
-  // OPTIONAL AGGRESSIVE CLEANUP (breaks -resume)
-  // --------------------
-  if( params.cleanup_aggressive ) {
-    println "[CLEANUP] Aggressive cleanup enabled (this will break -resume)."
+        if( !rerun_folder.isDirectory() ) {
+            die("Rerun folder '${rerun_name}' not found: ${rerun_folder}")
+        }
 
-    // D) Remove Nextflow work cache completely
-    runCmd("Remove workDir (Nextflow cache)",
-      "rm -rf '${q(workDir.toString())}' || true"
+        stepLog = new File(rerun_folder, 'step_log.txt')
+        if( stepLog.exists() ) {
+            bad = stepLog.readLines().any { it.contains('###ERROR###') }
+            if( bad ) {
+                die("Cannot rerun from '${rerun_name}' because step_log.txt contains ###ERROR###")
+            }
+        }
+        else {
+            println "[WARN] step_log.txt not found in ${rerun_folder}"
+        }
+
+        start_dir = rerun_folder.absolutePath
+        precounter = rerun_name.split('_', 2)[0]
+    }
+
+    println "Start dir         : ${start_dir}"
+    println "Precounter        : ${precounter}"
+
+    seed_data_path = run_value.equalsIgnoreCase('new')
+        ? ORIGINALDATA_ABS
+        : new File(start_dir, "data_${precounter}.tsv").absolutePath
+
+    seed_data = mustExist(seed_data_path, 'seed data')
+    original_data = mustExist(ORIGINALDATA_ABS, 'ORIGINALDATA')
+
+    seed_idmap_path = new File(start_dir, 'id_mapping.tsv').absolutePath
+    seed_mask_path = new File(start_dir, "data_${precounter}_mask.tsv").absolutePath
+    seed_maskdp_path = new File(start_dir, "data_${precounter}_mask_description.tsv").absolutePath
+
+    seed_mask = ensureExistsOrCreateEmpty(seed_mask_path, 'seed mask')
+    seed_maskdp = ensureExistsOrCreateEmpty(seed_maskdp_path, 'seed mask description')
+
+    seed_idmap = run_value.equalsIgnoreCase('new')
+        ? ensureExistsOrCreateEmpty(seed_idmap_path, 'seed idmap')
+        : mustExist(seed_idmap_path, 'seed idmap')
+
+    logSeed = ensureExistsOrCreateEmpty(new File(WORKDIR_ABS, 'pipeline_log.txt').absolutePath, 'pipeline_log.txt')
+    reportSeed = ensureExistsOrCreateEmpty(new File(start_dir, 'report.pdf').absolutePath, 'report seed')
+
+    metaFile = mustExist(METADATA_ABS, 'Metadata.tsv')
+
+    methodDoc = mustExist(resolveCode(method_doc as String), 'method doc TSV')
+
+    reportPy = mustExist(resolveCode("${code_py}/report.py"), 'modules_python/report.py')
+    qaScript = mustExist(resolveCode(qa_script_param as String), 'QA script')
+    evalConfig = mustExist(resolveFrom(WORKDIR_ABS, eval_config_param as String), 'Config_evaluation.txt')
+    maxlfqdll = mustExist(resolveCode(maxlfq_dll_param as String), 'maxlfq dll')
+    maxlfqdylib = mustExist(resolveCode(maxlfq_dylib_param as String), 'maxlfq dylib')
+
+    figscptn = mustExist(resolveCode(figs_cptn_param as String), 'Figures Captions')
+    codePyDir = mustExist(resolveCode(code_py as String), 'modules_python')
+    codeRDir = mustExist(resolveCode(code_r as String), 'modules_R')
+
+
+    stepsResolved = []
+
+    ordered.each { item ->
+
+        def parts = item.split('_', 2)
+        def counter = parts[0]
+        def rest = parts[1]
+
+        def suffix = rest.tokenize('_')[-1].toLowerCase()
+        def engine = suffix == 'r' ? 'r' : 'py'
+        def base = rest.replaceAll(/_(?i)(py|r)$/, '')
+
+        def codeDir = engine == 'py' ? codePyDir : codeRDir
+        def ext = engine == 'py' ? 'py' : 'R'
+
+        def targetName = "module_${base}.${ext}".toLowerCase()
+
+        def scriptFile = codeDir.listFiles()?.find {
+            it.name.toLowerCase() == targetName
+        }
+
+        if( !scriptFile ) {
+            die("Missing step script for ${item} in ${codeDir}")
+        }
+
+        def paramName = "${counter}_${base}_Parameters.json"
+
+        stepsResolved << [
+            counter: counter,
+            base: base,
+            engine: engine,
+            scriptName: scriptFile.name,
+            paramName: paramName
+        ]
+    }
+
+    steps_tsv = stepsResolved.collect {
+        "${it.counter}\t${it.base}\t${it.engine}\t${it.scriptName}\t${it.paramName}"
+    }.join('\n')
+
+    println "Working path      : ${WORKDIR_ABS}"
+    println "Original data     : ${ORIGINALDATA_ABS}"
+    println "Metadata          : ${METADATA_ABS}"
+    println "Steps             : ${stepsResolved.size()}"
+
+    init_ch = INIT_PARAMS(
+        Channel.of(
+            tuple(
+                WORKDIR_ABS,
+                file("${projectDir}/Initialization/Initialize.py"),
+                file("${projectDir}/Initialization/dict_flags.pkl"),
+                file("${projectDir}/Initialization/dict_parameters.pkl"),
+                file("${WORKDIR_ABS}/Parameters.txt"),
+                file(original_data.absolutePath),
+                file(metaFile.absolutePath)
+            )
+        )
     )
 
-    // E) Remove Nextflow metadata + common reports in launchDir
-    runCmd("Remove Nextflow metadata and reports in launchDir",
-      """
-        rm -rf '${q(launchDir.toString())}/.nextflow' || true
-        rm -f  '${q(launchDir.toString())}/.nextflow.log' || true
-        rm -f  '${q(launchDir.toString())}/trace.txt' || true
-        rm -f  '${q(launchDir.toString())}/report.html' || true
-        rm -f  '${q(launchDir.toString())}/timeline.html' || true
-        rm -f  '${q(launchDir.toString())}/dag.html' || true
-      """.stripIndent().trim()
-    )
-  } else {
-    println "[CLEANUP] Aggressive cleanup disabled (keeps workDir for -resume)."
-  }
+    run_input_ch = init_ch.map { paramdir, setup_log, init_done ->
+        tuple(
+            WORKDIR_ABS,
+            steps_tsv,
+            file(codePyDir.absolutePath),
+            file(codeRDir.absolutePath),
+            file(reportPy.absolutePath),
+            file(qaScript.absolutePath),
+            file(evalConfig.absolutePath),
+            file(maxlfqdll.absolutePath),
+            file(maxlfqdylib.absolutePath),
+            maxlfq_so_param as String,
+            file(figscptn.absolutePath),
+            file(seed_data.absolutePath),
+            file(metaFile.absolutePath),
+            file(seed_idmap.absolutePath),
+            file(seed_mask.absolutePath),
+            file(seed_maskdp.absolutePath),
+            file(logSeed.absolutePath),
+            file(reportSeed.absolutePath),
+            file(methodDoc.absolutePath),
+            paramdir
+        )
+    }
 
-  println "[CLEANUP] Done."
+    RUN_ALL_MODULES(run_input_ch)
+
+    onComplete:
+    cfgDataPath2 = resolveLaunch(config_data as String)
+    cfgData2 = parseKeyValueFile(cfgDataPath2)
+    workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
+    workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
+
+    println '[CLEANUP] Remove 0-byte files from output folder'
+    "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
+
+    println '[CLEANUP] Remove common hidden junk files'
+    "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
+
+    if( cleanup_aggressive ) {
+        println '[CLEANUP] Aggressive cleanup enabled'
+        "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
+        "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+    }
+    else {
+        println '[CLEANUP] Aggressive cleanup disabled'
+    }
+
+    println '[CLEANUP] Done.'
+
+    onError:
+    println ''
+    println '[PIPELINE FAILED]'
+    println ''
 }
 
-// nextflow run nextflow.nf --cleanup_aggressive true
