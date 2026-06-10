@@ -589,13 +589,7 @@ Nextflow will automatically download the container if needed.
 
 # Running the Pipeline
 
-Only once and Export First:
-
-``` bash
-export NXF_SYNTAX_PARSER=v1
-```
-
-Then, Navigate to the working directory:
+Navigate to the working directory:
 
 ``` bash
 cd "/Users/username/Desktop/test_pipeline"
