@@ -100,19 +100,15 @@ def get_dictionary_flags(data_flag):
         data_flag.loc[index,"Variable"]:{"Options":[el if re.search(";",str(item)) else item
                                                     for item in data_flag[(data_flag["Variable"]==data_flag.loc[index,"Variable"]) & (data_flag.loc[index,"Step"]==step)]["AllowedValues"].values 
                                                         for el in str(item).replace(" ","").split(";")],
-                                         "Default":data_flag.loc[index,"PrimaryDefault"],
+                                         "Default":data_flag.loc[index,"PrimaryDefault"] if not data_flag.loc[index,"PrimaryDefault"] is np.nan else None,
                                          "Comment":data_flag.loc[index,"Comment in parameters.txt"],
                                          "Type":data_flag.loc[index,"Type"],
-                                         "Check Operation":data_flag.loc[index,"Operations"]
-                                         } if not data_flag.loc[index,"PrimaryDefault"] is np.nan else {
-                                            "Options":[el if re.search(";",str(item)) else item
-                                                       for item in data_flag[(data_flag["Variable"]==data_flag.loc[index,"Variable"]) & (data_flag.loc[index,"Step"]==step)]["AllowedValues"].values 
-                                                           for el in str(item).replace(" ","").split(";")],
-                                            "Default":None,
-                                            "Comment":data_flag.loc[index,"Comment in parameters.txt"],
-                                            "Type":data_flag.loc[index,"Type"],
-                                            "Check Operation":data_flag.loc[index,"Operations"]
-                                            }  
+                                         "Check Operation":data_flag.loc[index,"Operations"],
+                                         "GUI":data_flag.loc[index,"GUI"],
+                                         "Child":data_flag.loc[index,"Child"].split(";") if not data_flag.loc[index,"Child"] is np.nan else None,
+                                         "M_column":data_flag.loc[index,"M_column"] if not data_flag.loc[index,"M_column"] is np.nan else None,
+                                         "NoneValid":1 if "None" in data_flag.loc[index,"Type"].split(";") else 0
+                                         }
                                          
         for index in data_flag[(data_flag["Step"]==step)].index} 
         for step in data_flag["Step"]}
@@ -131,19 +127,15 @@ def get_dictionary_parameters(data_parameters, data_flag):
     dict_parameters = {flag:{flag_value:{parameter:{"Options":[el if re.search(";",str(item)) else item
                                                 for item in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)]["AllowedValues"].values 
                                                     for el in str(item).replace(" ","").split(";")],
-                                                    "Default":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"], ########
+                                                    "Default":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"] if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"] is np.nan else None, ########
                                                     "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"],
                                                     "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
-                                                    "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]
-                                                    } if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"PrimaryDefault"] is np.nan else {
-                                                        "Options":[el if re.search(";",str(item)) else item
-                                                    for item in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)]["AllowedValues"].values 
-                                                        for el in str(item).replace(" ","").split(";")],
-                                                        "Default":None, ########
-                                                        "Comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in parameters.txt"],
-                                                        "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
-                                                        "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"]
-                                                        }
+                                                    "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"],
+                                                    "GUI":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"GUI"],
+                                                    "Child":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Child"].split(";") if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Child"] is np.nan else None,
+                                                    "M_column":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"M_column"] if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"M_column"] is np.nan else None,
+                                                    "NoneValid":1 if "None" in data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"].split(";") else 0
+                                                    } 
                                 for parameter in data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)]["Variable"].values}
                             for flag_value in set(data_parameters[data_parameters["Flag_variable"]==flag]["Flag_value"].values)}
                        for flag in data_flag["Variable"].values}
