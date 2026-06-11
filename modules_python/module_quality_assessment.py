@@ -87,6 +87,26 @@ def get_CV_log(values, base=2):
     cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
     return cv
 
+def get_CV_log_array(df, base=2):
+    """
+    Calculate the coefficient of variation (CV) assuming a log-normal distribution and logged data for whole data frames (precursors x samples).
+
+    Parameters
+    ----------
+    values : np.ndarray 
+        Array of values for which the CV should be calculated.
+    base : float, optional
+        Base of the logarithmic transformation. The default is 2.
+
+    Returns
+    -------
+    cv : list
+        Coefficient of variation for provided values.
+    """
+    
+    cv = np.sqrt(np.float64(base**(np.std(df, ddof=1, axis=1)**2)-1))
+    return list(cv)
+
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
     """
     Get indices of selected samples according to a sample type e.g. MS.QC-Samples.
@@ -698,8 +718,8 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     if not group_dict:
         group_dict = {"All":list(data_origin.columns)}  
         
-    #cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index] if not np.isnan(el)] for group in group_dict.keys()]
-    cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index]] for group in group_dict.keys()]
+    #cvs_lognormal_origin = [[el for el in [get_CV_log(data_origin.loc[index,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for index in data_origin.index]] for group in group_dict.keys()]
+    cvs_lognormal_origin = [get_CV_log_array(data_origin.loc[:,[column for column in group_dict[group] if column in data_origin.columns]], base=base) for group in group_dict.keys()]
 
     if write_to_disk:
         pd.DataFrame(columns=data_origin.index,index=group_dict.keys(),data=cvs_lognormal_origin).T.to_csv(outfile[:-4]+"_CVs_origin.tsv",sep="\t")
@@ -708,8 +728,8 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     cvs_lognormal_origin = [item if item or sum(item)>0 else [np.nan]*2 for item in cvs_lognormal_origin]
     
     if data_processed is not None:
-        #cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index] if not np.isnan(el)] for group in group_dict.keys()]
-        cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index]] for group in group_dict.keys()]
+        #cvs_lognormal_processed = [[el for el in [get_CV_log(data_processed.loc[index,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for index in data_processed.index]] for group in group_dict.keys()]
+        cvs_lognormal_processed = [get_CV_log_array(data_processed.loc[:,[column for column in group_dict[group] if column in data_processed.columns]], base=base) for group in group_dict.keys()]
         
         if write_to_disk:
             pd.DataFrame(columns=data_processed.index,index=group_dict.keys(),data=cvs_lognormal_processed).T.to_csv(outfile[:-4]+"_CVs_processed.tsv",sep="\t")
@@ -2273,15 +2293,17 @@ if __name__ == "__main__":
         #%%
         key_figure = "F07"
         if dict_config_setup[step][key_figure]["plot_decision_boundary"] == "1":
-            
-            plot_decision_boundary_estimation_curve(data_origin, 
-                                                    metadata_df, 
-                                                    outfile= dict_config_setup[step][key_figure]["outfile"],
-                                                    method = parameters_dict["intensity_dependent_missingness_fit_method"],
-                                                    boundary = float(parameters_dict["intensity_dependent_missingness_decision_boundary"])
-                                                    )
-            addition = " "+parameters_dict["intensity_dependent_missingness_fit_method"]+"."
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            try:
+                plot_decision_boundary_estimation_curve(data_origin, 
+                                                        metadata_df, 
+                                                        outfile= dict_config_setup[step][key_figure]["outfile"],
+                                                        method = parameters_dict["intensity_dependent_missingness_fit_method"],
+                                                        boundary = float(parameters_dict["intensity_dependent_missingness_decision_boundary"])
+                                                        )
+                addition = " "+parameters_dict["intensity_dependent_missingness_fit_method"]+"."
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            except:
+                print("Error in decision boundary plotting. Skipped.")
             
         #%%
         key_figure = "F08"   
