@@ -225,7 +225,7 @@ EOF_STEPS
         set -e
 
         if [ \$mod_rc -ne 0 ]; then
-            echo "###MOD_ERROR### module failed exit=\\\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
+            echo "###MOD_ERROR### module failed exit=\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
             touch MOD.fail
         else
             touch MOD.ok
@@ -247,7 +247,7 @@ EOF_STEPS
         set -e
 
         if [ \$qa_rc -ne 0 ]; then
-            echo "###QA_ERROR### QA failed exit=\\\$qa_rc for \${counter}_\${step_name}" >> step_log.txt
+            echo "###QA_ERROR### QA failed exit=\$qa_rc for \${counter}_\${step_name}" >> step_log.txt
             echo "[WARN] QA failed but continuing" >> step_log.txt
             touch QA.fail
         else
@@ -276,7 +276,7 @@ EOF_STEPS
         set -e
 
         if [ \$rep_rc -ne 0 ]; then
-            echo "###REP_ERROR### report failed exit=\\\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
+            echo "###REP_ERROR### report failed exit=\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
             touch REP.fail
         else
             mv report_new.pdf report.pdf
