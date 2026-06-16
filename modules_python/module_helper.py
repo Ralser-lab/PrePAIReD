@@ -498,7 +498,7 @@ def create_filtering_matrix(file,metadata_df,min_peptides="XXX",min_precursors="
     #sort File.Names
     samples.sort()
     columns_filenames=metadata_df.loc[samples,filename_col]
-    mask_df = pd.DataFrame(index=file.set_index(ids).index.unique(), columns=columns_filenames,data=0)
+    mask_df = pd.DataFrame(index=file.set_index(ids).index.unique(), columns=columns_filenames,data=0,dtype=np.int8)
     # dataframe explaining reasons why peptide was excluded
     mask_description_df = pd.DataFrame(columns=["filter","value"])
     #mask_description["filter"] = ["not measured","measured and kept", "excessing_NaNs","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","Precursor.Charge","Proteotypic","Min. "+str(min_peptides)+" Peptides","Zero "+values,"Imputed"]
