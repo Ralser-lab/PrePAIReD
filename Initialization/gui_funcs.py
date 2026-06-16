@@ -340,7 +340,7 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             if module in ["FILTERING_LONG","FILTERING_WIDE","NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 file.write("plot_int_box = 1"+"\n")
                 file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F01.png")+"\n")
-                if step == "FILTERING_LONG":
+                if module == "FILTERING_LONG":
                     file.write("size = (5,10)"+"\n")
                 else:
                     file.write("size = (10,10)"+"\n")
@@ -372,19 +372,19 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             if module in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 file.write("plot_pca = 1"+"\n")
                 file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F04.png"+"\n"))
-                if step == "NORMALISATION":
+                if module == "NORMALISATION":
                     file.write("continuous = True"+"\n")
                     file.write("coloring_property = Missingness"+"\n")
                     file.write("use_metadata_coloring = False"+"\n")
-                elif step == "IMPUTATION":
+                elif module == "IMPUTATION":
                     file.write("continuous = True"+"\n")
                     file.write("coloring_property = Mean_Intensities"+"\n")
                     file.write("use_metadata_coloring = False"+"\n")
-                elif step == "CORRECTION":
+                elif module == "CORRECTION":
                     file.write("continuous = None"+"\n")
                     file.write("coloring_property = None"+"\n")
                     file.write("use_metadata_coloring = True"+"\n")
-                elif step == "SUMMARISATION":
+                elif module == "SUMMARISATION":
                     file.write("continuous = False"+"\n")
                     file.write("coloring_property = None"+"\n")
                     file.write("use_metadata_coloring = True"+"\n")
@@ -408,7 +408,7 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             
             # F06
             if module in ["NORMALISATION","CORRECTION"]:
-                if step == "NORMALISATION":
+                if module == "NORMALISATION":
                     file.write("plot_scatter_series = 1"+"\n")
                 else:
                     if methods[key] in ["adjust_confounders","adjust_confounders_batchwise"]:
@@ -465,10 +465,10 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             if module in ["FILTERING_LONG","FILTERING_WIDE"]: 
                 file.write("plot_abundance_vs_completeness = 1"+"\n")
                 file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F10.png"+"\n"))
-                if step == "FILTERING_LONG":
+                if module == "FILTERING_LONG":
                     file.write("gridsize = 50"+"\n")
                     file.write("n_bins = 50"+"\n")
-                elif step == "FILTERING_WIDE":
+                elif module == "FILTERING_WIDE":
                     file.write("gridsize = 25"+"\n")
                     file.write("n_bins = 25"+"\n")
             else:
@@ -482,9 +482,7 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
                 file.write("plot_overall_completeness = 1"+"\n")
             else:
                 file.write("plot_overall_completeness = 0"+"\n") 
-            file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F11.png"+"\n"))
-            
-            file.write("%-%-%-%"+"\n")
+            file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F11.png"+"\n"))            
     return
 
 def write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict):
