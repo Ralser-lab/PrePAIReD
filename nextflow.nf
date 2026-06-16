@@ -92,16 +92,6 @@ process INIT_PARAMS {
     py_exit=\$?
     set -e
 
-    mkdir -p "${publish_root}"
-
-    if [ -f logfile_setup.txt ]; then
-        cp -f logfile_setup.txt "${publish_root}/"
-    fi
-
-    if [ -d Parameter_Files ]; then
-        cp -r Parameter_Files "${publish_root}/"
-    fi
-
     if [ "\$py_exit" -ne 0 ]; then
         echo "[FATAL] Initialize.py failed with exit code \$py_exit" >&2
         exit 100
