@@ -311,7 +311,6 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
         file.write("%%%%%%%%%%00_GENERAL%%%%%%%%%%"+"\n")
         file.write("%-%-%-%"+"\n")
         file.write("param_fp = "+os.path.join(outpath,"Parameter_Files","00_GENERAL_Parameters.json"+"\n"))
-        file.write("%-%-%-%"+"\n")
     
         steps_ = []
         for ind,(key,step) in enumerate(step_names.items()):
@@ -320,6 +319,7 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             else:
                 steps_.append(step)
             file.write("%%%%%%%%%%"+step+"%%%%%%%%%%"+"\n")
+            file.write("%-%-%-%"+"\n")
             if ind == 0:
                 if rerun:
                     if docker_setup:
