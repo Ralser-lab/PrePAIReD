@@ -63,7 +63,9 @@ String bashQuote(String s) {
 
 process INIT_PARAMS {
 
-    tag "INIT_PARAMS"
+    // tag "INIT_PARAMS"
+    tag "INIT_PARAMS | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
+    
     maxForks 1
 
     publishDir { publish_root }, mode: 'copy', overwrite: true
@@ -119,9 +121,15 @@ process INIT_PARAMS {
 
 process RUN_ALL_MODULES {
 
-    tag "RUN_ALL_MODULES"
+    // tag "RUN_ALL_MODULES"
+    tag "RUN_ALL_MODULES | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
+    
     maxForks 1
 
+    beforeScript """
+    echo "[RESOURCE INFO] Attempt ${task.attempt} | CPUs=${task.cpus} | Memory=${task.memory}"
+    """
+    
     input:
     tuple val(publish_root),
           val(steps_tsv),
@@ -169,6 +177,9 @@ EOF_STEPS
         step_name="\${base}"
         cd "\$BASE"
 
+        echo "[MODULE INFO] Running \${counter}_\${step_name}"
+        echo "[MODULE INFO] Running \${counter}_\${step_name}" >> step_log.txt
+        
         mkdir -p report_folder
         : > step_log.txt
 
@@ -201,7 +212,7 @@ EOF_STEPS
             echo "Missing parameter file: \$param_file" >> step_log.txt
             exit 100
         }
-
+        
         set +e
         "\$runner" "\$script_path" \\
           -d "\$current_data" \\
@@ -216,7 +227,19 @@ EOF_STEPS
 
         if [ \$mod_rc -ne 0 ]; then
             echo "###MOD_ERROR### module failed exit=\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
+            echo "[SKIP] QA skipped because module failed and expected output may not exist." >> step_log.txt
             touch MOD.fail
+            touch QA.skip
+            echo "----- MODULE END -----" >> step_log.txt
+
+            if [ \$mod_rc -eq 137 ] || [ \$mod_rc -eq 143 ]; then
+                echo "[MEMORY ERROR] \${counter}_\${step_name} was killed with exit \$mod_rc." >> step_log.txt
+                echo "[MEMORY ERROR] The assigned memory was not sufficient for this dataset." >> step_log.txt
+                echo "[MEMORY ERROR] Nextflow will retry with more memory if retries remain." >> step_log.txt
+                exit \$mod_rc
+            fi
+
+            continue
         else
             touch MOD.ok
         fi
@@ -541,31 +564,46 @@ workflow {
     RUN_ALL_MODULES(run_input_ch)
 
     onComplete:
-    cfgDataPath2 = resolveLaunch(config_data as String)
-    cfgData2 = parseKeyValueFile(cfgDataPath2)
-    workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
-    workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
-
-    println '[CLEANUP] Remove 0-byte files from output folder'
-    "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
-
-    println '[CLEANUP] Remove common hidden junk files'
-    "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
-
-    if( cleanup_aggressive ) {
-        println '[CLEANUP] Aggressive cleanup enabled'
-        "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
-        "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+    
+    if( !workflow.success ) {
+        println ''
+        println '[CLEANUP] Skipped because pipeline failed.'
+        println ''
+        return
     }
     else {
-        println '[CLEANUP] Aggressive cleanup disabled'
+        cfgDataPath2 = resolveLaunch(config_data as String)
+        cfgData2 = parseKeyValueFile(cfgDataPath2)
+        workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
+        workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
+        
+        println '[CLEANUP] Remove 0-byte files from output folder'
+        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
+        println '[CLEANUP] Remove common hidden junk files'
+        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
+        if( cleanup_aggressive ) {
+            println '[CLEANUP] Aggressive cleanup enabled'
+            "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
+            "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+        }
+        else {
+            println '[CLEANUP] Aggressive cleanup disabled'
+        }
+        println '[CLEANUP] Done.'
     }
-
-    println '[CLEANUP] Done.'
 
     onError:
     println ''
     println '[PIPELINE FAILED]'
+    println 'The pipeline stopped before completion.'
+    println 'If the failed exit status was 137 or 143, the likely reason is insufficient memory.'
+    println 'Nextflow already retried with larger memory if retries were available.'
+    println 'Please rerun with more memory, for example:'
+    println '  nextflow run nextflow.nf --memory "32 GB" --cpus 8'
+    println 'For initialization memory:'
+    println '  nextflow run nextflow.nf --init_memory "16 GB"'
+    println 'If using Docker Desktop, increase Docker Desktop memory in Settings > Resources.'
     println ''
+
 }
 
