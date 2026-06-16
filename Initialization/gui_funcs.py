@@ -258,6 +258,7 @@ def write_config(workdir, steps, language, rerun=False, rerun_start=""):
             file.write(rerun_start+"\n")
         else:
             file.write("new\n")
+        file.write("order = ")
         for ind,(key,step) in enumerate(steps.items()):
             if step != "General":
                 step_name = "{:02d}".format(key)
