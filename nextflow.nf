@@ -119,242 +119,176 @@ process INIT_PARAMS {
 }
 
 
-process RUN_ALL_MODULES {
+process MODULE {
 
-    // tag "RUN_ALL_MODULES"
-    tag "RUN_ALL_MODULES | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
-    
+    tag "${step_id}_${step_name} | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
     maxForks 1
 
-    beforeScript """
-    echo "[RESOURCE INFO] Attempt ${task.attempt} | CPUs=${task.cpus} | Memory=${task.memory}"
-    """
-    
     input:
     tuple val(publish_root),
-          val(steps_tsv),
+          val(step_id),
+          val(step_name),
+          val(engine),
+          path(script_file),
+          path(param_file),
           path(code_py_dir),
           path(code_r_dir),
           path(report_script),
           path(qa_script),
           path(eval_cfg),
-          path(maxlfqdll),
-          path(maxlfqdylib),
           val(maxlfqso),
-          path(figscptn),
-          path(seed_data),
           path(meta_file),
-          path(id_file),
-          path(mask_file),
-          path(mask_dp_file),
-          path(log_file),
-          path(prev_report),
-          path(doc_tsv),
-          path(paramdir)
+          path(input_data),
+          path(input_id),
+          path(input_mask),
+          path(input_mask_dp),
+          path(input_report),
+          path(doc_tsv)
 
     output:
-    path("pipeline.done")
+    tuple val(step_id),
+          val(step_name),
+          path("data_${step_id}.tsv"),
+          path("id_mapping.tsv"),
+          path("data_${step_id}_mask.tsv"),
+          path("data_${step_id}_mask_description.tsv"),
+          path("report.pdf"),
+          path("step_log.txt"),
+          emit: step_out
 
     script:
     """
     set -euo pipefail
 
-    BASE="\$PWD"
+    mkdir -p report_folder
 
-    cat > steps.tsv <<'EOF_STEPS'
-${steps_tsv}
-EOF_STEPS
+    echo "----- MODULE START (${step_id}_${step_name}) -----" > step_log.txt
+    echo "[RESOURCE INFO] attempt=${task.attempt} cpus=${task.cpus} memory=${task.memory}" >> step_log.txt
+    echo "[MODULE INFO] Running ${step_id}_${step_name}" >> step_log.txt
 
-    current_data="\$BASE/${seed_data}"
-    current_id="\$BASE/${id_file}"
-    current_mask="\$BASE/${mask_file}"
-    current_mask_dp="\$BASE/${mask_dp_file}"
-    current_log="\$BASE/${log_file}"
-    current_report="\$BASE/${prev_report}"
+    cp -f "${maxlfqso}" ./maxlfq_docker.so || true
 
-    while IFS=\$'\\t' read -r counter base engine script_name param_name; do
+    if [ "${engine}" = "py" ]; then
+        runner="python"
+    else
+        runner="Rscript"
+    fi
 
-        step_name="\${base}"
-        cd "\$BASE"
+    set +e
+    "\$runner" "${script_file}" \\
+      -d "${input_data}" \\
+      -p "${param_file}" \\
+      -o . \\
+      -m "${meta_file}" \\
+      -l step_log.txt \\
+      -i "${input_id}" \\
+      -c "${step_id}" >> step_log.txt 2>&1
+    mod_rc=\$?
+    set -e
 
-        echo "[MODULE INFO] Running \${counter}_\${step_name}"
-        echo "[MODULE INFO] Running \${counter}_\${step_name}" >> step_log.txt
+    if [ \$mod_rc -ne 0 ]; then
+        echo "###MOD_ERROR### module failed exit=\$mod_rc for ${step_id}_${step_name}" >> step_log.txt
+        echo "[SKIP] QA skipped because module failed." >> step_log.txt
+        touch MOD.fail
+        touch QA.skip
+        if [ \$mod_rc -eq 137 ] || [ \$mod_rc -eq 143 ]; then
+            echo "[MEMORY ERROR] ${step_id}_${step_name} was killed with exit \$mod_rc." >> step_log.txt
+            exit \$mod_rc
+        fi
+
+        exit 100
+    else
+        touch MOD.ok
+    fi
         
-        mkdir -p report_folder
-        : > step_log.txt
 
-        echo "----- MODULE START (\${counter}_\${step_name}) -----" >> step_log.txt
+    echo "----- MODULE END -----" >> step_log.txt
 
-        cp -f "${maxlfqso}" ./maxlfq_docker.so
-        test -f ./maxlfq_docker.so || {
-            echo "maxlfq_docker.so not found: ${maxlfqso}" >> step_log.txt
-            exit 100
-        }
+    echo "----- QA START (${step_id}_${step_name}) -----" >> step_log.txt
+    set +e
+    python "${qa_script}" \\
+      -w . \\
+      -m "${meta_file}" \\
+      -s "${step_id}_${step_name}" \\
+      -e "${eval_cfg}" \\
+      --docker >> step_log.txt 2>&1
+    qa_rc=\$?
+    set -e
 
-        if [ "\$engine" = "py" ]; then
-            script_path="\$BASE/${code_py_dir}/\${script_name}"
-            runner="python"
-        else
-            script_path="\$BASE/${code_r_dir}/\${script_name}"
-            runner="Rscript"
-        fi
+    if [ \$qa_rc -ne 0 ]; then
+        echo "###QA_ERROR### QA failed exit=\$qa_rc for ${step_id}_${step_name}" >> step_log.txt
+        echo "[WARN] QA failed but continuing" >> step_log.txt
+        touch QA.fail
+    else
+        touch QA.ok
+    fi
+    
+    echo "----- QA END -----" >> step_log.txt
 
-        param_file="\$BASE/${paramdir}/\${param_name}"
+    echo "----- REPORT START (${step_id}_${step_name}) -----" >> step_log.txt
+    set +e
+    if [ -f "${input_report}" ] && [ -s "${input_report}" ]; then
+        python "${report_script}" \\
+          --log step_log.txt \\
+          --in_pdf "${input_report}" \\
+          --out report_new.pdf \\
+          --doc_tsv "${doc_tsv}" >> step_log.txt 2>&1
+    else
+        python "${report_script}" \\
+          --log step_log.txt \\
+          --out report_new.pdf \\
+          --doc_tsv "${doc_tsv}" >> step_log.txt 2>&1
+    fi
+    rep_rc=\$?
+    set -e
 
-        test -f "\$script_path" || {
-            echo "Missing module script: \$script_path" >> step_log.txt
-            exit 100
-        }
-        
-        rm -f ./*_Parameters.json
-        cp -f "\$param_file" .
-        
-        test -f "\$param_file" || {
-            echo "Missing parameter file: \$param_file" >> step_log.txt
-            exit 100
-        }
-        
-        set +e
-        "\$runner" "\$script_path" \\
-          -d "\$current_data" \\
-          -p "\$param_file" \\
-          -o . \\
-          -m "\$BASE/${meta_file}" \\
-          -l step_log.txt \\
-          -i "\$current_id" \\
-          -c "\$counter" >> step_log.txt 2>&1
-        mod_rc=\$?
-        set -e
+    if [ \$rep_rc -ne 0 ]; then
+        echo "###REP_ERROR### report failed exit=\$rep_rc for ${step_id}_${step_name}" >> step_log.txt
+        touch REP.fail
+    else
+        mv report_new.pdf report.pdf
+        touch REP.ok
+    fi
 
-        if [ \$mod_rc -ne 0 ]; then
-            echo "###MOD_ERROR### module failed exit=\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
-            echo "[SKIP] QA skipped because module failed and expected output may not exist." >> step_log.txt
-            touch MOD.fail
-            touch QA.skip
-            echo "----- MODULE END -----" >> step_log.txt
+    
+    echo "----- REPORT END -----" >> step_log.txt
 
-            if [ \$mod_rc -eq 137 ] || [ \$mod_rc -eq 143 ]; then
-                echo "[MEMORY ERROR] \${counter}_\${step_name} was killed with exit \$mod_rc." >> step_log.txt
-                echo "[MEMORY ERROR] The assigned memory was not sufficient for this dataset." >> step_log.txt
-                echo "[MEMORY ERROR] Nextflow will retry with more memory if retries remain." >> step_log.txt
-                exit \$mod_rc
-            fi
+    touch pipeline_log.txt
+    {
+        echo ""
+        echo "===== ${step_id}_${step_name} (${engine}) ====="
+        cat step_log.txt
+    } >> pipeline_log.txt
 
-            continue
-        else
-            touch MOD.ok
-        fi
+    cp -f step_log.txt log.txt
 
-        echo "----- MODULE END -----" >> step_log.txt
+    publish_step="${publish_root}/${step_id}_${step_name}"
+    mkdir -p "\$publish_step"
 
-        echo "" >> step_log.txt
-        echo "----- QA START (\${counter}_\${step_name}) -----" >> step_log.txt
+    cp -f step_log.txt "\$publish_step/"
+    cp -f log.txt "\$publish_step/" || true
+    cp -f pipeline_log.txt "${publish_root}/" || true
+    cp -f report.pdf "\$publish_step/" || true
+    cp -f report.pdf "\$publish_step/" || true
+    cp -f data_${step_id}.tsv "\$publish_step/" || true
+    cp -f id_mapping.tsv "\$publish_step/" || true
+    cp -f data_${step_id}_mask.tsv "\$publish_step/" || true
+    cp -f data_${step_id}_mask_description.tsv "\$publish_step/" || true
+    [ -f Normalization_factors.tsv ] && cp -f Normalization_factors.tsv "\$publish_step/" || true
 
-        set +e
-        python "\$BASE/${qa_script}" \\
-          -w . \\
-          -m "\$BASE/${meta_file}" \\
-          -s "\${counter}_\${step_name}" \\
-          -e "\$BASE/${eval_cfg}" \\
-          --docker >> step_log.txt 2>&1
-        qa_rc=\$?
-        set -e
+    test -f data_${step_id}.tsv || {
+        echo "[FATAL] Expected output data_${step_id}.tsv was not created." >> step_log.txt
+        exit 100
+    }
 
-        if [ \$qa_rc -ne 0 ]; then
-            echo "###QA_ERROR### QA failed exit=\$qa_rc for \${counter}_\${step_name}" >> step_log.txt
-            echo "[WARN] QA failed but continuing" >> step_log.txt
-            touch QA.fail
-        else
-            touch QA.ok
-        fi
+    test -f id_mapping.tsv || {
+        echo "[FATAL] Expected output id_mapping.tsv was not created." >> step_log.txt
+        exit 100
+    }
 
-        echo "----- QA END -----" >> step_log.txt
-
-        echo "" >> step_log.txt
-        echo "----- REPORT START (\${counter}_\${step_name}) -----" >> step_log.txt
-
-        set +e
-        if [ -f "\$current_report" ] && [ -s "\$current_report" ]; then
-            python "\$BASE/${report_script}" \\
-              --log step_log.txt \\
-              --in_pdf "\$current_report" \\
-              --out report_new.pdf \\
-              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
-        else
-            python "\$BASE/${report_script}" \\
-              --log step_log.txt \\
-              --out report_new.pdf \\
-              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
-        fi
-        rep_rc=\$?
-        set -e
-
-        if [ \$rep_rc -ne 0 ]; then
-            echo "###REP_ERROR### report failed exit=\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
-            touch REP.fail
-        else
-            mv report_new.pdf report.pdf
-            touch REP.ok
-        fi
-
-        echo "----- REPORT END -----" >> step_log.txt
-
-        touch "\$current_log"
-        {
-            echo ""
-            echo "===== \${counter}_\${step_name} (\${engine}) ====="
-            cat step_log.txt
-        } >> "\$current_log"
-
-        cp -f step_log.txt log.txt
-
-        publish_step="${publish_root}/\${counter}_\${step_name}"
-        mkdir -p "\$publish_step"
-
-        cp -f step_log.txt "\$publish_step/"
-        cp -f log.txt "\$publish_step/" || true
-        cp -f report.pdf "\$publish_step/" || true
-        cp -rf report_folder "\$publish_step/" || true
-        cp -f data_\${counter}.tsv "\$publish_step/" || true
-        cp -f id_mapping.tsv "\$publish_step/" || true
-        cp -f data_\${counter}_mask.tsv "\$publish_step/" || true
-        cp -f data_\${counter}_mask_description.tsv "\$publish_step/" || true
-        [ -f Normalization_factors.tsv ] && cp -f Normalization_factors.tsv "\$publish_step/" || true
-
-        if grep -Eq "###MOD_ERROR###|###REP_ERROR###" step_log.txt; then
-            echo "[FATAL] \${counter}_\${step_name}: module/report failed; see step_log.txt" >&2
-            exit 100
-        fi
-
-        if grep -q "###QA_ERROR###" step_log.txt; then
-            echo "[WARN] \${counter}_\${step_name}: QA failed; continuing" >&2
-        fi
-
-        current_data="\$BASE/data_\${counter}.tsv"
-        current_id="\$BASE/id_mapping.tsv"
-        current_report="\$BASE/report.pdf"
-        current_norm=""
-        
-        if [ -f "\$BASE/data_\${counter}_mask.tsv" ]; then
-            current_mask="\$BASE/data_\${counter}_mask.tsv"
-        fi
-
-        if [ -f "\$BASE/data_\${counter}_mask_description.tsv" ]; then
-            current_mask_dp="\$BASE/data_\${counter}_mask_description.tsv"
-        fi
-
-        if [ -f "Normalization_factors.tsv" ]; then
-            current_norm="\$BASE/Normalization_factors.tsv"
-        fi
-        
-        cd "\$BASE"
-
-    done < steps.tsv
-
-    touch pipeline.done
+    touch step.done
     """
 }
-
 
 workflow {
 
@@ -562,7 +496,42 @@ workflow {
         )
     }
 
-    RUN_ALL_MODULES(run_input_ch)
+    step_tuples = []
+
+    def prev_folder = start_dir
+    def prev_counter = precounter
+
+    stepsResolved.each { s ->
+
+        def step_folder = new File(WORKDIR_ABS, "${s.counter}_${s.base}").absolutePath
+
+        step_tuples << tuple(
+            WORKDIR_ABS,
+            s.counter,
+            s.base,
+            s.engine,
+            file(new File(s.engine == 'py' ? codePyDir : codeRDir, s.scriptName).absolutePath),
+            file(new File(WORKDIR_ABS, "Parameter_Files/${s.paramName}").absolutePath),
+            file(codePyDir.absolutePath),
+            file(codeRDir.absolutePath),
+            file(reportPy.absolutePath),
+            file(qaScript.absolutePath),
+            file(evalConfig.absolutePath),
+            maxlfq_so_param as String,
+            file(metaFile.absolutePath),
+            new File(prev_folder, "data_${prev_counter}.tsv").absolutePath,
+            new File(prev_folder, "id_mapping.tsv").absolutePath,
+            file(new File(prev_folder, "data_${prev_counter}_mask.tsv").absolutePath),
+            file(new File(prev_folder, "data_${prev_counter}_mask_description.tsv").absolutePath),
+            new File(prev_folder, "report.pdf").absolutePath,
+            file(methodDoc.absolutePath)
+        )
+
+        prev_folder = step_folder
+        prev_counter = s.counter
+    }
+
+    MODULE(Channel.fromList(step_tuples))
 
     onComplete:
     
@@ -607,4 +576,5 @@ workflow {
     println ''
 
 }
+
 
