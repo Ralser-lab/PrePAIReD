@@ -205,7 +205,8 @@ EOF_STEPS
             echo "Missing module script: \$script_path" >> step_log.txt
             exit 100
         }
-
+        
+        rm -f ./*_Parameters.json
         cp -f "\$param_file" .
         
         test -f "\$param_file" || {
