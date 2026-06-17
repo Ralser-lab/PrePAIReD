@@ -485,7 +485,7 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F11.png"+"\n"))            
     return
 
-def write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict):
+def write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict, docker_setup=False):
     """
     Writes parameter file to disk.
     
@@ -507,14 +507,18 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
         Dictionary for flag variables.
     params_dict : dict
         Dictionary for parameters.
-    
+    docker_setup : bool
+        If True, pathes are adjusted to match NextFlow setup. The default is False.
+        
     Returns
     -------
-    None
+    additional_files : list
+        List of additional files to be included
     
     """
     
     simple_imputation_dropouts = ["imputation_method_HA","imputation_method_LA","imputation_method_ProtAbsence","imputation_method_ProtAbsenceHA","imputation_method_ProtAbsenceLA","eval_missingness_on_protein_presence","eval_missingness_by_detection_threshold","hierarchical_imputation","remember_missingness_type_in_mask","level_for_intensity_dependent_missingness_estimation","save_intermediate_output_for_QA","impute_over_whole_dataset","missingness_type_protein_absence","define_protein_missingness_on_filter_mask","intensity_dependent_missingness_decision_boundary","intensity_dependent_missingness_detection_proportion_cap","intensity_dependent_missingness_fit_method","intensity_dependent_missingness_n_knots"]
+    additional_files = []
     step_ = None
     skip_fw_method = False
     skip_prec_metadata = False
@@ -560,6 +564,17 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                 else:
                     flag = False
                     if skip_simple and param in simple_imputation_dropouts:
+                        process = False
+                    elif param in params_dict[current_flag][current_flag_value] and param in ["exclusion_list_fp","peptide_list_fp"]:
+                        if docker_setup:
+                            try:
+                                file_ = el.rsplit("/",1)[1]
+                            except:
+                                file_ = el
+                            file.write(param+" = "+"extra_input_files/"+file_+"\n")
+                        else:
+                            file.write(param+" = "+el+"\n")
+                        additional_files.append(el)
                         process = False
                     elif param == "precursor_filter_col" and not skip_prec_metadata and "filter_precursors_by_metadata" in methods[step_collection[key]]:
                         file.write("precursor_filter_col = "+precursor_metadata[step_collection[key]]["col"]+"\n")
@@ -657,9 +672,40 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                             else:
                                 file.write(str(el))
                             file.write("\n")
-    return
+    return additional_files
 
-def write_output(workflow_data, workdir, flags_dict, params_dict, rerun=False, rerun_start=None, rerun_counter=0, docker_setup=False):
+def write_config_data(workdir, data_fp, metadata_fp, additional_files=[]):
+    """
+    Writes data configuration file.
+    
+    Parameters
+    ----------
+    workdir : str
+        Working directory.
+    data_fp : str
+        Path to input data.
+    metadata_fp : str
+        Path to metadata.
+    additional_files : list
+        List of additional files to be included
+    
+    Returns
+    -------
+        None
+    
+    """
+    with open(os.path.join(workdir,"Config_data.txt"),"w") as file:
+        file.write("WORKING_PATH = "+"\""+workdir+"\"\n")
+        file.write("ORIGINALDATA = "+"\""+data_fp+"\"\n")
+        file.write("METADATA = "+"\""+metadata_fp+"\"\n")
+        file.write("EXTRA_INPUT_FILES = ")
+        if additional_files:
+            for ind,file_ in enumerate(additional_files):
+                file.write("\""+file_+"\"")
+                if ind < len(additional_files)-1:
+                    file.write(";")
+
+def write_output(workflow_data, workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun=False, rerun_start=None, rerun_counter=0, docker_setup=False):
     """
     Writes all data to disk.
     
@@ -669,6 +715,10 @@ def write_output(workflow_data, workdir, flags_dict, params_dict, rerun=False, r
         Workflow setup.
     workdir : str
         Working directory.
+    data_fp : str
+        Path to input data.
+    metadata_fp : str
+        Path to metadata.
     flags_dict : dict
         Dictionary for flag variables.
     params_dict : dict
@@ -690,6 +740,7 @@ def write_output(workflow_data, workdir, flags_dict, params_dict, rerun=False, r
     steps, precursor_metadata, language, methods, step_collection = get_steps(workflow_data, params_dict, rerun_counter)
     step_names = write_config(workdir, steps, language, rerun, rerun_start)
     write_evaluation_config(workdir, step_names, methods, rerun=rerun, rerun_start=rerun_start, docker_setup=docker_setup)
-    write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict)
+    additional_files = write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict, docker_setup)
+    write_config_data(workdir, data_fp, metadata_fp, additional_files)
     return
 

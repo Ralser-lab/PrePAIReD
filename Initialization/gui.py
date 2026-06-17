@@ -3380,11 +3380,8 @@ class WorkflowListPanel(QWidget):
         for step_data in workflow_data["workflow"]:
     
             step = WorkflowStep(step_data["name"])
-    
             step.params = step_data.get("params", {})
-    
             item = QListWidgetItem(step.name)
-    
             item.setData(Qt.UserRole, step)
     
             # protect General item
@@ -3399,7 +3396,9 @@ class WorkflowListPanel(QWidget):
 
         gs = self.main_window.global_settings
         workflow_dict = self.get_configuration_dict()
-        workdir = gs.work_dir.text()
+        workdir = os.path.abspath(gs.work_dir.text())
+        data_fp = os.path.abspath(gs.ms_file.text())
+        metadata_fp = os.path.abspath(gs.meta_file.text())
         rerun = gs.rerun_checkbox.isChecked()
         if rerun:
             rerun_start = gs.dropdown.currentText()
@@ -3410,7 +3409,7 @@ class WorkflowListPanel(QWidget):
         flags_dict = gs.flags_dict
         params_dict = gs.params_dict
         docker_setup = gs.docker_checkbox.isChecked()
-        gui_funcs.write_output(workflow_dict["workflow"], workdir, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
+        gui_funcs.write_output(workflow_dict["workflow"], workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
 
 # ----------------------------
 # Main Window
