@@ -3409,7 +3409,11 @@ class WorkflowListPanel(QWidget):
         flags_dict = gs.flags_dict
         params_dict = gs.params_dict
         docker_setup = gs.docker_checkbox.isChecked()
-        gui_funcs.write_output(workflow_dict["workflow"], workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
+        try:
+            gui_funcs.write_output(workflow_dict["workflow"], workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
+            gs.status_label.setText("Files successfully generated ✅")
+        except:
+            gs.status_label.setText("Failed generating files ❌")
 
 # ----------------------------
 # Main Window
