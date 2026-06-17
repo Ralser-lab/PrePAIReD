@@ -131,6 +131,7 @@ process MODULE {
           val(engine),
           path(script_file),
           path(param_file),
+          path(paramdir),
           path(code_py_dir),
           path(code_r_dir),
           path(report_script),
@@ -161,7 +162,7 @@ process MODULE {
     set -euo pipefail
 
     mkdir -p report_folder
-
+   
     echo "----- MODULE START (${step_id}_${step_name}) -----" > step_log.txt
     echo "[RESOURCE INFO] attempt=${task.attempt} cpus=${task.cpus} memory=${task.memory}" >> step_log.txt
     echo "[MODULE INFO] Running ${step_id}_${step_name}" >> step_log.txt
@@ -268,7 +269,6 @@ process MODULE {
     cp -f step_log.txt "\$publish_step/"
     cp -f log.txt "\$publish_step/" || true
     cp -f pipeline_log.txt "${publish_root}/" || true
-    cp -f report.pdf "\$publish_step/" || true
     cp -f report.pdf "\$publish_step/" || true
     cp -f data_${step_id}.tsv "\$publish_step/" || true
     cp -f id_mapping.tsv "\$publish_step/" || true
@@ -512,6 +512,7 @@ workflow {
             s.engine,
             file(new File(s.engine == 'py' ? codePyDir : codeRDir, s.scriptName).absolutePath),
             file(new File(WORKDIR_ABS, "Parameter_Files/${s.paramName}").absolutePath),
+            file(new File(WORKDIR_ABS, "Parameter_Files").absolutePath),
             file(codePyDir.absolutePath),
             file(codeRDir.absolutePath),
             file(reportPy.absolutePath),
