@@ -1125,6 +1125,9 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     else:
         max_val = data_origin.max().max()
         min_val = data_origin.min().min()
+        
+    bin_edges = np.linspace(min_val, max_val, nbins + 1)
+    width = bin_edges[1] - bin_edges[0]
     
     if sample_type_column:
         if not sample_type:
@@ -1137,7 +1140,20 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
         if data_processed is not None:
             indices_processed = [index for index in metadata.index if index in data_processed.columns]
     
-    distribution_origin = [np.histogram(data_origin[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_origin]
+    #distribution_origin = [np.histogram(data_origin[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_origin]
+    
+    X = data_origin.loc[:, indices_origin].to_numpy()
+    bin_idx = np.full(X.shape, -1, dtype=np.int64)
+    valid = np.isfinite(X)
+    bin_idx[valid] = ((X[valid] - min_val) / width).astype(np.int64)
+    mask = (bin_idx >= 0) & (bin_idx < nbins)
+
+    ncols = X.shape[1]
+    col_idx = np.broadcast_to(np.arange(ncols),X.shape)
+    flat_bins = bin_idx[mask] + col_idx[mask] * nbins
+    counts = np.bincount(flat_bins, minlength=ncols * nbins).reshape(ncols, nbins)
+    densities = counts / (X.shape[0] * width)
+    distribution_origin = densities.tolist()
     
     xs = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),nbins)
     xs_fine = np.linspace(min_val+(max_val-min_val)/(2*nbins),max_val-(max_val-min_val)/(2*nbins),250)
@@ -1166,7 +1182,21 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     
     if data_processed is not None:
         ax_processed = fig.add_subplot(gs[0,1])
-        distribution_processed = [np.histogram(data_processed[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_processed]
+        
+        #distribution_processed = [np.histogram(data_processed[column],bins=nbins,range=(min_val,max_val),density=True)[0] for column in indices_processed]
+        X = data_processed.loc[:, indices_processed].to_numpy()
+        bin_idx = np.full(X.shape, -1, dtype=np.int64)
+        valid = np.isfinite(X)
+        bin_idx[valid] = ((X[valid] - min_val) / width).astype(np.int64)
+        mask = (bin_idx >= 0) & (bin_idx < nbins)
+
+        ncols = X.shape[1]
+        col_idx = np.broadcast_to(np.arange(ncols),X.shape)
+        flat_bins = bin_idx[mask] + col_idx[mask] * nbins
+        counts = np.bincount(flat_bins, minlength=ncols * nbins).reshape(ncols, nbins)
+        densities = counts / (X.shape[0] * width)
+        distribution_processed = densities.tolist()
+        
         color_values_processed = np.linspace(0,1,len(indices_processed))
         colors_processed = [cmap_(norm(el)) for el in color_values_processed] 
         for item, color in zip(distribution_processed,colors_processed):
