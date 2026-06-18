@@ -335,10 +335,10 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     property_peptide : pd. Series
         Calculated property per sample.
     """
-    
     # Avoid errors if subset chosen is too small -> test
-    data_index = [index for index in data.index if sum(~data.loc[index,indices].isna()) >= min_samples]
-    
+    #data_index = [index for index in data.index if sum(~data.loc[index,indices].isna()) >= min_samples]
+    data_index = ((~data.loc[:,indices].isna()).T.sum() >= min_samples).index
+
     if plot_by == "Missingness":
         property_peptide = data[indices].isna().T.sum()
     elif plot_by == "Mean":
@@ -353,22 +353,34 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
         property_peptide = pd.Series(index=data_index, data = [mean_squared_error(data.loc[index,indices].fillna(data.loc[index,indices].mean()),data.loc[index,indices].mean()*np.ones(len(indices)))/data.loc[index,indices].mean() for index in data_index])
     elif plot_by in ["Correlation","Corr_pvalue"]:
         if metadata is None or not column_metadata:
-            raise ValueError("Metadata or Metadata column or not defined.")
-        metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data_index]
+            raise ValueError("Metadata or Metadata column is not defined.")
+        masks = ~np.isnan(data.values)
+        meta_values = metadata.loc[indices, column_metadata].to_numpy()
+        metadata_values_ = [meta_values[mask] for mask in masks]
+        #metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data_index]
         if shuffle:
             np.random.seed(seed)
             for i, item in enumerate(metadata_values_):
                 shuffled = np.array(item, copy=True)
                 np.random.shuffle(shuffled)
                 metadata_values_[i] = shuffled
-        if data_type == "continuous":
-            stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
-        elif data_type == "ordinal":
-            stats = [spearmanr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
-        elif data_type == "nominal":
-            stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
-        else:
-            raise ValueError("data_type not defined.")
+                
+        stats = []
+        for ind, row in enumerate(data.values):
+            mask = masks[ind]
+        
+            if data_type == "continuous":
+                stats.append(pearsonr(metadata_values_[ind],row[mask]))
+                #stats = [pearsonr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
+            elif data_type == "ordinal":
+                stats.append(spearmanr(metadata_values_[ind],row[mask]))
+                #stats = [spearmanr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
+            elif data_type == "nominal":
+                stats.append(pointbiserialr(metadata_values_[ind],row[mask]))
+                #stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
+            else:
+                raise ValueError("data_type not defined.")
+        
         if plot_by == "Correlation":
             if take_abs:
                 property_peptide = pd.Series(index=data_index, data=[abs(el[0]) for el in stats])
@@ -1269,7 +1281,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     step : str, optional
         Preprocessing step (used for the title). The default is "".
     """
-    
+        
     if column_metadata:
         try:
             metadata[column_metadata] = pd.to_numeric(metadata[column_metadata])
@@ -1290,12 +1302,12 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         indices_origin, indices_processed = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
     else:
         indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
-        
+    
     # Calculate property
     property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type, take_abs=True)
     # Get n top hits
     selection = property_peptide.sort_values(ascending=False).index[:top_n]
-        
+    
     if data_processed is not None:
         size = (size[0]*2,(size[1]*top_n)+1)
     else:
