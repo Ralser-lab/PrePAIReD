@@ -830,6 +830,8 @@ if __name__ == "__main__":
         
         #parameter extraction
         methods = parameters_dict['filtering_wide_methods'].replace(" ", "").split(";")
+        #for multiple calls of filter_precursors_by_metadata define a counter accessing correct parameter subset, initialized with zero
+        filter_precursors_by_metadata_counter = 0
         data_processed_df = data_df
         
         #create filtering metadata to remember excluded samples, excluded precursors will be flagged in id_mapping_df
@@ -1042,13 +1044,17 @@ if __name__ == "__main__":
                     #log filtering method
                     log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['precursor_filter_col']} not {parameters_dict['precursor_filter_value']}.\n"
                     helper.logger(log_file,log)
+                    #extract correct parameter subset
+                    filter_col=parameters_dict["precursor_filter_col"].split(";")[filter_precursors_by_metadata_counter]
+                    filter_value=parameters_dict["precursor_filter_value"].split(";")[filter_precursors_by_metadata_counter]
+                    operator=parameters_dict["filter_operator"].split(";")[filter_precursors_by_metadata_counter]
                     #apply exclusion of selected precursors
                     data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
                                                                            id_mapping_df=id_mapping_df, 
                                                                            precursor_col=parameters_dict["precursor_col"], 
-                                                                           filter_col=parameters_dict["precursor_filter_col"], 
-                                                                           filter_value=parameters_dict["precursor_filter_value"],
-                                                                           operator=parameters_dict["filter_operator"])
+                                                                           filter_col=filter_col, 
+                                                                           filter_value=filter_value,
+                                                                           operator=operator)
                     
                     #catch errors
                     if "###ERROR###" in log:
