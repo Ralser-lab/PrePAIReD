@@ -1,4 +1,5 @@
 nextflow.enable.dsl=2
+nextflow.preview.recursion=true
 
 def pget(String key, Object defaultValue) {
     return params.containsKey(key) ? params[key] : defaultValue
@@ -63,9 +64,8 @@ String bashQuote(String s) {
 
 process INIT_PARAMS {
 
-    // tag "INIT_PARAMS"
     tag "INIT_PARAMS | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
-    
+
     maxForks 1
 
     publishDir { publish_root }, mode: 'copy', overwrite: true
@@ -119,137 +119,170 @@ process INIT_PARAMS {
 }
 
 
-process RUN_ALL_MODULES {
+/*
+ * RUN_STEP — runs exactly ONE pipeline step, then emits the SAME tuple shape it
+ * received (mandatory for .recurse()). The step to run is steps[idx]; idx is
+ * advanced by 1 on output so the next recursion runs the next step.
+ *
+ * Sequential guarantee: .recurse() feeds this iteration's OUTPUT as the next
+ * iteration's INPUT. The data file emitted here (out_data.tsv) literally becomes
+ * the next step's in_data. Steps therefore run strictly in order, each consuming
+ * the previous step's result. Nothing runs independently (maxForks 1, local).
+ *
+ * Display: each iteration is a separate task, so the executor shows
+ *   [xx/aaaa] process > RUN_STEP (1)  ✔
+ *   [xx/bbbb] process > RUN_STEP (2)  ✔
+ *
+ * Failure policy: module / QA / report failures are NON-FATAL. The step never
+ * exits non-zero for those and ALWAYS emits a complete tuple; if the module
+ * produces no new data, previous data/id/mask/report are CARRIED FORWARD. The
+ * ONLY hard failure is an OOM kill (137/143), which cannot carry itself forward.
+ */
+process RUN_STEP {
 
-    // tag "RUN_ALL_MODULES"
-    tag "RUN_ALL_MODULES | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
-    
+    tag {
+        def f = steps_tsv.split('\n')[(idx as int)].split('\t')
+        "${f[0]}_${f[1]} | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
+    }
+
     maxForks 1
 
     beforeScript """
-    echo "[RESOURCE INFO] Attempt ${task.attempt} | CPUs=${task.cpus} | Memory=${task.memory}"
+    echo "[RESOURCE INFO] Iteration ${(idx as int) + 1} | Attempt ${task.attempt} | CPUs=${task.cpus} | Memory=${task.memory}"
     """
-    
+
     input:
     tuple val(publish_root),
+          val(idx),
           val(steps_tsv),
+          path(in_data, stageAs: 'in_data.tsv'),
+          path(in_id, stageAs: 'in_id.tsv'),
+          path(in_mask, stageAs: 'in_mask.tsv'),
+          path(in_mask_dp, stageAs: 'in_mask_dp.tsv'),
+          path(in_report, stageAs: 'in_report.pdf'),
           path(code_py_dir),
           path(code_r_dir),
           path(report_script),
           path(qa_script),
           path(eval_cfg),
-          path(maxlfqdll),
-          path(maxlfqdylib),
-          val(maxlfqso),
-          path(figscptn),
-          path(seed_data),
           path(meta_file),
-          path(id_file),
-          path(mask_file),
-          path(mask_dp_file),
-          path(log_file),
-          path(prev_report),
           path(doc_tsv),
-          path(paramdir)
+          path(paramdir),
+          val(maxlfqso)
 
     output:
-    path("pipeline.done")
+    tuple val(publish_root),
+          val(idx + 1),
+          val(steps_tsv),
+          path("out_data.tsv"),
+          path("out_id_mapping.tsv"),
+          path("out_mask.tsv"),
+          path("out_mask_description.tsv"),
+          path("out_report.pdf"),
+          path(code_py_dir),
+          path(code_r_dir),
+          path(report_script),
+          path(qa_script),
+          path(eval_cfg),
+          path(meta_file),
+          path(doc_tsv),
+          path(paramdir),
+          val(maxlfqso)
 
     script:
     """
-    set -euo pipefail
+    set -uo pipefail
 
     BASE="\$PWD"
+    IDX=${idx}
 
     cat > steps.tsv <<'EOF_STEPS'
 ${steps_tsv}
 EOF_STEPS
 
-    current_data="\$BASE/${seed_data}"
-    current_id="\$BASE/${id_file}"
-    current_mask="\$BASE/${mask_file}"
-    current_mask_dp="\$BASE/${mask_dp_file}"
-    current_log="\$BASE/${log_file}"
-    current_report="\$BASE/${prev_report}"
+    line=\$(sed -n "\$((IDX + 1))p" steps.tsv)
+    if [ -z "\$line" ]; then
+        echo "[FATAL] No step at index \$IDX" >&2
+        exit 100
+    fi
 
-    while IFS=\$'\\t' read -r counter base engine script_name param_name; do
+    counter=\$(printf '%s' "\$line" | cut -f1)
+    base=\$(printf '%s' "\$line" | cut -f2)
+    engine=\$(printf '%s' "\$line" | cut -f3)
+    script_name=\$(printf '%s' "\$line" | cut -f4)
+    param_name=\$(printf '%s' "\$line" | cut -f5)
 
-        step_name="\${base}"
-        cd "\$BASE"
+    step_name="\${base}"
 
-        echo "[MODULE INFO] Running \${counter}_\${step_name}"
-        echo "[MODULE INFO] Running \${counter}_\${step_name}" >> step_log.txt
-        
-        mkdir -p report_folder
-        : > step_log.txt
+    echo "[MODULE INFO] Running \${counter}_\${step_name}"
 
-        echo "----- MODULE START (\${counter}_\${step_name}) -----" >> step_log.txt
+    mkdir -p report_folder
+    : > step_log.txt
+    echo "----- MODULE START (\${counter}_\${step_name}) -----" >> step_log.txt
 
-        cp -f "${maxlfqso}" ./maxlfq_docker.so
-        test -f ./maxlfq_docker.so || {
-            echo "maxlfq_docker.so not found: ${maxlfqso}" >> step_log.txt
-            exit 100
-        }
+    if cp -f "${maxlfqso}" ./maxlfq_docker.so 2>>step_log.txt; then
+        :
+    else
+        echo "[WARN] could not copy maxlfq_docker.so from ${maxlfqso}" >> step_log.txt
+    fi
 
-        if [ "\$engine" = "py" ]; then
-            script_path="\$BASE/${code_py_dir}/\${script_name}"
-            runner="python"
-        else
-            script_path="\$BASE/${code_r_dir}/\${script_name}"
-            runner="Rscript"
-        fi
+    if [ "\$engine" = "py" ]; then
+        script_path="\$BASE/${code_py_dir}/\${script_name}"
+        runner="python"
+    else
+        script_path="\$BASE/${code_r_dir}/\${script_name}"
+        runner="Rscript"
+    fi
 
-        param_file="\$BASE/${paramdir}/\${param_name}"
+    param_file="\$BASE/${paramdir}/\${param_name}"
 
-        test -f "\$script_path" || {
-            echo "Missing module script: \$script_path" >> step_log.txt
-            exit 100
-        }
-        
-        rm -f ./*_Parameters.json
+    rm -f ./*_Parameters.json
+    if [ -f "\$param_file" ]; then
         cp -f "\$param_file" .
-        
-        test -f "\$param_file" || {
-            echo "Missing parameter file: \$param_file" >> step_log.txt
-            exit 100
-        }
-        
+    else
+        echo "[WARN] Missing parameter file: \$param_file" >> step_log.txt
+    fi
+
+    mod_rc=0
+    if [ ! -f "\$script_path" ]; then
+        echo "[WARN] Missing module script: \$script_path" >> step_log.txt
+        echo "###MOD_ERROR### module script missing for \${counter}_\${step_name}" >> step_log.txt
+        mod_rc=127
+    else
         set +e
         "\$runner" "\$script_path" \\
-          -d "\$current_data" \\
+          -d "\$BASE/in_data.tsv" \\
           -p "\$param_file" \\
           -o . \\
           -m "\$BASE/${meta_file}" \\
           -l step_log.txt \\
-          -i "\$current_id" \\
+          -i "\$BASE/in_id.tsv" \\
           -c "\$counter" >> step_log.txt 2>&1
         mod_rc=\$?
         set -e
+    fi
 
-        if [ \$mod_rc -ne 0 ]; then
-            echo "###MOD_ERROR### module failed exit=\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
-            echo "[SKIP] QA skipped because module failed and expected output may not exist." >> step_log.txt
-            touch MOD.fail
-            touch QA.skip
-            echo "----- MODULE END -----" >> step_log.txt
+    if [ \$mod_rc -ne 0 ]; then
+        echo "###MOD_ERROR### module failed exit=\$mod_rc for \${counter}_\${step_name}" >> step_log.txt
+        touch MOD.fail
 
-            if [ \$mod_rc -eq 137 ] || [ \$mod_rc -eq 143 ]; then
-                echo "[MEMORY ERROR] \${counter}_\${step_name} was killed with exit \$mod_rc." >> step_log.txt
-                echo "[MEMORY ERROR] The assigned memory was not sufficient for this dataset." >> step_log.txt
-                echo "[MEMORY ERROR] Nextflow will retry with more memory if retries remain." >> step_log.txt
-                exit \$mod_rc
-            fi
-
-            continue
-        else
-            touch MOD.ok
+        if [ \$mod_rc -eq 137 ] || [ \$mod_rc -eq 143 ]; then
+            echo "[MEMORY ERROR] \${counter}_\${step_name} killed with exit \$mod_rc (out of memory)." >> step_log.txt
+            echo "[MEMORY ERROR] Nextflow will retry with more memory if retries remain." >> step_log.txt
+            exit \$mod_rc
         fi
 
-        echo "----- MODULE END -----" >> step_log.txt
+        echo "[INFO] module failed but continuing (non-fatal); previous data carried forward." >> step_log.txt
+    else
+        touch MOD.ok
+    fi
 
-        echo "" >> step_log.txt
-        echo "----- QA START (\${counter}_\${step_name}) -----" >> step_log.txt
+    echo "----- MODULE END -----" >> step_log.txt
 
+    echo "" >> step_log.txt
+    echo "----- QA START (\${counter}_\${step_name}) -----" >> step_log.txt
+
+    if [ \$mod_rc -eq 0 ]; then
         set +e
         python "\$BASE/${qa_script}" \\
           -w . \\
@@ -267,91 +300,91 @@ EOF_STEPS
         else
             touch QA.ok
         fi
+    else
+        echo "[SKIP] QA skipped because module failed." >> step_log.txt
+        touch QA.skip
+    fi
 
-        echo "----- QA END -----" >> step_log.txt
+    echo "----- QA END -----" >> step_log.txt
 
-        echo "" >> step_log.txt
-        echo "----- REPORT START (\${counter}_\${step_name}) -----" >> step_log.txt
+    echo "" >> step_log.txt
+    echo "----- REPORT START (\${counter}_\${step_name}) -----" >> step_log.txt
 
-        set +e
-        if [ -f "\$current_report" ] && [ -s "\$current_report" ]; then
-            python "\$BASE/${report_script}" \\
-              --log step_log.txt \\
-              --in_pdf "\$current_report" \\
-              --out report_new.pdf \\
-              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
-        else
-            python "\$BASE/${report_script}" \\
-              --log step_log.txt \\
-              --out report_new.pdf \\
-              --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
-        fi
-        rep_rc=\$?
-        set -e
+    set +e
+    if [ -f "\$BASE/in_report.pdf" ] && [ -s "\$BASE/in_report.pdf" ]; then
+        python "\$BASE/${report_script}" \\
+          --log step_log.txt \\
+          --in_pdf "\$BASE/in_report.pdf" \\
+          --out report_new.pdf \\
+          --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
+    else
+        python "\$BASE/${report_script}" \\
+          --log step_log.txt \\
+          --out report_new.pdf \\
+          --doc_tsv "\$BASE/${doc_tsv}" >> step_log.txt 2>&1
+    fi
+    rep_rc=\$?
+    set -e
 
-        if [ \$rep_rc -ne 0 ]; then
-            echo "###REP_ERROR### report failed exit=\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
-            touch REP.fail
-        else
-            mv report_new.pdf report.pdf
-            touch REP.ok
-        fi
+    if [ \$rep_rc -ne 0 ]; then
+        echo "###REP_ERROR### report failed exit=\$rep_rc for \${counter}_\${step_name}" >> step_log.txt
+        echo "[WARN] report failed but continuing" >> step_log.txt
+        touch REP.fail
+    else
+        mv -f report_new.pdf report.pdf
+        touch REP.ok
+    fi
 
-        echo "----- REPORT END -----" >> step_log.txt
+    echo "----- REPORT END -----" >> step_log.txt
 
-        touch "\$current_log"
-        {
-            echo ""
-            echo "===== \${counter}_\${step_name} (\${engine}) ====="
-            cat step_log.txt
-        } >> "\$current_log"
+    cp -f step_log.txt log.txt || true
 
-        cp -f step_log.txt log.txt
+    if [ -f "data_\${counter}.tsv" ]; then
+        cp -f "data_\${counter}.tsv" out_data.tsv
+    else
+        echo "[INFO] carrying forward previous data (no data_\${counter}.tsv produced)" >> step_log.txt
+        cp -f "\$BASE/in_data.tsv" out_data.tsv
+    fi
 
-        publish_step="${publish_root}/\${counter}_\${step_name}"
-        mkdir -p "\$publish_step"
+    if [ -f "id_mapping.tsv" ]; then
+        cp -f "id_mapping.tsv" out_id_mapping.tsv
+    else
+        cp -f "\$BASE/in_id.tsv" out_id_mapping.tsv
+    fi
 
-        cp -f step_log.txt "\$publish_step/"
-        cp -f log.txt "\$publish_step/" || true
-        cp -f report.pdf "\$publish_step/" || true
-        cp -rf report_folder "\$publish_step/" || true
-        cp -f data_\${counter}.tsv "\$publish_step/" || true
-        cp -f id_mapping.tsv "\$publish_step/" || true
-        cp -f data_\${counter}_mask.tsv "\$publish_step/" || true
-        cp -f data_\${counter}_mask_description.tsv "\$publish_step/" || true
-        [ -f Normalization_factors.tsv ] && cp -f Normalization_factors.tsv "\$publish_step/" || true
+    if [ -f "data_\${counter}_mask.tsv" ]; then
+        cp -f "data_\${counter}_mask.tsv" out_mask.tsv
+    else
+        cp -f "\$BASE/in_mask.tsv" out_mask.tsv
+    fi
 
-        if grep -Eq "###MOD_ERROR###|###REP_ERROR###" step_log.txt; then
-            echo "[FATAL] \${counter}_\${step_name}: module/report failed; see step_log.txt" >&2
-            exit 100
-        fi
+    if [ -f "data_\${counter}_mask_description.tsv" ]; then
+        cp -f "data_\${counter}_mask_description.tsv" out_mask_description.tsv
+    else
+        cp -f "\$BASE/in_mask_dp.tsv" out_mask_description.tsv
+    fi
 
-        if grep -q "###QA_ERROR###" step_log.txt; then
-            echo "[WARN] \${counter}_\${step_name}: QA failed; continuing" >&2
-        fi
+    if [ -f "report.pdf" ]; then
+        cp -f "report.pdf" out_report.pdf
+    elif [ -f "\$BASE/in_report.pdf" ]; then
+        cp -f "\$BASE/in_report.pdf" out_report.pdf
+    else
+        : > out_report.pdf
+    fi
 
-        current_data="\$BASE/data_\${counter}.tsv"
-        current_id="\$BASE/id_mapping.tsv"
-        current_report="\$BASE/report.pdf"
-        current_norm=""
-        
-        if [ -f "\$BASE/data_\${counter}_mask.tsv" ]; then
-            current_mask="\$BASE/data_\${counter}_mask.tsv"
-        fi
+    publish_step="${publish_root}/\${counter}_\${step_name}"
+    mkdir -p "\$publish_step"
+    cp -f step_log.txt "\$publish_step/" || true
+    cp -f log.txt "\$publish_step/" || true
+    [ -f report.pdf ] && cp -f report.pdf "\$publish_step/" || true
+    cp -rf report_folder "\$publish_step/" || true
+    [ -f "data_\${counter}.tsv" ] && cp -f "data_\${counter}.tsv" "\$publish_step/" || true
+    [ -f id_mapping.tsv ] && cp -f id_mapping.tsv "\$publish_step/" || true
+    [ -f "data_\${counter}_mask.tsv" ] && cp -f "data_\${counter}_mask.tsv" "\$publish_step/" || true
+    [ -f "data_\${counter}_mask_description.tsv" ] && cp -f "data_\${counter}_mask_description.tsv" "\$publish_step/" || true
+    [ -f Normalization_factors.tsv ] && cp -f Normalization_factors.tsv "\$publish_step/" || true
 
-        if [ -f "\$BASE/data_\${counter}_mask_description.tsv" ]; then
-            current_mask_dp="\$BASE/data_\${counter}_mask_description.tsv"
-        fi
-
-        if [ -f "Normalization_factors.tsv" ]; then
-            current_norm="\$BASE/Normalization_factors.tsv"
-        fi
-        
-        cd "\$BASE"
-
-    done < steps.tsv
-
-    touch pipeline.done
+    echo "[MODULE INFO] Finished \${counter}_\${step_name}"
     """
 }
 
@@ -359,7 +392,7 @@ EOF_STEPS
 workflow {
 
     main:
-    
+
     def config_data = pget('config_data', 'Config_data.txt')
     def code_py = pget('code_py', 'modules_python')
     def code_r = pget('code_r', 'modules_R')
@@ -514,14 +547,20 @@ workflow {
         ]
     }
 
-    steps_tsv = stepsResolved.collect {
+    def steps_tsv = stepsResolved.collect {
         "${it.counter}\t${it.base}\t${it.engine}\t${it.scriptName}\t${it.paramName}"
     }.join('\n')
+
+    def n_steps = stepsResolved.size()
 
     println "Working path      : ${WORKDIR_ABS}"
     println "Original data     : ${ORIGINALDATA_ABS}"
     println "Metadata          : ${METADATA_ABS}"
-    println "Steps             : ${stepsResolved.size()}"
+    println "Steps             : ${n_steps}"
+
+    if( n_steps == 0 ) {
+        die("No steps to run (Order = is empty)")
+    }
 
     init_ch = INIT_PARAMS(
         Channel.of(
@@ -537,74 +576,93 @@ workflow {
         )
     )
 
-    run_input_ch = init_ch.map { paramdir, setup_log, init_done ->
-        tuple(
-            WORKDIR_ABS,
-            steps_tsv,
-            file(codePyDir.absolutePath),
-            file(codeRDir.absolutePath),
-            file(reportPy.absolutePath),
-            file(qaScript.absolutePath),
-            file(evalConfig.absolutePath),
-            file(maxlfqdll.absolutePath),
-            file(maxlfqdylib.absolutePath),
-            maxlfq_so_param as String,
-            file(figscptn.absolutePath),
-            file(seed_data.absolutePath),
-            file(metaFile.absolutePath),
-            file(seed_idmap.absolutePath),
-            file(seed_mask.absolutePath),
-            file(seed_maskdp.absolutePath),
-            file(logSeed.absolutePath),
-            file(reportSeed.absolutePath),
-            file(methodDoc.absolutePath),
-            paramdir
-        )
-    }
+    // Seed tuple (iteration 0 input). MUST match RUN_STEP input shape exactly.
+    // .first() converts the queue channel into a value channel, required by
+    // .recurse(). Mapping INIT_PARAMS output also gates start on init completion.
+    seed_ch = init_ch
+        .map { paramdir, setup_log, init_done ->
+            tuple(
+                WORKDIR_ABS,
+                0,
+                steps_tsv,
+                file(seed_data.absolutePath),
+                file(seed_idmap.absolutePath),
+                file(seed_mask.absolutePath),
+                file(seed_maskdp.absolutePath),
+                file(reportSeed.absolutePath),
+                file(codePyDir.absolutePath),
+                file(codeRDir.absolutePath),
+                file(reportPy.absolutePath),
+                file(qaScript.absolutePath),
+                file(evalConfig.absolutePath),
+                file(metaFile.absolutePath),
+                file(methodDoc.absolutePath),
+                paramdir,
+                maxlfq_so_param as String
+            )
+        }
+        .first()
 
-    RUN_ALL_MODULES(run_input_ch)
+    // Run all steps sequentially. .times(n_steps) => one iteration per step;
+    // each iteration's OUTPUT feeds the next iteration's INPUT (strict order).
+    RUN_STEP
+        .recurse(seed_ch)
+        .times(n_steps)
 
-    onComplete:
-    
-    if( !workflow.success ) {
-        println ''
-        println '[CLEANUP] Skipped because pipeline failed.'
-        println ''
-        return
-    }
-    else {
-        cfgDataPath2 = resolveLaunch(config_data as String)
-        cfgData2 = parseKeyValueFile(cfgDataPath2)
-        workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
-        workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
-        
-        println '[CLEANUP] Remove 0-byte files from output folder'
-        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
-        println '[CLEANUP] Remove common hidden junk files'
-        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
-        if( cleanup_aggressive ) {
-            println '[CLEANUP] Aggressive cleanup enabled'
-            "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
-            "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+
+    workflow.onComplete {
+        if( !workflow.success ) {
+            println ''
+            println '[CLEANUP] Skipped because pipeline failed.'
+            println ''
         }
         else {
-            println '[CLEANUP] Aggressive cleanup disabled'
+            try {
+                def out = new File(WORKDIR_ABS, 'pipeline_log.txt')
+                out.text = ''
+                stepsResolved.each { st ->
+                    def slog = new File("${WORKDIR_ABS}/${st.counter}_${st.base}", 'step_log.txt')
+                    out << "\n===== ${st.counter}_${st.base} (${st.engine}) =====\n"
+                    out << (slog.exists() ? slog.text : "[WARN] step_log.txt not found for ${st.counter}_${st.base}\n")
+                }
+                println "[LOG] Rebuilt aggregated log: ${out.absolutePath}"
+            } catch( Throwable t ) {
+                println "[WARN] Could not rebuild pipeline_log.txt: ${t.message}"
+            }
+
+            def cfgDataPath2 = resolveLaunch(config_data as String)
+            def cfgData2 = parseKeyValueFile(cfgDataPath2)
+            def workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
+            def workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
+
+            println '[CLEANUP] Remove 0-byte files from output folder'
+            "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
+            println '[CLEANUP] Remove common hidden junk files'
+            "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
+            if( cleanup_aggressive ) {
+                println '[CLEANUP] Aggressive cleanup enabled'
+                "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
+                "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+            }
+            else {
+                println '[CLEANUP] Aggressive cleanup disabled'
+            }
+            println '[CLEANUP] Done.'
         }
-        println '[CLEANUP] Done.'
     }
 
-    onError:
-    println ''
-    println '[PIPELINE FAILED]'
-    println 'The pipeline stopped before completion.'
-    println 'If the failed exit status was 137 or 143, the likely reason is insufficient memory.'
-    println 'Nextflow already retried with larger memory if retries were available.'
-    println 'Please rerun with more memory, for example:'
-    println '  nextflow run nextflow.nf --memory "32 GB" --cpus 8'
-    println 'For initialization memory:'
-    println '  nextflow run nextflow.nf --init_memory "16 GB"'
-    println 'If using Docker Desktop, increase Docker Desktop memory in Settings > Resources.'
-    println ''
-
+    workflow.onError {
+        println ''
+        println '[PIPELINE FAILED]'
+        println 'The pipeline stopped before completion.'
+        println 'If the failed exit status was 137 or 143, the likely reason is insufficient memory.'
+        println 'Nextflow already retried with larger memory if retries were available.'
+        println 'Please rerun with more memory, for example:'
+        println '  nextflow run nextflow.nf --memory "32 GB" --cpus 8'
+        println 'For initialization memory:'
+        println '  nextflow run nextflow.nf --init_memory "16 GB"'
+        println 'If using Docker Desktop, increase Docker Desktop memory in Settings > Resources.'
+        println ''
+    }
 }
 
