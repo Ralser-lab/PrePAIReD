@@ -1073,6 +1073,9 @@ if __name__ == "__main__":
                     
                     #log filtering progress
                     helper.logger(log_file,log)
+
+                    #increase counter for multiple calls of filter_precursors_by_metadata
+                    filter_precursors_by_metadata_counter += 1
                     
                 elif method == "filter_precursors_by_exclusion_list":
                     #log filtering method
