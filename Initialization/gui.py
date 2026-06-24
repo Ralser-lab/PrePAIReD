@@ -402,6 +402,8 @@ class DynamicParameterConfig(QWidget):
 
             widget_to_add = MultiDependencyWidget(
                 metadata_dict=self.meta_columns_full,
+                data_list=self.data_columns,
+                parent_type=parent_type,
                 child_metas=child_metas,
                 create_widget_func=self.create_widget,
                 parse_gui_type_func=self.parse_gui_type,
@@ -1439,19 +1441,27 @@ class DynamicParameterConfig(QWidget):
                         visible = False
                         break
     
-            # apply visibility
-            if widget.parentWidget():
+            # apply visibility            
+            if param_name in self.flags_dict[self.step.name.upper()]:
                 widget.parentWidget().setVisible(visible)
+            else:
+                widget.setVisible(visible)
                 
         self.apply_filtered_options()
     
     def get_widget_value(self, widget):
+    
         if isinstance(widget, QComboBox):
             return widget.currentText().strip()
+    
         if isinstance(widget, QCheckBox):
             return widget.isChecked()
-        return None
+        
+        if hasattr(widget, "get_value"):
+            return widget.get_value()
     
+        return None
+        
     def apply_filtered_options(self):
         for name, widget in self.param_widgets.items():
     
@@ -1926,7 +1936,9 @@ class DependencyRowWidget(QWidget, BaseParamWidget):
 
     def __init__(self,
              metadata_dict,
+             data_list,
              child_metas,
+             parent_type,
              create_widget_func,
              parse_gui_type_func,
              allow_empty=False):
@@ -1935,7 +1947,9 @@ class DependencyRowWidget(QWidget, BaseParamWidget):
         self._internal_update = False
 
         self.metadata_dict = metadata_dict
+        self.data_list = data_list
         self.child_metas = child_metas
+        self.parent_type = parent_type
         self.create_widget_func = create_widget_func
         self.parse_gui_type_func = parse_gui_type_func
         self.allow_empty = allow_empty
@@ -1948,11 +1962,16 @@ class DependencyRowWidget(QWidget, BaseParamWidget):
 
         if self.allow_empty:
             self.parent_combo.addItem("")
-        
-        keys = [
-            k for k in metadata_dict.keys()
-            if k != "__dummy_type__"
-        ]
+                
+        if self.parent_type[0] == "meta":
+            keys = [
+                k for k in metadata_dict.keys()
+                if k != "__dummy_type__"
+            ]
+        elif self.parent_type[0] == "data":
+            keys = [
+                k for k in data_list
+            ]
     
         self.parent_combo.addItems(keys)
         self.parent_combo.setCurrentIndex(-1)
@@ -2241,6 +2260,8 @@ class MultiDependencyWidget(QWidget, BaseParamWidget):
 
     def __init__(self,
              metadata_dict,
+             data_list,
+             parent_type,
              child_metas,
              create_widget_func,
              parse_gui_type_func,
@@ -2250,6 +2271,8 @@ class MultiDependencyWidget(QWidget, BaseParamWidget):
         self._internal_update = False
 
         self.metadata_dict = metadata_dict
+        self.data_list = data_list
+        self.parent_type = parent_type
         self.child_metas = child_metas
         self.create_widget_func = create_widget_func
         self.parse_gui_type_func = parse_gui_type_func
@@ -2274,7 +2297,9 @@ class MultiDependencyWidget(QWidget, BaseParamWidget):
 
         dep_widget = DependencyRowWidget(
             metadata_dict=self.metadata_dict,
+            data_list=self.data_list,
             child_metas=self.child_metas,
+            parent_type=self.parent_type,
             create_widget_func=self.create_widget_func,
             parse_gui_type_func=self.parse_gui_type_func,
             allow_empty=self.allow_empty
@@ -2463,6 +2488,23 @@ class FilteringLongParameterConfig(QWidget):
         super().__init__()
 
         layout = QVBoxLayout(self)
+        
+        flags_dict["FILTERING_LONG"]["input_origin"]["PriorityFirst"] = True
+        flags_dict["FILTERING_LONG"]["filter_proteotypic"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_global_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_gg_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_pg_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_global_pg_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_p_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_lib_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_lib_pg_qvalue"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_PEP"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_MScorr"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_zero_values"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_evidence"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_MScorr_evidence_combined"]["VisibleIf"] = {"input_origin":"diann"}
+        flags_dict["FILTERING_LONG"]["filter_by_precursorcharge"]["VisibleIf"] = {"input_origin":"diann"}
 
         widget = DynamicParameterConfig(
             step,
@@ -2505,6 +2547,13 @@ class NormalisationParameterConfig(QWidget):
         layout = QVBoxLayout(self)
 
         flags_dict["NORMALISATION"]["on_peptide_list"]["VisibleIf"] = {"normalization_method":"median_scaling"}
+        params_dict["normalization_method"]["median_scaling"]["nan_intersect_thresh"]["VisibleIf"] = {"normalization_on_intersecting_precs":True}
+        params_dict["normalization_method"]["median_scaling"]["on_mad"]["VisibleIf"] = {"exclude_outlier_nfs":True}
+        params_dict["normalization_method"]["median_scaling"]["rel_threshold"]["VisibleIf"] = {"on_mad":True}
+        params_dict["normalization_method"]["median_scaling"]["min_nf"]["VisibleIf"] = {"on_mad":False,
+                                                                                        "exclude_outlier_nfs":True}
+        params_dict["normalization_method"]["median_scaling"]["max_nf"]["VisibleIf"] = {"on_mad":False,
+                                                                                        "exclude_outlier_nfs":True}
 
         widget = DynamicParameterConfig(
             step,
@@ -3412,6 +3461,12 @@ class WorkflowListPanel(QWidget):
         try:
             gui_funcs.write_output(workflow_dict["workflow"], workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
             gs.status_label.setText("Files successfully generated ✅")
+
+            QTimer.singleShot(
+                5000,
+                lambda: gs.status_label.clear()
+            )
+            
         except:
             gs.status_label.setText("Failed generating files ❌")
 

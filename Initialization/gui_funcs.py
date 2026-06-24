@@ -518,10 +518,13 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
     """
     
     simple_imputation_dropouts = ["imputation_method_HA","imputation_method_LA","imputation_method_ProtAbsence","imputation_method_ProtAbsenceHA","imputation_method_ProtAbsenceLA","eval_missingness_on_protein_presence","eval_missingness_by_detection_threshold","hierarchical_imputation","remember_missingness_type_in_mask","level_for_intensity_dependent_missingness_estimation","save_intermediate_output_for_QA","impute_over_whole_dataset","missingness_type_protein_absence","define_protein_missingness_on_filter_mask","intensity_dependent_missingness_decision_boundary","intensity_dependent_missingness_detection_proportion_cap","intensity_dependent_missingness_fit_method","intensity_dependent_missingness_n_knots"]
+    ms_custom_dropouts = ["filter_proteotypic","filter_by_qvalue","filter_by_global_qvalue","filter_by_gg_qvalue","filter_by_pg_qvalue","filter_by_global_pg_qvalue","filter_by_p_qvalue","filter_by_lib_qvalue","filter_by_lib_pg_qvalue","filter_by_PEP","filter_by_MScorr","filter_by_zero_values","filter_by_evidence","filter_by_MScorr_evidence_combined","qvalue_thresh","lib_qvalue_thresh","pep_thresh","MScorr_thresh","evidence_thresh","MScorr_evidence_combined_thresh","filter_by_precursorcharge","preccharge_min","preccharge_max"]
+    
     additional_files = []
     step_ = None
     skip_fw_method = False
     skip_prec_metadata = False
+    skip_custom = False
     
     with open(os.path.join(workdir,"Parameters.txt"),"w") as file:
         for key,item in enumerate(workflow_data):
@@ -550,6 +553,10 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                         skip_simple = True
                     if skip_simple and param in simple_imputation_dropouts:
                         process = False
+                    if current_flag == "input_origin" and current_flag_value == "custom":
+                        skip_custom = True
+                    if skip_custom and param in ms_custom_dropouts:
+                        process = False
                     if current_flag == "filtering_wide_methods" and not skip_fw_method:
                         file.write("filtering_wide_methods = ")
                         for ind,method in enumerate(methods[step_collection[key]]):
@@ -564,6 +571,8 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                 else:
                     flag = False
                     if skip_simple and param in simple_imputation_dropouts:
+                        process = False
+                    elif skip_custom and param in ms_custom_dropouts:
                         process = False
                     elif param in params_dict[current_flag][current_flag_value] and param in ["exclusion_list_fp","peptide_list_fp"]:
                         if docker_setup:
