@@ -613,8 +613,9 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                                 child_vals = {i:"" for i in range(len(el[0]["children"]))}
                                 for el_ in el:
                                     parent_vals += str(el_["parent"])+";"
-                                    for i in range(len(el_["children"])):
-                                        child_vals[i] += str(el_["children"][i]["child"])+";"
+                                    if el_["parent"] is not None:
+                                        for i in range(len(el_["children"])):
+                                            child_vals[i] += str(el_["children"][i]["child"])+";"
                                 
                                 el = [{"parent":parent_vals.strip(";"), "child":child_vals[i].strip(";")} for i in child_vals]
                             if el[0]["parent"] and el[0]["child"]:

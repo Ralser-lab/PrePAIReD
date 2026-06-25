@@ -1976,6 +1976,13 @@ class DependencyRowWidget(QWidget, BaseParamWidget):
         self.parent_combo.addItems(keys)
         self.parent_combo.setCurrentIndex(-1)
         
+        self.parent_combo.currentTextChanged.connect(
+            lambda *_: self.value_changed.emit()
+        )
+        self.parent_combo.currentTextChanged.connect(
+            lambda *_: self.update_child()
+        )
+        
         self._apply_default_size(self.parent_combo)
 
         layout.addWidget(self.parent_combo)
