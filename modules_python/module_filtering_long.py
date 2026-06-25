@@ -977,7 +977,7 @@ if __name__ == "__main__":
             ids_list = ["to_be_filled"]
             
         if parameters_dict["ms_filter_columns"] is not None:
-            ids_list = ids_list + str(parameters_dict["ms_filter_columns"]).split(";")
+            ids_list_ = ids_list + str(parameters_dict["ms_filter_columns"]).split(";")
         
         input_id_col = ids_list[0]
         
@@ -985,7 +985,7 @@ if __name__ == "__main__":
         if parameters_dict["input_origin"]=="diann":
             # Select columns which will be read from DIA-NN output (reading only used columns saves RAM and speeds up analysis)
             file_columns_list = select_filtering_columns(filters_dict=parameters_dict, 
-                                                         ids_list=ids_list, 
+                                                         ids_list=ids_list_, 
                                                          values_col=parameters_dict["input_values_column"],
                                                          input_filename_col=parameters_dict["input_filename_column"])
         
@@ -1030,9 +1030,10 @@ if __name__ == "__main__":
             log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n"
             helper.logger(log_file,log)
             
-            
             # Extract ID mapping
-            id_mapping_df = input_df[ids_list + ["Proteotypic"]].drop_duplicates()
+            id_mapping_df = input_df[ids_list + ["Proteotypic"]].drop_duplicates(subset=[parameters_dict["precursor_col"],parameters_dict["protein_col"]])
+            if len(input_df[ids_list + ["Proteotypic"]].drop_duplicates()) != len(id_mapping_df):
+                log += "###WARNING###: ID mapping contianed non-unique precursor-protein combination. IDs need to be treated with care and additional filters need to be considered\n"
     
             # Rename missing values in protein_col
             if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
