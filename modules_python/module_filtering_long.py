@@ -978,6 +978,8 @@ if __name__ == "__main__":
             
         if parameters_dict["ms_filter_columns"] is not None:
             ids_list_ = ids_list + str(parameters_dict["ms_filter_columns"]).split(";")
+        else:
+            ids_list_ = ids_list
         
         input_id_col = ids_list[0]
         
