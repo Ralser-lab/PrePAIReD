@@ -1973,7 +1973,13 @@ def plot_overall_completeness(data, metadata=None, column_metadata=None, size = 
     data_ = data_.loc[sums_.index]
     
     if plot_limits:
-        limits_indices = [np.where(data_.index==sums_[sums_>=data_.shape[1]*limit].index[-1])[0][0] for limit in limits]
+        limits_indices = []
+        for limit in limits:
+            try:
+                limits_indices.append(np.where(data_.index==sums_[sums_>=data_.shape[1]*limit].index[-1])[0][0])
+            except:
+                limits_indices.append(0)
+        #limits_indices = [np.where(data_.index==sums_[sums_>=data_.shape[1]*limit].index[-1])[0][0] for limit in limits]
     
     limit_label = "Limits : "
     for ind,limit in enumerate(limits):
@@ -1990,11 +1996,11 @@ def plot_overall_completeness(data, metadata=None, column_metadata=None, size = 
     
     if plot_limits:
         legend_elements = [Patch(facecolor=color_present, edgecolor=color_present, label="Present"),
-                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Abscent"),
+                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Absent"),
                            Line2D([0], [0], color='k', linestyle="--", label=limit_label)]
     else:
         legend_elements = [Patch(facecolor=color_present, edgecolor=color_present, label="Present"),
-                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Abscent")]
+                           Patch(facecolor=color_abscent, edgecolor=color_abscent, label="Absent")]
     
     ax.legend(loc = legend_loc, handles = legend_elements, fontsize=fontsize_legend)
     
