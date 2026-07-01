@@ -2183,30 +2183,35 @@ if __name__ == "__main__":
                 addition = " "+parameters_dict_general["sample_type_column"]+":"+parameters_dict_general["sample_type"]+"."
             else:
                 addition = " All."
-                
-            plot_qa_box_int_and_number(data_origin, 
-                                       metadata_df, 
-                                       data_processed_, 
-                                       sample_type = parameters_dict_general["sample_type"], 
-                                       sample_type_column = parameters_dict_general["sample_type_column"],
-                                       size = ast.literal_eval(dict_config_setup[step][key_figure]["size"]), 
-                                       step = step, 
-                                       outfile = dict_config_setup[step][key_figure]["outfile"], 
-                                       use_metadata_coloring = use_metadata_coloring, 
-                                       column_color = column_color,
-                                       ylabel_int = ylabel_int
-                                       )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            
+            try:
+                plot_qa_box_int_and_number(data_origin, 
+                                           metadata_df, 
+                                           data_processed_, 
+                                           sample_type = parameters_dict_general["sample_type"], 
+                                           sample_type_column = parameters_dict_general["sample_type_column"],
+                                           size = ast.literal_eval(dict_config_setup[step][key_figure]["size"]), 
+                                           step = step, 
+                                           outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                           use_metadata_coloring = use_metadata_coloring, 
+                                           column_color = column_color,
+                                           ylabel_int = ylabel_int
+                                           )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            except:
+                print("Error in boxplot plotting. Skipped.")
             
         #%%
         key_figure = "F02"
         if dict_config_setup[step][key_figure]["plot_filter_mask"] == "1":  
-            
-            plot_filter_mask(mask_processed,
-                             mask_description_processed, 
-                             outfile = dict_config_setup[step][key_figure]["outfile"]
-                             )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            try:
+                plot_filter_mask(mask_processed,
+                                 mask_description_processed, 
+                                 outfile = dict_config_setup[step][key_figure]["outfile"]
+                                 )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            except:
+                print("Error in filter mask plotting. Skipped.")
     
         #%%
         key_figure = "F03"
@@ -2218,14 +2223,17 @@ if __name__ == "__main__":
             else:
                 addition = " "+parameters_dict_general["sample_type_column"]+"."
                 groups_ = parameters_dict_general["sample_type_column"]
-
-            plot_CV_violin(data_origin, 
-                           metadata_df, 
-                           data_processed=data_processed, 
-                           group_columns = [groups_], 
-                           outfile = dict_config_setup[step][key_figure]["outfile"]
-                           )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            
+            try:
+                plot_CV_violin(data_origin, 
+                               metadata_df, 
+                               data_processed=data_processed, 
+                               group_columns = [groups_], 
+                               outfile = dict_config_setup[step][key_figure]["outfile"]
+                               )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+            except:
+                print("Error in CV plotting. Skipped.")
             
         #%%
         key_figure = "F04"
@@ -2275,14 +2283,16 @@ if __name__ == "__main__":
         #%%
         key_figure = "F05"
         if dict_config_setup[step][key_figure]["plot_distribution"] == "1":
-            
-            plot_distribution(data_origin, 
-                              metadata_df, 
-                              data_processed = data_processed, 
-                              outfile = dict_config_setup[step][key_figure]["outfile"],
-                              step = step
-                              )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            try:
+                plot_distribution(data_origin, 
+                                  metadata_df, 
+                                  data_processed = data_processed, 
+                                  outfile = dict_config_setup[step][key_figure]["outfile"],
+                                  step = step
+                                  )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            except:
+                print("Error in distribution plotting. Skipped.")
             
         #%%
         key_figure = "F06"
@@ -2391,20 +2401,24 @@ if __name__ == "__main__":
         #%%
         key_figure = "F10" 
         if dict_config_setup[step][key_figure]["plot_abundance_vs_completeness"] == "1":
+            try:    
+                plot_completeness_vs_abundance_scatter(data_processed, 
+                                                       metadata_df, 
+                                                       outfile = dict_config_setup[step][key_figure]["outfile"], 
+                                                       gridsize = int(dict_config_setup[step][key_figure]["gridsize"]), 
+                                                       n_bins = int(dict_config_setup[step][key_figure]["n_bins"])
+                                                       )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            except:
+                print("Error in abundance vs. completeness plotting. Skipped.")
                 
-            plot_completeness_vs_abundance_scatter(data_processed, 
-                                                   metadata_df, 
-                                                   outfile = dict_config_setup[step][key_figure]["outfile"], 
-                                                   gridsize = int(dict_config_setup[step][key_figure]["gridsize"]), 
-                                                   n_bins = int(dict_config_setup[step][key_figure]["n_bins"])
-                                                   )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
-            
         #%%
         key_figure = "F11"
         if dict_config_setup[step][key_figure]["plot_overall_completeness"] == "1":
-                
-            plot_overall_completeness(data_processed, 
-                                      outfile = dict_config_setup[step][key_figure]["outfile"]
-                                      )
-            log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            try:
+                plot_overall_completeness(data_processed, 
+                                          outfile = dict_config_setup[step][key_figure]["outfile"]
+                                          )
+                log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition="")
+            except:
+                print("Error in overall completeness plotting. Skipped.")
