@@ -34,8 +34,8 @@ script_dir <- dirname(script_path)
 
 source(file.path(script_dir, "helper_functions_R.R"))
 
-# For my testing internally
-#source("/home/alvaro/MyStuff/preprocessing/Old_just_in_case/Testing_Nooshin/Code/helper_functions_R.R")
+# For internal testing - comment out before pushing
+#source("/home/alvaro/Research/Projects/preprocessing/finished_pipeline/modules_R/helper_functions_R.R")
 
 
 
@@ -128,10 +128,12 @@ normalize_cyclic_loess <- function(DM_df,
   
   # Missingness warning (as percentage)
   prop_na <- mean(is.na(DM_mat))
-  warning(sprintf(
-    "The provided dataset contains %.1f%% missing values. Any value over 20%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
-    prop_na * 100
-  ))
+  if (prop_na > 0.2) {
+    warning(sprintf(
+      "The provided dataset contains %.1f%% missing values. Any value over 20%% will make this normalization method less reliable—consider imputation beforehand or a different normalization method.",
+      prop_na * 100
+    ))
+  }
   
   # Print message informing the user that normalization is starting, with time stamp
   cat(sprintf(
@@ -183,7 +185,7 @@ normalize_cyclic_loess <- function(DM_df,
               format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   
   # Return output
-  return(as.data.frame(DM_mat, stringsAsFactors = FALSE))
+  return(as.data.frame(DM_df, stringsAsFactors = FALSE))
 }
 
 
