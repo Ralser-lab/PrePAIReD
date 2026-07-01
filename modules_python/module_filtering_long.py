@@ -534,7 +534,7 @@ def create_mask(mask_arr, mask_description_df, precursor_codes, precursor_labels
     mask_arr = mask_arr == 1
     return mask_df, mask_description_df, mask_arr
 
-def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes, file_labels, metadata_df, metadata_filename_col="File.Name",metadata_sample_col="Sample.Name"):    
+def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes, file_labels, metadata_df, metadata_filename_col="File.Name",metadata_sample_col="Sample.Name", replace_zeroes=True):    
     """
     Transforms long format data frame to wide format. 
     author: BZ, OL
@@ -557,6 +557,8 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
         column name with complete filenames in metadata, which match file names in long_df[input_filename_col]. The default is "File.Name".
     metadata_sample_col : str, optional
         column name with (shorter) sample names in metadata. The default is "Sample.Name".
+    replace_zeroes : bool, optional
+        If True replaces 0s with np.nan. The default is True.
         
     Return
     ------
@@ -567,7 +569,8 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
     values_arr, log_ = data_read_column(data_df_fp, parameters_dict["input_values_column"], dtype=float)
     values_arr = values_arr.copy()
     values_arr[~keep_arr] = np.nan
-    values_arr[values_arr==0] = np.nan
+    if replace_zeroes:
+        values_arr[values_arr==0] = np.nan
     
     wide_df = pd.DataFrame.sparse.from_spmatrix(coo_matrix((values_arr, (precursor_codes, file_codes))),
                                                 index = precursor_labels,
@@ -1494,9 +1497,9 @@ if __name__ == "__main__":
         # Get columns to be saved in ID-mapping
         if parameters_dict["input_origin"]=="diann":
             if parameters_dict["input_ids_columns"] is not None:
-                ids_list = ids_list + ["Stripped.Sequence","Genes","Proteotypic"] + [col for col in parameters_dict["input_ids_columns"].split(";") if col not in ["Stripped.Sequence","Genes","Proteotypic"]+[parameters_dict["precursor_col"],parameters_dict["protein_col"]]]
+                ids_list = ids_list + [col for col in ["Stripped.Sequence","Genes","Proteotypic"] if col not in [parameters_dict["precursor_col"],parameters_dict["protein_col"]]] + [col for col in parameters_dict["input_ids_columns"].split(";") if col not in ["Stripped.Sequence","Genes","Proteotypic"]+[parameters_dict["precursor_col"],parameters_dict["protein_col"]]]
             else:
-                ids_list = ids_list + ["Stripped.Sequence","Genes","Proteotypic"]
+                ids_list = ids_list + [col for col in ["Stripped.Sequence","Genes","Proteotypic"] if col not in [parameters_dict["precursor_col"],parameters_dict["protein_col"]]]
         else:
             if parameters_dict["input_ids_columns"] is not None:
                 ids_list = ids_list + [col for col in parameters_dict["input_ids_columns"].split(";") if col not in [parameters_dict["precursor_col"],parameters_dict["protein_col"]]]
@@ -1526,7 +1529,8 @@ if __name__ == "__main__":
         # Sample filtering (trimming to samples specified by metadata_df)
         wide_df, log = exclude_runs_not_in_metadata(wide_df=wide_df, 
                                                      metadata_df=metadata_df, 
-                                                     metadata_filename_col=parameters_dict["metadata_filename_column"])
+                                                     metadata_filename_col=parameters_dict["metadata_sample_column"])
+        wide_df = wide_df.sparse.to_dense()
         wide_df.dropna(how="all", inplace=True)
         helper.logger(log_file,log)
              
@@ -1536,6 +1540,8 @@ if __name__ == "__main__":
                                                     filename_col=parameters_dict["metadata_filename_column"], 
                                                     sample_col=parameters_dict["metadata_sample_column"])
         
+        mask_df = mask_df.sparse.to_dense()
+        
         # Log Transformation (Base 2)
         wide_df = helper.log_transform(wide_df, base=2)
         log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format data logtransformed to base 2\n"
@@ -1543,7 +1549,7 @@ if __name__ == "__main__":
         
         # Save data
         id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
-        log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tWide format matrix saved successfully to " + os.path.join(out_dir_fp, "data_" + str(counter) + ".tsv")+"\n"+time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMask saved successfully to " + os.path.join(out_dir_fp,"data_mask_" + str(counter) + ".tsv")+"\n"+time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tTable for ID mapping saved to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
+        log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tID-Mapping saved successfully to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
         helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=log, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
         
     except Exception as e:
