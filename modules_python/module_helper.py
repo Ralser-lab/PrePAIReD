@@ -103,7 +103,7 @@ def log_transform(
     """
     Applies a logarithmic transformation to a DataFrame with the specified base.
 
-    Authors: SB, BZ, CD
+    Authors: SB, BZ, CD, OL
 
     Parameters:
     -----------
@@ -141,14 +141,14 @@ def log_transform(
     if base <= 0 or base == 1:
         raise ValueError("Base must be greater than 0 and not equal to 1")
     # Get NaNs
-    nan_mask = df.isna()
+    #nan_mask = df.isna()
     # Add constant
     if add_constant:
         df = df + constant
     # Log transform
     df = np.log(df) / np.log(base)
     # Replace Nan's
-    df[nan_mask] = np.nan
+    #df[nan_mask] = np.nan
     return df
 
 
