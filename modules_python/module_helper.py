@@ -1487,18 +1487,24 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
     
     # Update log file
     logger(log_file, module_output=module_output)
+    module_output = ""
 	# Check for empty DataFrame
     if data_processed_df.empty:
         logger(log_file, "###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
+        sys.exit("###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
     # Save data
     save_data(data_processed_df, out_dir_fp, outname)
+    module_output += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tProcessed data saved successfully to " + os.path.join(out_dir_fp, outname)+"\n"
     # Save mask
     if mask:
         save_mask(masked_df, out_dir_fp, outname)
         save_mask_description(mask_description_df, out_dir_fp, outname)
+        module_output += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tMask saved successfully to " + os.path.join(out_dir_fp,outname[:-4] + "_mask.tsv")+"\n"
+
     # Close function
-    logger(log_file, time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tProcessed data saved successfully to " + os.path.join(out_dir_fp, outname)+"\n"+time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n" + "------------\n" + "------------\n")
     if exit_module:
+        module_output += time.strftime("\n%Y-%m-%d%t%H:%M:%S") + "\tModule finished as expected.\n" + "------------\n" + "------------\n"
+        logger(log_file, module_output=module_output)
         sys.exit(0)
 
 def skip_parser_init(module, report_folder="report_folder"):
