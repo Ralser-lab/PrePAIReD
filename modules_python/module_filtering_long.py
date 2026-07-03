@@ -1531,6 +1531,7 @@ if __name__ == "__main__":
                                                      metadata_df=metadata_df, 
                                                      metadata_filename_col=parameters_dict["metadata_sample_column"])
         wide_df = wide_df.sparse.to_dense()
+        wide_df.index.names = [parameters_dict["precursor_col"]]
         wide_df.dropna(how="all", inplace=True)
         helper.logger(log_file,log)
              
@@ -1541,6 +1542,7 @@ if __name__ == "__main__":
                                                     sample_col=parameters_dict["metadata_sample_column"])
         
         mask_df = mask_df.sparse.to_dense()
+        mask_df.index.names = [parameters_dict["precursor_col"]]
         
         # Log Transformation (Base 2)
         wide_df = helper.log_transform(wide_df, base=2)
