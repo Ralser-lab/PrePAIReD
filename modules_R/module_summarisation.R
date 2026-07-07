@@ -167,8 +167,13 @@ summarize_median_polish <- function(quant_df, parameter_list, mapping_df){
     }))
     
     quant_prot_df <- iq::create_protein_table(quant_list)$estimate
+
+    ## remove protein/sample estimates supported by too few features
+    ## (align by name so masking does not rely on row/column order)
+    quant_df_Nfeat <- quant_df_Nfeat[rownames(quant_prot_df),
+                                     colnames(quant_prot_df), drop = FALSE]
     quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
-    
+
     cat("\n\nFinished median polish summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
@@ -187,9 +192,14 @@ summarize_fast_maxlfq <- function(quant_df, parameter_list, mapping_df){
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
     prot_ids <- mapping_df[match(row.names(quant_df), mapping_df[, feat_col]), prot_col]
-    
+
     quant_list <- split(as.data.frame(quant_df), prot_ids)
-    
+
+    ## per-protein, per-sample count of non-missing features (for post-hoc filtering)
+    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+        colSums(!is.na(as.matrix(x)))
+    }))
+
     res <- lapply(names(quant_list), \(p){
         
         x <- as.matrix(quant_list[[p]])
@@ -211,7 +221,13 @@ summarize_fast_maxlfq <- function(quant_df, parameter_list, mapping_df){
                       quant = unlist(lapply(res, `[[`, "quant"), use.names = FALSE))
     
     quant_prot_df <- iq::fast_MaxLFQ(norm_data)$estimate
-    
+
+    ## remove protein/sample estimates supported by too few features
+    ## (align by name, as fast_MaxLFQ does not preserve input order)
+    quant_df_Nfeat <- quant_df_Nfeat[rownames(quant_prot_df),
+                                     colnames(quant_prot_df), drop = FALSE]
+    quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
+
     cat("\n\nFinished fast MaxLFQ summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
@@ -250,8 +266,13 @@ summarize_plm <- function(quant_df, parameter_list, mapping_df){
     }))
     
     colnames(quant_prot_df) <- sample_names
+
+    ## remove protein/sample estimates supported by too few features
+    ## (align by name so masking does not rely on row/column order)
+    quant_df_Nfeat <- quant_df_Nfeat[rownames(quant_prot_df),
+                                     colnames(quant_prot_df), drop = FALSE]
     quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
-    
+
     cat("\n\nFinished PLM summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
     
