@@ -3018,15 +3018,15 @@ class GlobalSettingsPanel(QWidget):
         # ----------------------------
 
         #### For testing and debugging
-        self.ms_file = QLineEdit("./data/data_00.tsv")
-        self.meta_file = QLineEdit("./data/Metadata.tsv")
-        self.param_dir = QLineEdit("../")
-        self.work_dir = QLineEdit("./")
+        #self.ms_file = QLineEdit("./data/data_00.tsv")
+        #self.meta_file = QLineEdit("./data/Metadata.tsv")
+        #self.param_dir = QLineEdit("../")
+        #self.work_dir = QLineEdit("./")
         
-        #self.ms_file = QLineEdit("")
-        #self.meta_file = QLineEdit("")
-        #self.param_dir = QLineEdit("")
-        #self.work_dir = QLineEdit("")
+        self.ms_file = QLineEdit("")
+        self.meta_file = QLineEdit("")
+        self.param_dir = QLineEdit("")
+        self.work_dir = QLineEdit("")
 
         self.ms_file.setPlaceholderText("Select proteomic data file...")
         self.meta_file.setPlaceholderText("Select metadata file...")
@@ -3136,7 +3136,7 @@ class GlobalSettingsPanel(QWidget):
     def validate(self):
         valid = all([
             self.ms_file.text(),
-            self.meta_file.text(),
+            #self.meta_file.text(), ### Can be empty
             self.param_dir.text(),
             self.work_dir.text()
         ])
@@ -3198,7 +3198,9 @@ class GlobalSettingsPanel(QWidget):
                 # store full dict
                 self.context["metadata"] = meta_dict
             else:
-                self.context["metadata"] = {}
+                self.context["metadata"] = {"File.Name":[]}
+                if not self.meta_file.text():
+                    self.flag_meta = True
     
         except:
             self.flag_meta = False
