@@ -1622,9 +1622,9 @@ def plot_correlation_distribution(data_origin, metadata, data_processed = None, 
         range_min_processed = np.min((np.min(corr_peptide),np.min(corr_peptide_random)))
         range_max_processed = np.max((np.max(corr_peptide),np.max(corr_peptide_random)))
     
-        hist_corr_processed = np.histogram(corr_peptide,bins=nbins,range=(range_min_processed,range_max_processed))
+        hist_corr_processed = np.histogram(corr_peptide,bins=nbins,range=(range_min_origin,range_max_origin))
         if not use_same_random:
-            hist_corr_random_processed = np.histogram(corr_peptide_random,bins=nbins,range=(range_min_processed,range_max_processed))
+            hist_corr_random_processed = np.histogram(corr_peptide_random,bins=nbins,range=(range_min_origin,range_max_origin))
         else: 
             hist_corr_random_processed = hist_corr_random_origin
             
