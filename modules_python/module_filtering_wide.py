@@ -521,7 +521,7 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
     filter_col : str, optional
         name of column in id_mapping_df to perform filter on. The default is "Proteotypic".
     filter_value : str/int/float/..., optional
-        value in filter_col specifying precursors to keep.
+        value in filter_col specifying precursors to keep. If filter_value = "" (empty string) the filter is performed on missing values. The default is True
     operator : str, optional
         string that defines the operator for the filtering, e.g. "==" to filter for filter_col == filter_value or "!=" to filter for filter_col != filter_value
 
@@ -536,7 +536,7 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
     #check correct data types before running eval() for filtering
     if type(id_mapping_df) != pd.DataFrame:
         log += "###ERROR###: id_mapping_df provided to filter_precursors_by_metadata is not a dataframe.\n"
-    if operator not in ["==","!=","<",">","<=",">=","&","|"]:
+    if operator not in ["==","!=","<",">","<=",">="]:
         log += "###ERROR###: Invalid operator provided to filter_precursors_by_metadata, please use one of ==, !=, <, >, <=, >=, &, | .\n"
     #check if filter column is present
     if filter_col not in id_mapping_df.columns:
@@ -548,16 +548,51 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
     if "###ERRROR###" in log:
         return data_df, log
     
+    if filter_value == "" or pd.isna(filter_value):
+        if operator == "!=":
+            drop_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[filter_col].isna()][precursor_col]))
+            #log filtering method
+            log += f"{timestamp()}\tRemoving precursors with missing values in id mapping column {str(filter_col)}.\n"
+        elif operator == "==":
+            drop_precursors = list(set(data_df.columns) & set(id_mapping_df[~id_mapping_df[filter_col].isna()][precursor_col]))
+            log += f"{timestamp()}\tOnly keeping precursors with missing values in id mapping column {str(filter_col)}.\n"
+        else:
+            log += f"###WARNING###: Provided operator {operator} not allowed for filtering on missing values (value {filter_value} provided.\n\t\t\t\t\tFiltering of precursors by metadata skipped.\n"
+    else:
+        # define key_value with respect to its datatype
+        filter_col_dtype = id_mapping_df[filter_col].dtype
+        if filter_col_dtype == bool:
+            if str(filter_value).lower() == "false" or str(filter_value)=="0":
+                filter_value = False
+            elif str(filter_value).lower() == "true" or str(filter_value)=="1":
+                filter_value = True
+        elif filter_col_dtype == float:
+            filter_value = float(filter_value)
+        elif filter_col_dtype == int:
+            filter_value = int(filter_value)
+        else:
+            filter_value = str(filter_value)
+    
+    #log filtering method
+    log += f"{timestamp()}\tFiltering data for samples that satisfy id_mapping_df['{str(filter_col)}'] {str(operator)} {str(filter_value)}.\n"
+
     #apply filtering
     try:
-        keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+str(filter_value)+"][precursor_col]")))
+        drop_precursors = list(set(data_df.index) - set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+str(filter_value)+"][precursor_col]")))
     except:
         try:
-            keep_precursors = list(set(data_df.index) & set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+repr(filter_value)+"][precursor_col]")))
+            drop_precursors = list(set(data_df.index) - set(eval("id_mapping_df[id_mapping_df[filter_col]"+operator+repr(filter_value)+"][precursor_col]")))
         except:
             log += "###ERROR###: Filtering on metadata failed for "+f"id_mapping_df[id_mapping_df[{filter_col}]{operator}{str(filter_value)}]{[precursor_col]}"+".\n"
             log += "###ERROR###: Filtering on metadata failed for "+f"id_mapping_df[id_mapping_df[{filter_col}]{operator}{repr(filter_value)}]{[precursor_col]}"+".\n"
-    return([data_df.loc[keep_precursors], log])
+    
+    #remove precursors from data
+    data_df.drop(drop_precursors,axis=0,inplace=True)
+    
+    # remove samples with all missing values after precursor exclusion
+    data_df = data_df.dropna(how="all",axis=1)
+    
+    return([data_df, log])
 
 
 ##############################################################################
@@ -906,8 +941,7 @@ if __name__ == "__main__":
                         pre_method_columns = data_processed_df.columns
                         pre_method_rows = data_processed_df.index
                         
-                        #select corresponding column, operator and value #TODO
-                        #key_value = eval(parameters_dict["sample_filter_values_types"].split(";")[k])(str(parameters_dict['sample_filter_values']).split(";")[k])
+                        #select corresponding column, operator and value
                         key_value = parameters_dict['sample_filter_values'].split(";")[k]
                         key_operator = parameters_dict['sample_filter_operators'].split(";")[k]
                         
@@ -1094,13 +1128,10 @@ if __name__ == "__main__":
                     helper.logger(log_file,log)
     
                 elif method == "filter_precursors_by_metadata":
-                    #log filtering method
-                    log = f"{timestamp()}\tExcluding precursors from id_mapping_df with {parameters_dict['precursor_filter_col']} not {parameters_dict['precursor_filter_value']}.\n"
-                    helper.logger(log_file,log)
                     #extract correct parameter subset
                     filter_col=parameters_dict["precursor_filter_col"].split(";")[filter_precursors_by_metadata_counter]
                     filter_value=parameters_dict["precursor_filter_value"].split(";")[filter_precursors_by_metadata_counter]
-                    operator=parameters_dict["filter_operator"].split(";")[filter_precursors_by_metadata_counter]
+                    operator=parameters_dict["precursor_filter_operator"].split(";")[filter_precursors_by_metadata_counter]
                     #apply exclusion of selected precursors
                     data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
                                                                            id_mapping_df=id_mapping_df, 
@@ -1125,6 +1156,11 @@ if __name__ == "__main__":
                                                                       pre_method_rows=pre_method_rows)
                     
                     #log filtering progress
+                    num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
+                    log += f"\t\t\t\t{num_excluded_precursors} precursors excluded which do not satisfy id_mapping_df['{str(filter_col)}'] {str(operator)} {str(filter_value)}.\n"
+                    num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
+                    if num_excluded_samples > 0:
+                        log += f"\t\t\t\t{num_excluded_samples} samples excluded because they remained without precursors after filtering on id_mapping_df['{str(filter_col)}'] {str(operator)} {str(filter_value)}.\n"
                     helper.logger(log_file,log)
 
                     #increase counter for multiple calls of filter_precursors_by_metadata
