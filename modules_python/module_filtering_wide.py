@@ -34,10 +34,10 @@ pd.set_option('future.no_silent_downcasting', True)
 # Sample Thresholding Functions
 ##############################################################################
 
-def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Name', key_column='Corrupted', key_value=True):
+def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Name', key_column='Corrupted', key_operator ="!=", key_value=True):
     """
-    Indexes metadata on specified column (index_column), then filters rows from the input data DataFrame 
-    based on bool values in a specific metadata column (key_column).
+    Indexes metadata on specified column (index_column), then only keeps rows from the input data DataFrame 
+   for which values in specific metadata column (key_column) satisfy key_perator key_value, i.e. values in the column 'Corrupted' != True are kept.
 
     If the specified index_column is not found in metadata, logs a ERROR: INDEX KEY ERROR, 
     and returns unfiltered data.
@@ -56,10 +56,12 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
     index_column : str
         Column name in meta_df to set as index to align with data_df.
     key_column : str
-        Column name in meta_df to check for corrupted samples due to MS acquisition operator 
+        Column name in meta_df to check for corrupted samples due to e.g. MS acquisition operator 
         technicalities. Default is 'Corrupted'. 
-    key_value : bool or str
-        the value in key_column specifying samples to be dropped.
+    key_operator : str
+        operator to select for key_value in key_column. Allowed values are "==","!=","<",">","<=",">=". The default is "!=".
+    key_value : bool, str, float or int
+        the value in key_column specifying samples to be dropped. If key_value is '' (an empty string) the value is treated as missing value. The default is True.
 
     Returns
     -------
@@ -70,21 +72,69 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
         log string, logged with ###ERROR### messages if index and column keys not found in metadata
     """
     
+    log = ""
+    
+    # check correct data types and column presences before running eval() for filtering
+    if type(metadata_df) != pd.DataFrame:
+        log += "###ERROR###: metadata_df provided to filter_samples_by_metadata is not a dataframe.\n"
     if index_column not in metadata_df.columns:
-        log = f"###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
-        return data_df, log
+        log += f"###ERROR###: INDEX KEY ERROR - index_column '{index_column}' not found in metadata. Returning unfiltered data.\n"
+    if key_operator not in ["==","!=","<",">","<=",">="]:
+        log += "###ERROR###: Invalid operator provided to filter_samples_by_metadata, please use one of ==, !=, <, >, <=, >=.\n"
 
+    # catch error and return
+    if "###ERRROR###" in log:
+        return data_df, log
+    
     metadata_df_indexed = metadata_df.set_index(index_column)
 
     if key_column not in metadata_df_indexed.columns:
-        log = f"###WARNING###: COLUMN KEY WARNING - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
+        log += f"###WARNING###: COLUMN KEY WARNING - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df, log
     
-    log = "" #f"{timestamp()}\tAll keys found ('{index_column}', '{key_column}') in metadata. Filtering wide by metadata.\n"
-    # Define columns to be dropped by samples with key_value in key_column intersecting with data_df
-    drop_cols = list(set(metadata_df_indexed[metadata_df_indexed[key_column]==key_value].index) & set(data_df.columns))
+    if key_value == "" or pd.isna(key_value):
+        if key_operator == "!=":
+            drop_cols = list(set(data_df.columns) & set(metadata_df_indexed[metadata_df_indexed[key_column].isna()].index))
+            #log filtering method
+            log += f"{timestamp()}\tRemoving samples with missing values in metadata column {str(key_column)}.\n"
+        elif key_operator == "==":
+            drop_cols = list(set(data_df.columns) & set(metadata_df_indexed[~metadata_df_indexed[key_column].isna()].index))
+            log += f"{timestamp()}\tOnly keeping samples with missing values in metadata column {str(key_column)}.\n"
+        else:
+            log += f"###WARNING###: Provided operator {key_operator} not allowed for filtering on missing values (value {key_value} provided.\n\t\t\t\t\tFiltering of samples by metadata skipped.\n"
+    else:
+        # define key_value with respect to its datatype
+        key_column_dtype = metadata_df_indexed[key_column].dtype
+        if key_column_dtype == bool:
+            if str(key_value).lower() == "false" or str(key_value)=="0":
+                key_value = False
+            elif str(key_value).lower() == "true" or str(key_value)=="1":
+                key_value = True
+        elif key_column_dtype == float:
+            key_value = float(key_value)
+        elif key_column_dtype == int:
+            key_value = int(key_value)
+        else:
+            key_value = str(key_value)
+        
+        #log filtering method
+        log += f"{timestamp()}\tFiltering data for samples that satisfy metadata_df['{str(key_column)}'] {str(key_operator)} {str(key_value)}.\n"
+    
+        # define columns to be dropped from metadata by samples that do not satisfy eval(metadata_df[metadata_df[key_column] + key_operator + key_value) without altering data_df's column order
+        try:
+            drop_cols = list(set(data_df.columns) - set(eval("metadata_df_indexed[metadata_df_indexed[key_column]" + str(key_operator) + str(key_value) + "].index")))
+        except:
+            try:
+                drop_cols = list(set(data_df.columns) - set(eval("metadata_df_indexed[metadata_df_indexed[key_column]" + str(key_operator) + repr(key_value) + "].index")))
+            except:
+                log += "###ERROR###: Filtering on metadata failed for "+f"metadata_df_indexed[metadata_df_indexed['{key_column}']{str(key_operator)}{str(key_value)}].index"+".\n"
+                log += "###ERROR###: Filtering on metadata failed for "+f"metadata_df_indexed[metadata_df_indexed['{key_column}']{repr(key_operator)}{repr(key_value)}].index"+".\n"
+                return([data_df,log])
+        
+    # remove samples that does not satisfy filtering criterium
     data_df = data_df.drop(drop_cols,axis=1)
-    #remove precursors with all missing values after sample exclusion
+    
+    # remove precursors with all missing values after sample exclusion
     data_df = data_df.dropna(how="all",axis=0)
     return data_df, log
 
@@ -850,23 +900,23 @@ if __name__ == "__main__":
                 
                 # SAMPLE FILTERS
                 if method == "filter_samples_based_on_metadata":
-                    #for every column specified for exclusion by metadata
-                    for k,key_column in enumerate(parameters_dict['metadata_exclusion_columns'].split(";")):
+                    #for every column specified for filtering by metadata
+                    for k,key_column in enumerate(parameters_dict['sample_filter_cols'].split(";")):
                         # snapshot BEFORE this method
                         pre_method_columns = data_processed_df.columns
                         pre_method_rows = data_processed_df.index
                         
-                        #select corresponding value for exclusion in the given key_column
-                        key_value = eval(parameters_dict["metadata_exclusion_values_types"].split(";")[k])(str(parameters_dict['metadata_exclusion_values']).split(";")[k])
+                        #select corresponding column, operator and value #TODO
+                        #key_value = eval(parameters_dict["sample_filter_values_types"].split(";")[k])(str(parameters_dict['sample_filter_values']).split(";")[k])
+                        key_value = parameters_dict['sample_filter_values'].split(";")[k]
+                        key_operator = parameters_dict['sample_filter_operators'].split(";")[k]
                         
-                        #log filtering method
-                        log = f"{timestamp()}\tExcluding samples from data with {key_value} in metadata column {key_column}.\n"
-                        helper.logger(log_file,log)
                         #apply filtering based on metadata
                         data_processed_df, log  = filter_samples_based_on_metadata(data_df=data_processed_df, 
                                                                                    metadata_df=metadata_df, 
                                                                                    index_column=parameters_dict['metadata_sample_column'], 
                                                                                    key_column=key_column,
+                                                                                   key_operator=key_operator,
                                                                                    key_value=key_value)
                         #catch errors
                         if "###ERROR###" in log:
@@ -885,12 +935,15 @@ if __name__ == "__main__":
                             
                             #remember excluded samples
                             sample_filters_df.loc[flags,key_column+"="+str(key_value)] = True
-                            
                             #log filtering progress
                             num_excluded_samples = len(pre_method_columns) - len(data_processed_df.columns)
-                            log += f"\t\t\t\t{num_excluded_samples} samples excluded by {key_value} in metadata_column {key_column}.\n"
+                            log += f"\t\t\t\t{num_excluded_samples} samples excluded which do not satisfy metadata_df['{str(key_column)}'] {str(key_operator)} {str(key_value)}.\n"
+                            num_excluded_precursors = len(pre_method_rows) - len(data_processed_df.index)
+                            if num_excluded_precursors > 0:
+                                log += f"\t\t\t\t{num_excluded_precursors} precursors excluded because they were unique to samples with {key_value} in metadata_column {key_column}, which were excluded.\n"
+                               
                         helper.logger(log_file,log)
-                        
+                      
                 elif method == "filter_samples_by_detection_proportion":
                     #log filtering method
                     log = f"{timestamp()}\tFiltering samples from data by missingness threshold.\n"
