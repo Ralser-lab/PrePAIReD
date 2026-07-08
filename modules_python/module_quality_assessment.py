@@ -678,7 +678,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
     return
 
 # For Imputation, Normalization, Correction, Summarization
-def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = ["Sample.Type"], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=False, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
+def plot_CV_violin(data_origin, metadata, data_processed = None, group_columns = [], size=(1,5), fontsize = 15, fontsize_title = 15, calc_widths=False, step="", outfile="CV_violinplot.png", base=2, scale_max=0.95, y_lim=None, write_to_disk=False):
     """
     Plotting of the coefficient of variation (CV) as a violin plot for different sample types.
 
@@ -691,7 +691,7 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
 	data_processed : pd.DataFrame, optional
 	    Data (Indices: Precursors, Columns: Samples) after the preprocessing step.
     group_columns : list of str, optional
-        Columns in Matedata that distinguish different sample types. This information can also contain other information e.g. "Batch". The default is ["Sample.Type"].
+        Columns in Matedata that distinguish different sample types. This information can also contain other information e.g. "Batch". The default is [].
     size : tuple of float, optional
         Size of the plot. The default is (1,5).
     fontsize : int, optional
@@ -712,6 +712,14 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
         y-limit for which the CVs should be evaluated (to mask outliers for better visuals ONLY). If None, no filter is applied. The default is None.
     write_to_disk : bool, optional
         If true saves CV to disk as outfile[:-4]+"_CVs_origin.tsv". The default is False.
+        
+    Returns
+    -------
+    cross_border_origin : bool
+        Only returned if y_lim is not None. If True is returned at least one CV crossed max(y_lim) in original data.
+    cross_border_processed : bool
+        Only returned if y_lim is not None. If True is returned at least one CV crossed max(y_lim) in processed data.
+    
     """
     
     if data_processed is not None:
@@ -750,10 +758,14 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
         cvs_lognormal_processed = [item if item else [np.nan]*2 for item in cvs_lognormal_processed]
     
     if y_lim:
+        cross_border_origin = any(True if el > y_lim[1] else False for el in [max(item) for item in cvs_lognormal_origin])
         cvs_lognormal_origin = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_origin]
         if data_processed is not None:
             cvs_lognormal_processed = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_processed]
-    
+            cross_border_processed = any(True if el > y_lim[1] else False for el in [max(item) for item in cvs_lognormal_processed])
+        else:
+            cross_border_processed = False
+            
     if calc_widths:
         min_origin = np.nanmin([el for item in cvs_lognormal_origin for el in item])
         max_origin = np.nanmax([el for item in cvs_lognormal_origin for el in item])
@@ -836,7 +848,10 @@ def plot_CV_violin(data_origin, metadata, data_processed=None, group_columns = [
     ax.grid(axis="y")
 
     plt.savefig(outfile, bbox_inches="tight")
-    return
+    if y_lim:
+        return cross_border_origin, cross_border_processed
+    else:
+        return
 
 # For Imputation, Normalization, Correction
 ### Coloring
@@ -2225,12 +2240,19 @@ if __name__ == "__main__":
                 groups_ = parameters_dict_general["sample_type_column"]
             
             try:
-                plot_CV_violin(data_origin, 
-                               metadata_df, 
-                               data_processed=data_processed, 
-                               group_columns = [groups_], 
-                               outfile = dict_config_setup[step][key_figure]["outfile"]
-                               )
+                append_o, append_p = plot_CV_violin(data_origin, 
+                                                    metadata_df, 
+                                                    data_processed=data_processed, 
+                                                    group_columns = [groups_], 
+                                                    outfile = dict_config_setup[step][key_figure]["outfile"],
+                                                    y_lim=(0,2)
+                                                    )
+                
+                if append_o:
+                    addition += " At least 1 precursor in original data exceeds a CV of 2."
+                if append_p:
+                    addition += " At least 1 precursor in processed data exceeds a CV of 2."
+                
                 log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
             except:
                 print("Error in CV plotting. Skipped.")
