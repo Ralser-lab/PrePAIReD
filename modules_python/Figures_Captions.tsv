@@ -1,7 +1,7 @@
 Figure ID	Title	Description	Optional text
 F01	Overall quality	Number of unique IDs (top) and log2(quantity) distribution (bottom) per sample. Median, first and third quartiles are shown. Whiskers extend to a maximal 1.5-times inter-quartile distance. Outliers are highlighted. Selected set:	1
 F02	Number of Filtered IDs	Number of Unique IDs dropped by selected filters up to this step.	0
-F03	Coefficient of variation	Distribution of the coefficient of variation calculated on a log-normal scale for base 2. Selected sets according to:	1
+F03	Coefficient of variation	Distribution of the coefficient of variation calculated on a log-normal scale for base 2. Only CVs with a maximal value of 2 are shown. Selected sets according to:	1
 F04	Principal component analysis	Principal component analysis highlighting the 4 components with highest variance. Colored according to:	1
 F05	Distribution of intensities	Smoothed normalized intensity distributions per sample.	0
 F06	Dependency on covariate	log2(Quantity) versus covariate of the top 3 IDs with highest correlation. Correlation Type: Continuous - Pearson, Ordinal - Spearman, Nominal - Point Biserial. Covariate:	1
