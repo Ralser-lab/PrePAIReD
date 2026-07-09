@@ -92,7 +92,7 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
         log += f"###WARNING###: COLUMN KEY WARNING - key_column '{key_column}' not found in metadata. Returning unfiltered data.\n"
         return data_df, log
     
-    if key_value == "" or pd.isna(key_value):
+    if key_value == "__None__" or pd.isna(key_value):
         if key_operator == "!=":
             drop_cols = list(set(data_df.columns) & set(metadata_df_indexed[metadata_df_indexed[key_column].isna()].index))
             #log filtering method
@@ -548,7 +548,7 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
     if "###ERRROR###" in log:
         return data_df, log
     
-    if filter_value == "" or pd.isna(filter_value):
+    if filter_value == "__None__" or pd.isna(filter_value):
         if operator == "!=":
             drop_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[filter_col].isna()][precursor_col]))
             #log filtering method
