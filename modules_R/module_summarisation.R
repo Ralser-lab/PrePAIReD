@@ -161,12 +161,17 @@ summarize_median_polish <- function(quant_df, parameter_list, mapping_df){
                          mapping_df[, feat_col]), prot_col]
     )
     quant_list <- lapply(quant_list, as.matrix)
-    
-    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+
+    ## unname before do.call: passing a named list turns protein-group names
+    ## into rbind argument tags, which R installs as symbols (capped at 10000
+    ## bytes) and errors on large razor groups; set row names afterwards instead
+    quant_df_Nfeat <- do.call(rbind, unname(lapply(quant_list, \(x){
         colSums(!is.na(x))
-    }))
-    
-    quant_prot_df <- iq::create_protein_table(quant_list)$estimate
+    })))
+    rownames(quant_df_Nfeat) <- names(quant_list)
+
+    quant_prot_df <- iq::create_protein_table(quant_list,
+                                              method = "median_polish")$estimate
 
     ## remove protein/sample estimates supported by too few features
     ## (align by name so masking does not rely on row/column order)
@@ -196,9 +201,12 @@ summarize_fast_maxlfq <- function(quant_df, parameter_list, mapping_df){
     quant_list <- split(as.data.frame(quant_df), prot_ids)
 
     ## per-protein, per-sample count of non-missing features (for post-hoc filtering)
-    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+    ## unname before do.call: named-list names become rbind argument tags that R
+    ## installs as symbols (capped at 10000 bytes) and errors on large razor groups
+    quant_df_Nfeat <- do.call(rbind, unname(lapply(quant_list, \(x){
         colSums(!is.na(as.matrix(x)))
-    }))
+    })))
+    rownames(quant_df_Nfeat) <- names(quant_list)
 
     res <- lapply(names(quant_list), \(p){
         
@@ -252,19 +260,23 @@ summarize_plm <- function(quant_df, parameter_list, mapping_df){
                          mapping_df[, feat_col]), prot_col]
     )
     quant_list <- lapply(quant_list, as.matrix)
-    
-    quant_df_Nfeat <- do.call(rbind, lapply(quant_list, \(x){
+
+    ## unname before do.call: named-list names become rbind argument tags that R
+    ## installs as symbols (capped at 10000 bytes) and errors on large razor groups
+    quant_df_Nfeat <- do.call(rbind, unname(lapply(quant_list, \(x){
         colSums(!is.na(x))
-    }))
-    
+    })))
+    rownames(quant_df_Nfeat) <- names(quant_list)
+
     sample_names <- colnames(quant_df)
     n_samples <- ncol(quant_df)
-    
-    quant_prot_df <- do.call(rbind, lapply(quant_list, \(df){
+
+    quant_prot_df <- do.call(rbind, unname(lapply(quant_list, \(df){
         out <- preprocessCore::rcModelPLM(y = df)
         out$Estimates[seq_len(n_samples)]
-    }))
-    
+    })))
+    rownames(quant_prot_df) <- names(quant_list)
+
     colnames(quant_prot_df) <- sample_names
 
     ## remove protein/sample estimates supported by too few features

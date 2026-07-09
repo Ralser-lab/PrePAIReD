@@ -40,8 +40,11 @@ run_with_logging <- function(expr, log_path) {
       }
     ),
     error = function(e) {
+      ## log the real error, then re-raise so the module halts with it
+      ## (returning NULL here masks the cause: downstream code crashes on the
+      ##  NULL result with an unrelated message instead of this one)
       message("###ERROR###: ", conditionMessage(e))
-      return(NULL)  # safely continue execution
+      stop(e)
     }
   )
   
