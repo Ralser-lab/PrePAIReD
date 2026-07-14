@@ -1503,8 +1503,11 @@ class DynamicParameterConfig(QWidget):
             idx = widget.findText(current_value)
             if idx != -1:
                 widget.setCurrentIndex(idx)
-    
+            
             widget.blockSignals(False)
+            
+            # Save updated value
+            self.save_param_value(name, widget)
 
 # ----------------------------
 # Automated sizing
