@@ -581,18 +581,22 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
     
     return wide_df
 
-def generate_id_mapping(filename, ids_list, precursor_codes, log=""):
+def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_col=None, separator="-", log=""):
     """
     Generates mapping for precursors to proteins to additional data.
     
     Parameters
     ----------
-    filename : str, optional
+    filename : str
         string specifying MS-dataN output path and filename (e.g. report.tsv)
     ids_list : list of str
         list containing column names to be exctracted-
     precursor_codes : np.array
         array containg the indices for the rows.
+    precursor_suffix_col : str
+        column_name of precursor suffixes
+    separator: str
+        separator for suffixes
     log : str, optional
         string containing the log up to this point.
     
@@ -611,10 +615,20 @@ def generate_id_mapping(filename, ids_list, precursor_codes, log=""):
     id_mapping_df = pd.DataFrame(columns=ids_list)
     
     log = ""
-    for column in ids_list:
+    
+    if precursor_suffix_col:
+        suffixes, _ = data_read_column(filename,precursor_suffix_col,dtype=str)
+        mask = suffixes[first_entry] != ""
+    else: 
+        suffixes = None
+    
+    for ind,column in enumerate(ids_list):
         try:
             column_, _ = data_read_column(filename,column,dtype=str)
-            id_mapping_df[column] = column_[first_entry]
+            if ind <= 1 and suffixes is not None:
+                id_mapping_df[column] =  np.where(mask,np.char.add(np.char.add(column_[first_entry], separator),suffixes[first_entry]),column_[first_entry])
+            else:
+                id_mapping_df[column] = column_[first_entry]
             if len(set(column_[most_common_precursor_indices])) > 1:
                 log += "###WARNING###: ID mapping contained non-unique precursor-column combination for column "+str(column)+". IDs need to be treated with care and additional filters need to be considered.\n"
         except:
@@ -1407,6 +1421,12 @@ if __name__ == "__main__":
         log += log_
         # Extract Precursor names and positions in input data
         precursor_name_column, log_ = data_read_column(data_df_fp, parameters_dict["precursor_col"], dtype=str)
+        if parameters_dict["expand_precursor_name"]:
+            precursor_name_column = precursor_name_column.copy()
+            precursor_name_suffix, log_ = data_read_column(data_df_fp, parameters_dict["precursor_suffix_col"], dtype=str)
+            mask = precursor_name_suffix != ""
+            precursor_name_column[mask] = np.char.add(np.char.add(precursor_name_column[mask],parameters_dict["precursor_suffix_separator"]),precursor_name_suffix[mask])
+            del precursor_name_suffix
         precursor_codes, precursor_labels = pd.factorize(precursor_name_column)
         # Clean memory
         del precursor_name_column
@@ -1505,7 +1525,11 @@ if __name__ == "__main__":
                 ids_list = ids_list + [col for col in parameters_dict["input_ids_columns"].split(";") if col not in [parameters_dict["precursor_col"],parameters_dict["protein_col"]]]
         
         # Generate ID-mapping
-        id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log)  
+        if parameters_dict["expand_precursor_name"]:
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, parameters_dict["precursor_suffix_col"], parameters_dict["precursor_suffix_separator"], log) 
+
+        else:
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log) 
         
         # Clean memory
         del precursor_codes
