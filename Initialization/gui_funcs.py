@@ -173,10 +173,13 @@ def get_steps(workflow_data, params_dict, rerun_counter=0):
             fw_methods.append(item["params"]["filtering_wide_methods"])
             if item["params"]["filtering_wide_methods"] == "filter_precursors_by_metadata":
                 family = item["params"]["precursor_filter_col"]
-                if family[0]["parent"] and family[0]["child"]and family[0]["child"]:
+                if family[0]["parent"] and family[0]["child"]:# and family[1]["child"]:
                     precursor_metadata_col += family[0]["parent"]+";"
                     precursor_metadata_opr += family[0]["child"]+";"
-                    precursor_metadata_val += family[1]["child"]+";"
+                    if family[1]["child"]:
+                        precursor_metadata_val += family[1]["child"]+";"
+                    else:
+                        precursor_metadata_val += "None"+";"
         else:
             steps.update({counter_step:step})
             precursor_metadata.update({counter_step:{"col":precursor_metadata_col.strip(";"),"opr":precursor_metadata_opr.strip(";"),"val":precursor_metadata_val.strip(";")}})
@@ -189,10 +192,13 @@ def get_steps(workflow_data, params_dict, rerun_counter=0):
             fw_methods.append(item["params"]["filtering_wide_methods"])
             if item["params"]["filtering_wide_methods"] == "filter_precursors_by_metadata":
                 family = item["params"]["precursor_filter_col"]
-                if family[0]["parent"] and family[0]["child"]and family[0]["child"]:
+                if family[0]["parent"] and family[0]["child"]:# and family[1]["child"]:
                     precursor_metadata_col += family[0]["parent"]+";"
                     precursor_metadata_opr += family[0]["child"]+";"
-                    precursor_metadata_val += family[1]["child"]+";"
+                    if family[1]["child"]:
+                        precursor_metadata_val += family[1]["child"]+";"
+                    else:
+                        precursor_metadata_val += "None"+";"
             
             counter_step +=1
             step_collection[ind] = counter_step
@@ -587,11 +593,11 @@ def write_parameter_file(workdir, workflow_data, step_names, step_collection, me
                         process = False
                     elif param == "precursor_filter_col" and not skip_prec_metadata and "filter_precursors_by_metadata" in methods[step_collection[key]]:
                         file.write("precursor_filter_col = "+precursor_metadata[step_collection[key]]["col"]+"\n")
-                        file.write("filter_operator = "+precursor_metadata[step_collection[key]]["opr"]+"\n")
+                        file.write("precursor_filter_operator = "+precursor_metadata[step_collection[key]]["opr"]+"\n")
                         file.write("precursor_filter_value = "+precursor_metadata[step_collection[key]]["val"]+"\n")
                         skip_prec_metadata = True
                         process = False
-                    elif param in ["precursor_filter_col", "filter_operator", "precursor_filter_value"] and skip_prec_metadata:
+                    elif param in ["precursor_filter_col", "precursor_filter_operator", "precursor_filter_value"] and skip_prec_metadata:
                         process = False
                     elif param in params_dict[current_flag][current_flag_value]:
                         process = True
