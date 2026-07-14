@@ -471,9 +471,12 @@ def operation_selection(value, target_dict: dict, operation_dictionary: dict, us
             # print("New operation here")
             values = value.split(";")
             # print(user_dict)
-            id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]
+            id_columns = ["Precursor.Id", "Stripped.Sequence", "Protein.Group", "Genes", "Peptide.Id", "Proteotypic"]   
             input_ids_columns = user_dict["input_ids_columns"]
-            input_ids_columns = input_ids_columns.split(";")
+            if input_ids_columns:
+                input_ids_columns = input_ids_columns.split(";")
+            else:
+                input_ids_columns = []
             # print(input_ids_columns)
             input_ids_columns = list(set(input_ids_columns + id_columns))
             for val in values:
