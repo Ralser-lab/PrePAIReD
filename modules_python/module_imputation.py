@@ -1062,7 +1062,7 @@ if __name__ == "__main__":
                             log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputing " + str(len(precursors)) + " precursors with missingness up to " + str(precursor_hierarchy*100) + "%.\n"
                             helper.logger(log_file, module_output=log)
                             # extract missingness types from mask
-                            missingness_types = pd.Series(imputation_mask_df.loc[precursors,samples].to_numpy().flatten()).replace("",np.nan).dropna().unique()
+                            missingness_types = sorted(pd.Series(imputation_mask_df.loc[precursors,samples].to_numpy().flatten()).replace("",np.nan).dropna().unique())
                             if len(missingness_types) == 0:
                                 log = "\t\t\t\tNo missing values in this sample and precursor subset.\n"
                                 helper.logger(log_file, module_output=log)
