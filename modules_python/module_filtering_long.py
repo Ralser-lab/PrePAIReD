@@ -315,7 +315,7 @@ def exclude_runs_not_in_metadata(wide_df, metadata_df=None, metadata_filename_co
             log += "###ERROR###: No overlap between samples in metadata and DIA-NN report. Please check whether filename_col is defined correctly.\n\t\t\t\t\t\tReturning not filtered input.\n"
             #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
             return wide_df,log
-        missing_samples = set(metadata_df[metadata_filename_col])^set(wide_df.columns)
+        missing_samples = [sample for sample in wide_df.columns if sample in metadata_df[metadata_filename_col]]
         wide_df = wide_df.drop(columns=missing_samples)
         if len(missing_samples) > 0:
             log += "###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(len(intersect_files)) + " files present in metadata.\n"
