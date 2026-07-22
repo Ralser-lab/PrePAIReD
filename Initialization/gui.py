@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFrame, QSizePolicy,
     QStackedWidget, QScrollArea
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QLocale
 from PySide6.QtGui import QIcon, QIntValidator, QDoubleValidator
 from shiboken6 import isValid
 
@@ -3626,6 +3626,8 @@ if __name__ == "__main__":
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
+        
+    QLocale.setDefault(QLocale.c())
 
     window = MainWindow()
     window.show()
