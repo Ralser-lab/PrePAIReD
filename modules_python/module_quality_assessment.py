@@ -337,14 +337,16 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     """
     # Avoid errors if subset chosen is too small -> test
     #data_index = [index for index in data.index if sum(~data.loc[index,indices].isna()) >= min_samples]
-    data_index = ((~data.loc[:,indices].isna()).T.sum() >= min_samples).index
+    if min_samples < 2:
+        min_samples = 2
+    data_index = data.loc[((~data.loc[:,indices].isna()).T.sum() >= min_samples),:].index
 
     if plot_by == "Missingness":
-        property_peptide = data[indices].isna().T.sum()
+        property_peptide = data.loc[data_index,indices].isna().T.sum()
     elif plot_by == "Mean":
-        property_peptide = data[indices].T.mean()
+        property_peptide = data.loc[data_index,indices].T.mean()
     elif plot_by == "Median":
-        property_peptide = data[indices].T.median()
+        property_peptide = data.loc[data_index,indices].T.median()
     elif plot_by == "CV":
         property_peptide = pd.Series(index=data_index, data=[get_CV_log(data.loc[index,indices]) for index in data_index])
     elif plot_by == "norm_MAE":
@@ -354,7 +356,7 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
     elif plot_by in ["Correlation","Corr_pvalue"]:
         if metadata is None or not column_metadata:
             raise ValueError("Metadata or Metadata column is not defined.")
-        masks = ~np.isnan(data.values)
+        masks = ~np.isnan(data.loc[data_index,indices].values)
         meta_values = metadata.loc[indices, column_metadata].to_numpy()
         metadata_values_ = [meta_values[mask] for mask in masks]
         #metadata_values_ = [metadata.loc[data.loc[index,indices].dropna().index,column_metadata].values for index in data_index]
@@ -366,7 +368,7 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
                 metadata_values_[i] = shuffled
                 
         stats = []
-        for ind, row in enumerate(data.values):
+        for ind, row in enumerate( data.loc[data_index,indices].values):
             mask = masks[ind]
         
             if data_type == "continuous":
@@ -380,6 +382,7 @@ def get_property(data, indices, metadata=None, column_metadata=None, plot_by="Co
                 #stats = [pointbiserialr(metadata_values_[ind],data.loc[index,data.loc[index,indices].dropna().index]) for ind,index in enumerate(data_index)]
             else:
                 raise ValueError("data_type not defined.")
+
         
         if plot_by == "Correlation":
             if take_abs:
@@ -1249,7 +1252,7 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
 
 ### TODO: Add LinReg per selection e.g. Batch
 ### TODO: Add that also a list of peptides can be provided instead of plot_by
-def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step=""):
+def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step="", min_samples=10, limit_y_label=None):
     """
     Plotting of Intensity versus covariate for top_n precursors of plot_by property.
 
@@ -1295,6 +1298,10 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
 	    Base of the logarithmic transformation. The default is 2.
     step : str, optional
         Preprocessing step (used for the title). The default is "".
+    min_samples : int, optional
+        Minimal numbers of samples to plot for most keywords. The default is 10.
+    limit_y_label : int,optional
+        Maximal number of characters for the ylabel
     """
         
     if column_metadata:
@@ -1319,7 +1326,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         indices_origin = get_indices_by_type(data_origin, metadata, data_processed, sample_type_column, sample_type)
     
     # Calculate property
-    property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type, take_abs=True)
+    property_peptide = get_property(data_origin, indices_origin, metadata, column_metadata=column_metadata, plot_by=plot_by, data_type=data_type, take_abs=True, min_samples=min_samples)
     # Get n top hits
     selection = property_peptide.sort_values(ascending=False).index[:top_n]
     
@@ -1346,11 +1353,14 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     else:
         gs = GridSpec(top_n,1, hspace = 0.05)
     
+    x_lim = (np.min(metadata[column_metadata].values),np.max(metadata[column_metadata].values))
+    
     for ind, el in enumerate(selection):
         
         # estimate y_lim
         if data_processed is not None:
-            y_lim = (np.min([np.min(data_origin.loc[el,indices_origin]),np.min(data_processed.loc[el,indices_processed])])*0.98,np.max([np.max(data_origin.loc[el,indices_origin]),np.max(data_processed.loc[el,indices_processed])])*1.02)
+            y_lim = (np.min([np.min(data_origin.loc[el,indices_origin]),np.min(data_processed.loc[el,indices_processed])])*0.98,
+                     np.max([np.max(data_origin.loc[el,indices_origin]),np.max(data_processed.loc[el,indices_processed])])*1.02)
         else:
             y_lim = (np.min(data_origin.loc[el,indices_origin])*0.98,np.max(data_origin.loc[el,indices_origin])*1.02)
             
@@ -1364,9 +1374,17 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
             ax_scatter_origin.set_xticklabels([])
         else:
             ax_scatter_origin.set_xlabel(column_metadata, fontsize=fontsize)
+        ax_scatter_origin.set_xlim(x_lim)
         ax_scatter_origin.set_ylim(y_lim)
         ax_scatter_origin.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-        ax_scatter_origin.set_ylabel(ylabel+"\n"+el, fontsize=fontsize)
+        if limit_y_label:
+            if len(el) > limit_y_label:
+                el_ = el[:limit_y_label]+"..."
+            else:
+                el_ = el
+        else:
+            el_ = el
+        ax_scatter_origin.set_ylabel(ylabel+"\n"+el_, fontsize=fontsize)
         ax_scatter_origin.set_axisbelow(True)
         ax_scatter_origin.grid(axis="y")
         ax_scatter_origin.tick_params(labelsize=fontsize)
@@ -1374,7 +1392,8 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         if plot_linreg:
             indices_origin_nonan = [index for index in indices_origin if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_origin.loc[el,index])]
             coef = np.polyfit(metadata.loc[indices_origin_nonan,column_metadata], data_origin.loc[el,indices_origin_nonan],1) #### NaN Handling
-            x = [np.min(metadata.loc[indices_origin_nonan,column_metadata]),np.max(metadata.loc[indices_origin_nonan,column_metadata])]
+            #x = [np.min(metadata.loc[indices_origin_nonan,column_metadata]),np.max(metadata.loc[indices_origin_nonan,column_metadata])]
+            x = x_lim
             linreg = np.poly1d(coef)
             ax_scatter_origin.plot(x,linreg(x),c="k")
         
@@ -1389,6 +1408,7 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
                 ax_scatter_processed.set_xticklabels([])
             else:
                 ax_scatter_processed.set_xlabel(column_metadata, fontsize=fontsize)
+            ax_scatter_processed.set_xlim(x_lim)    
             ax_scatter_processed.set_ylim(y_lim)
             ax_scatter_processed.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
             ax_scatter_processed.set_yticklabels([])
@@ -1404,7 +1424,8 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
             if plot_linreg:
                 indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index])]
                 coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
-                x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
+                #x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
+                x = x_lim
                 linreg = np.poly1d(coef)
                 ax_scatter_processed.plot(x,linreg(x),c="k")
     
@@ -2364,7 +2385,9 @@ if __name__ == "__main__":
                                     plot_linreg = dict_config_setup[step][key_figure]["plot_linreg"], 
                                     outfile = dict_config_setup[step][key_figure]["outfile"], 
                                     plot_by = dict_config_setup[step][key_figure]["plot_by"], 
-                                    step = step
+                                    step = step,
+                                    min_samples = 10,
+                                    limit_y_label=15
                                     )
                 log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition_1+addition_2)
             except:
