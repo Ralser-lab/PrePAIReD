@@ -1299,9 +1299,9 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
     step : str, optional
         Preprocessing step (used for the title). The default is "".
     min_samples : int, optional
-        Minimal numbers of samples to plot for most keywords. The default is 10.
+        Minimal numbers of samples to plot. The default is 10.
     limit_y_label : int,optional
-        Maximal number of characters for the ylabel
+        Maximal number of characters for the ylabel.
     """
         
     if column_metadata:
@@ -1336,17 +1336,17 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         size = (size[0],(size[1]*top_n)+1)
     
     if not cmap:
-            if continuous:
-                cmap = "viridis"
-            else:
-                cmap = "Spectral"
+        if continuous:
+            cmap = "viridis"
+        else:
+            cmap = "Spectral"
     
     if use_metadata_coloring:
-            if data_processed is not None:
-                colors_origin, colors_processed, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=indices_processed, cmap=cmap, continuous=continuous)
-            else:
-                colors_origin, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, cmap=cmap, continuous=continuous)
-    
+        if data_processed is not None:
+            colors_origin, colors_processed, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=indices_processed, cmap=cmap, continuous=continuous)
+        else:
+            colors_origin, norm, values_dict = get_colors_by_metadata(metadata, column_color, indices_origin, indices_processed=None, cmap=cmap, continuous=continuous)
+
     fig = plt.figure(figsize=size)
     if data_processed is not None:
         gs = GridSpec(top_n,2, width_ratios = [0.5,0.5], wspace = 0.05, hspace = 0.05)
@@ -1390,12 +1390,19 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
         ax_scatter_origin.tick_params(labelsize=fontsize)
         
         if plot_linreg:
-            indices_origin_nonan = [index for index in indices_origin if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_origin.loc[el,index])]
-            coef = np.polyfit(metadata.loc[indices_origin_nonan,column_metadata], data_origin.loc[el,indices_origin_nonan],1) #### NaN Handling
-            #x = [np.min(metadata.loc[indices_origin_nonan,column_metadata]),np.max(metadata.loc[indices_origin_nonan,column_metadata])]
-            x = x_lim
-            linreg = np.poly1d(coef)
-            ax_scatter_origin.plot(x,linreg(x),c="k")
+            if use_metadata_coloring:
+                for value in set(metadata.loc[indices_origin,column_color]):
+                    indices_origin_nonan = [index for index in indices_origin if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_origin.loc[el,index]) and metadata.loc[index,column_color]==value]
+                    x = [np.min(metadata.loc[indices_origin_nonan,column_metadata]),np.max(metadata.loc[indices_origin_nonan,column_metadata])]
+                    coef = np.polyfit(metadata.loc[indices_origin_nonan,column_metadata], data_origin.loc[el,indices_origin_nonan],1) #### NaN Handling
+                    linreg = np.poly1d(coef)
+                    ax_scatter_origin.plot(x,linreg(x),c="k")
+            else:
+                indices_origin_nonan = [index for index in indices_origin if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_origin.loc[el,index])]
+                x = x_lim
+                coef = np.polyfit(metadata.loc[indices_origin_nonan,column_metadata], data_origin.loc[el,indices_origin_nonan],1) #### NaN Handling
+                linreg = np.poly1d(coef)
+                ax_scatter_origin.plot(x,linreg(x),c="k")
         
         if data_processed is not None:
             ax_scatter_processed = fig.add_subplot(gs[ind,1])
@@ -1422,12 +1429,19 @@ def plot_scatter_series(data_origin, metadata, column_metadata, data_processed =
                 ax_scatter_processed.set_title("After "+step, fontsize=fontsize)
             
             if plot_linreg:
-                indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index])]
-                coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
-                #x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
-                x = x_lim
-                linreg = np.poly1d(coef)
-                ax_scatter_processed.plot(x,linreg(x),c="k")
+                if use_metadata_coloring:
+                    for value in set(metadata.loc[indices_processed,column_color]):
+                        indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index]) and metadata.loc[index,column_color]==value]
+                        x = [np.min(metadata.loc[indices_processed_nonan,column_metadata]),np.max(metadata.loc[indices_processed_nonan,column_metadata])]
+                        coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
+                        linreg = np.poly1d(coef)
+                        ax_scatter_processed.plot(x,linreg(x),c="k")
+                else:
+                    indices_processed_nonan = [index for index in indices_processed if not np.isnan(metadata.loc[index,column_metadata]) and not np.isnan(data_processed.loc[el,index])]
+                    x = x_lim
+                    coef = np.polyfit(metadata.loc[indices_processed_nonan,column_metadata], data_processed.loc[el,indices_processed_nonan],1) #### NaN Handling
+                    linreg = np.poly1d(coef)
+                    ax_scatter_processed.plot(x,linreg(x),c="k")
     
     plt.savefig(outfile, bbox_inches="tight")
     return
