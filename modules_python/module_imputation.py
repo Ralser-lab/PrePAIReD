@@ -1149,7 +1149,7 @@ if __name__ == "__main__":
                 helper.logger(log_file, module_output=log)
                 if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                     missingness_types = pd.Series(imputation_mask_df.to_numpy().flatten()).replace("",np.nan).dropna().unique()
-                    notimplemented_missingness_types = set(missingness_types) - {"HA","LA",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/HA",parameters_dict["missingness_type_protein_absence"] + "/LA"}
+                    notimplemented_missingness_types = set(missingness_types) - {"HA","LA",parameters_dict["missingness_type_protein_absence"],parameters_dict["missingness_type_protein_absence"] + "/HA",parameters_dict["missingness_type_protein_absence"] + "/LA", "simple"}
                     if  notimplemented_missingness_types != set():
                         log = "###WARNING###: No imputation method defined for missingness type(s) " + str(notimplemented_missingness_types) + "\n\t\t\t\tPlease define a variable specifying the missingness_type and change the source code.\n\t\t\t\tMissingness types skipped for now.\n"
                         helper.logger(log_file, module_output=log)
@@ -1171,10 +1171,11 @@ if __name__ == "__main__":
                     else:
                         continue
                     #remember which and how many values were missing prior imputation
-                    if missingness_type == "simple":
-                        missing_val_locs_m =  getIndexes(pd.isna(data_df),True)
-                    else:
+                    if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                         missing_val_locs_m = getIndexes(imputation_mask_df == missingness_type,True)
+                    else:
+                        missing_val_locs_m =  getIndexes(pd.isna(data_df),True)
+  
                     total_num_values,num_missing_values,missing_val_locs = obtain_missingness_for_log(data_df=data_df) # all missingness_types
                     missing_val_locs_m = list(set(missing_val_locs_m) & set(missing_val_locs))
                     num_missing_values_m = len(missing_val_locs_m)
@@ -1209,7 +1210,7 @@ if __name__ == "__main__":
                                                         estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
                                                         weighting=parameters_dict["graphbased_imputation_weighting"])
                     
-                    if missingness_type != "simple":
+                    if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                         data_part_df =  data_part_df[(imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type) & (data_df.loc[data_part_df.index,data_part_df.columns].isna())]
                         data_df.loc[data_part_df.index,data_part_df.columns] = data_df.loc[data_part_df.index,data_part_df.columns].add(data_part_df,fill_value=0).replace(0,np.nan)
                     else:
