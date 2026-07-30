@@ -360,6 +360,16 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
 
     #define minimum number of samples needed for fitting (rule of thumb)
     min_samples = get_min_samples(len(adjust_cols_list))
+
+    # create dict to collect precursors that were not used for correction due to 
+    # low number of samples in one group
+
+    # categorical_cols = [
+    #     col for col, dtype in zip(adjust_cols_list, adjust_cols_dtypes_list)
+    #     if dtype in ("nominal", "ordinal")
+    # ]
+    # low_number_prec_dict = {key: [] for key in categorical_cols}
+    low_number_prec_dict = {key: [] for key in adjust_cols_list}
             
     # iterate over features
     for idx in data_df.columns:
@@ -394,6 +404,8 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             if len(common_samples) < min_samples:
                 # log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
                 #         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
+                
+                low_number_prec_dict[metadata_var].append(idx)
                 corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                 corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
                 continue
@@ -403,10 +415,10 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # do not check association if < min_samples samples per group
             if (dt == "ordinal") or (dt=="nominal"):
                 if any([len(x) for x in samples_idx_test_list]) < min_samples:
-                    log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than {min_samples} samples.\n" \
-                        f"\t\t\t\tNo Correction will be applied on {idx}.\n"
+                    # log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than {min_samples} samples.\n" \
+                    #     f"\t\t\t\tNo Correction will be applied on {idx}.\n"
 
-                    
+                    low_number_prec_dict[metadata_var].append(idx)
                     # save nan if sample size was not sufficient
                     corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
                     corr_df.loc[idx, coef_type_str+ metadata_var] = np.nan
@@ -463,6 +475,18 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             if pval < alpha_significance:
                 metadata_vars.append(metadata_var)
             corr_df.loc[idx, "pval_"+ metadata_var] = pval
+
+    # Add number about not fitted precursors to log string
+        n_precursors = data_df.shape[1]
+        for metadata_var in adjust_cols_list:
+            if len(low_number_prec_dict[metadata_var])>0:
+                n_not_fitted = len(low_number_prec_dict[metadata_var])
+                fraction_not_fitted = n_not_fitted/n_precursors
+                log_string += (
+                    f"###WARNING###: {metadata_var:<20} "
+                    f"{n_not_fitted:>5}/{n_precursors:<2} "
+                    f"({fraction_not_fitted*100:2.2f}%) precursors could not be adjusted due to low sample size.\n"
+        )
 
     return corr_df, log_string
 
