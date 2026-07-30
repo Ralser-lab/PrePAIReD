@@ -1425,7 +1425,7 @@ if __name__ == "__main__":
             precursor_name_column = precursor_name_column.copy()
             precursor_name_suffix, log_ = data_read_column(data_df_fp, parameters_dict["precursor_suffix_col"], dtype=str)
             mask = precursor_name_suffix != ""
-            precursor_name_column[mask] = np.char.add(np.char.add(precursor_name_column[mask],parameters_dict["precursor_suffix_separator"]),precursor_name_suffix[mask])
+            precursor_name_column[mask] = np.char.add(np.char.add([str(p) for p in precursor_name_column[mask]],str(parameters_dict["precursor_suffix_separator"])),[str(s) for s in precursor_name_suffix[mask]])
             del precursor_name_suffix
         precursor_codes, precursor_labels = pd.factorize(precursor_name_column)
         # Clean memory
@@ -1498,6 +1498,7 @@ if __name__ == "__main__":
                                                              precursor_codes, precursor_labels, 
                                                              file_codes, file_labels, 
                                                              last_filter_value = 14)
+        
         # Transform long format to wide format
         wide_df = long_to_wide_format(mask_arr, 
                                       precursor_codes, precursor_labels, 
@@ -1558,7 +1559,7 @@ if __name__ == "__main__":
         wide_df.index.names = [parameters_dict["precursor_col"]]
         wide_df.dropna(how="all", inplace=True)
         helper.logger(log_file,log)
-             
+
         # Rename filter_mask columns
         mask_df = helper.rename_filter_mask_columns(mask_df, 
                                                     metadata_df, 
