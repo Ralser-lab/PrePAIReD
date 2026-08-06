@@ -542,6 +542,8 @@ def rename_filter_mask_columns(filter_mask,metadata_df,filename_col="filename",s
         summarized=filter_mask["Precursor summarized for Protein"]
         filter_mask.drop("Precursor summarized for Protein",axis=1,inplace=True)
     #trim filter_mask on samples present in metadata
+    metadata_df[filename_col] = metadata_df[filename_col].astype(str)
+    metadata_df[sample_col] = metadata_df[sample_col].astype(str)
     samples=list(set(metadata_df[filename_col]) & set(filter_mask.columns))
     filter_mask=filter_mask[samples]
     filter_mask.columns=metadata_df.set_index(filename_col,drop=False).loc[filter_mask.columns,sample_col]

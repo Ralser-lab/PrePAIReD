@@ -934,7 +934,7 @@ if __name__ == "__main__":
                 pre_method_rows = data_processed_df.index
                 
                 # SAMPLE FILTERS
-                if method == "filter_samples_based_on_metadata":
+                if method == "filter_samples_by_metadata":
                     #for every column specified for filtering by metadata
                     for k,key_column in enumerate(parameters_dict['sample_filter_cols'].split(";")):
                         # snapshot BEFORE this method
