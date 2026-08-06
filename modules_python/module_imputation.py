@@ -995,7 +995,13 @@ if __name__ == "__main__":
             # combine masks if any distinguishment of missingness
             if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                 #combine masks
-                imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + ha_la_mask_df.loc[data_df.index,data_df.columns]
+                #imputation_mask_df = protmissing_mask_df.loc[data_df.index,data_df.columns] + "/" + ha_la_mask_df.loc[data_df.index,data_df.columns]
+                
+                a = protmissing_mask_df.loc[data_df.index, data_df.columns]
+                b = ha_la_mask_df.loc[a.index.get_level_values(0),data_df.columns]
+                b.index = a.index 
+                imputation_mask_df = a.astype(str) + "/" + b.astype(str)
+                
                 #if one category of missingness evaluation (protein presence or ha/la) is not applied, keep "simple" imputation for precursors that do not fall into other category
                 if not parameters_dict["eval_missingness_on_protein_presence"]:
                     imputation_mask_df = imputation_mask_df.replace({"simple/HA":"HA","simple/LA":"LA"})
