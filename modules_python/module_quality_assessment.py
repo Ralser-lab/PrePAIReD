@@ -763,8 +763,10 @@ def plot_CV_violin(data_origin, metadata, data_processed = None, group_columns =
     if y_lim:
         cross_border_origin = any(True if el > y_lim[1] else False for el in [max(item) for item in cvs_lognormal_origin])
         cvs_lognormal_origin = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_origin]
+        cvs_lognormal_origin = [[np.nan,np.nan] if not el else el for el in cvs_lognormal_origin]
         if data_processed is not None:
             cvs_lognormal_processed = [[el for el in item if el>=y_lim[0] and el<=y_lim[1]] for item in cvs_lognormal_processed]
+            cvs_lognormal_processed = [[np.nan,np.nan] if not el else el for el in cvs_lognormal_processed]
             cross_border_processed = any(True if el > y_lim[1] else False for el in [max(item) for item in cvs_lognormal_processed])
         else:
             cross_border_processed = False
@@ -861,7 +863,7 @@ def plot_CV_violin(data_origin, metadata, data_processed = None, group_columns =
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1, return_fitted_model = False):
     """
     Plotting of the first n_components principal components with different coloring options.
 
@@ -907,6 +909,16 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         Set axis-limits automatically (sometimes needed if plot_confidence_ellipse == True). The default is False.
     axis_offset : float, optional
         Axis offset for automatic axis-limits. The default is 0.1.
+    return_fitted_model : bool, optional
+        If True returns the fitted model for additional analysis
+        
+    Returns
+    -------
+    pca_origin : obj, optional
+        Fitted model for origin data
+    pca_processed : obj, optional
+        Fitted model for processed data
+    
     """
     
     ### Examples:
@@ -1103,6 +1115,11 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         cbar.ax.set_yticklabels(values_dict.keys())
     
     plt.savefig(outfile, bbox_inches="tight")
+    if return_fitted_model:
+        if data_processed is not None:
+            return pca_origin, pca_processed
+        else:
+            return pca_origin
     return
 
 def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15, xlabel = "log2(PQ)", cmap = "Spectral"):
