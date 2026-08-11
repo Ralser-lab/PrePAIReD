@@ -1410,8 +1410,7 @@ if __name__ == "__main__":
                                                                                                                                                                   outname=outname)
     
     
-    #try:
-    if True:
+    try:
         # Check if loading was successful, else pass error to log and exit   
         helper.logger(log_file,log)
         log = ""
@@ -1601,9 +1600,9 @@ if __name__ == "__main__":
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tID-Mapping saved successfully to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
         helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=log, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
         
-    #except Exception as e:
-             #e_type, e_obj, e_tb = sys.exc_info()
-             #script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-             #helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
-             #if exit_module:
-             #    sys.exit("Filtering_long exited with an error.")
+    except Exception as e:
+             e_type, e_obj, e_tb = sys.exc_info()
+             script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+             helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+             if exit_module:
+                 sys.exit("Filtering_long exited with an error.")
