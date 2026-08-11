@@ -534,7 +534,7 @@ def create_mask(mask_arr, mask_description_df, precursor_codes, precursor_labels
     mask_arr = mask_arr == 1
     return mask_df, mask_description_df, mask_arr
 
-def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes, file_labels, metadata_df, metadata_filename_col="File.Name",metadata_sample_col="Sample.Name", replace_zeroes=True):    
+def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes, file_labels, metadata_df, metadata_filename_col="File.Name",metadata_sample_col="Sample.Name", replace_zeroes=True, filter_codes = None):    
     """
     Transforms long format data frame to wide format. 
     author: BZ, OL
@@ -559,6 +559,8 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
         column name with (shorter) sample names in metadata. The default is "Sample.Name".
     replace_zeroes : bool, optional
         If True replaces 0s with np.nan. The default is True.
+    filter_codes : list of bool, optional
+        booloean filter which lines to kepp. The default is None.
         
     Return
     ------
@@ -567,6 +569,8 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
     """
     
     values_arr, log_ = data_read_column(data_df_fp, parameters_dict["input_values_column"], dtype=float)
+    if filter_codes is not None:
+        values_arr = values_arr[filter_codes]
     values_arr = values_arr.copy()
     values_arr[~keep_arr] = np.nan
     if replace_zeroes:
@@ -581,7 +585,7 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
     
     return wide_df
 
-def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_col=None, separator="-", log=""):
+def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_col=None, separator="-", log="", filter_codes = None):
     """
     Generates mapping for precursors to proteins to additional data.
     
@@ -599,6 +603,8 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
         separator for suffixes
     log : str, optional
         string containing the log up to this point.
+    filter_codes : list of bool, optional
+        booloean filter which lines to kepp. The default is None.
     
     Return
     ------
@@ -618,6 +624,8 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
     
     if precursor_suffix_col:
         suffixes, _ = data_read_column(filename,precursor_suffix_col,dtype=str)
+        if filter_codes is not None:
+            suffixes = suffixes[filter_codes]
         mask = suffixes[first_entry] != ""
     else: 
         suffixes = None
@@ -625,8 +633,10 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
     for ind,column in enumerate(ids_list):
         try:
             column_, _ = data_read_column(filename,column,dtype=str)
+            if filter_codes is not None:
+                column_ = column_[filter_codes]
             if ind <= 1 and suffixes is not None:
-                id_mapping_df[column] =  np.where(mask,np.char.add(np.char.add(column_[first_entry], separator),suffixes[first_entry]),column_[first_entry])
+                id_mapping_df[column] = np.where(mask,np.char.add(np.char.add(column_[first_entry], separator),suffixes[first_entry]),column_[first_entry])
             else:
                 id_mapping_df[column] = column_[first_entry]
             if len(set(column_[most_common_precursor_indices])) > 1:
@@ -1400,7 +1410,8 @@ if __name__ == "__main__":
                                                                                                                                                                   outname=outname)
     
     
-    try:
+    #try:
+    if True:
         # Check if loading was successful, else pass error to log and exit   
         helper.logger(log_file,log)
         log = ""
@@ -1493,6 +1504,15 @@ if __name__ == "__main__":
             if exit_module:
                 sys.exit("###ERROR###: Long format Filtering failed. Please check the log for more details.")
         
+        # Remove missing entries
+        if any(precursor_codes != -1):
+            filter_codes = precursor_codes != -1
+            file_codes = file_codes[filter_codes]
+            precursor_codes = precursor_codes[filter_codes]
+            mask_arr = mask_arr[filter_codes]
+        else:
+            filter_codes = None
+        
         # Generate mask, clean mas description and tranform mask_arr to boolean array
         mask_df, mask_description_df, mask_arr = create_mask(mask_arr, mask_description_df, 
                                                              precursor_codes, precursor_labels, 
@@ -1505,7 +1525,8 @@ if __name__ == "__main__":
                                       file_codes, file_labels, 
                                       metadata_df, 
                                       metadata_filename_col=parameters_dict["metadata_filename_column"],
-                                      metadata_sample_col=parameters_dict["metadata_sample_column"])
+                                      metadata_sample_col=parameters_dict["metadata_sample_column"],
+                                      filter_codes = filter_codes)
         
         # Clean memory
         del mask_arr
@@ -1527,10 +1548,10 @@ if __name__ == "__main__":
         
         # Generate ID-mapping
         if parameters_dict["expand_precursor_name"]:
-            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, parameters_dict["precursor_suffix_col"], parameters_dict["precursor_suffix_separator"], log) 
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, parameters_dict["precursor_suffix_col"], parameters_dict["precursor_suffix_separator"], log, filter_codes = filter_codes) 
 
         else:
-            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log) 
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log, filter_codes = filter_codes) 
         
         # Clean memory
         del precursor_codes
@@ -1541,12 +1562,13 @@ if __name__ == "__main__":
             id_mapping_df[parameters_dict["peptide_col"]] = create_peptide_ids(id_mapping_df[parameters_dict["precursor_col"]])
         
         # Rename missing protein names with other column
-        if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
-            id_mapping_df = name_unknown_proteins(id_mapping_df=id_mapping_df,
-                                                  input_fp=data_df_fp, 
-                                                  ids_list=ids_list, 
-                                                  protein_col=parameters_dict["protein_col"], 
-                                                  replace_id_col=parameters_dict["alternative_protein_col"])    
+        ### Not Tested yet
+        #if pd.isna(id_mapping_df[parameters_dict["protein_col"]]).sum() > 0:
+        #    id_mapping_df = name_unknown_proteins(id_mapping_df=id_mapping_df,
+        #                                          input_fp=data_df_fp, 
+        #                                          ids_list=ids_list, 
+        #                                          protein_col=parameters_dict["protein_col"], 
+        #                                          replace_id_col=parameters_dict["alternative_protein_col"])    
             
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tID mapping successfully generated.\n"
         helper.logger(log_file,log)
@@ -1579,9 +1601,9 @@ if __name__ == "__main__":
         log += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tID-Mapping saved successfully to " + os.path.join(out_dir_fp, "id_mapping.tsv")+"\n"
         helper.close_module(data_processed_df=wide_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=log, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
         
-    except Exception as e:
-             e_type, e_obj, e_tb = sys.exc_info()
-             script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-             helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
-             if exit_module:
-                 sys.exit("Filtering_long exited with an error.")
+    #except Exception as e:
+             #e_type, e_obj, e_tb = sys.exc_info()
+             #script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
+             #helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+             #if exit_module:
+             #    sys.exit("Filtering_long exited with an error.")
