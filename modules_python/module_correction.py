@@ -592,7 +592,7 @@ def adjust_confounders(
     - Disagreement between ANOVA and correlation test significance is reported.
 
     """
-
+    metadata_df = metadata_df.copy()
     data_processed_df = data_df.copy()
 
     log_string = ""
