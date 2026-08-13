@@ -286,7 +286,10 @@ def get_min_samples(m):
     """
     return(m * 10)
 
-def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtypes_list,fitsamples_idx_list=None,alpha_significance=0.05):
+
+def get_ids_for_correction(
+        data_df,metadata_df,adjust_cols_list,adjust_cols_dtypes_list,
+        fitsamples_idx_list=None,alpha_significance=0.05):
     
     """
     Calculates association and p-value of IDs (e.g. precursors) with covariates to obtain relevant IDs for confounder correction.
@@ -381,11 +384,10 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             samples_meta = metadata_df.loc[samples_idx_list, metadata_var].dropna()
             samples_data = data_df.loc[samples_idx_list, idx].dropna()
             common_samples = list(set(samples_meta.index) & set(samples_data.index))
-
             samples_idx_test_list= [list(metadata_df[metadata_df[metadata_var]==x].index) for x in metadata_df[metadata_var].unique()]
+
             samples_idx_test_list = [list(set(x) & set(common_samples)) for x in samples_idx_test_list]
-            
-            # correlation coefficient to be calculated depending on datatype
+
             coef_type_str = ""
             if dt == "nominal":
                 if len(metadata_df.loc[common_samples,metadata_var].unique())==2:
@@ -402,6 +404,7 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # check how many samples are available per feature
             # do not check association if < min_samples
             if len(common_samples) < min_samples:
+
                 # log_string += f"###WARNING###: Less than 5 samples in data with annotated {metadata_var} in metadata.\n" \
                 #         f"\t\t\t\tNo Correction will be applied on {idx}.\n"
                 
@@ -414,10 +417,8 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             # check if ordinal or nominal variable groups have at 
             # do not check association if < min_samples samples per group
             if (dt == "ordinal") or (dt=="nominal"):
-                if any([len(x) for x in samples_idx_test_list]) < min_samples:
-                    # log_string += f"###WARNING###: One of the groups in col {metadata_var} consists of less than {min_samples} samples.\n" \
-                    #     f"\t\t\t\tNo Correction will be applied on {idx}.\n"
-
+                # if any([len(x) for x in samples_idx_test_list]) < min_samples:
+                if any(len(x) < min_samples for x in samples_idx_test_list):
                     low_number_prec_dict[metadata_var].append(idx)
                     # save nan if sample size was not sufficient
                     corr_df.loc[idx, "pval_"+ metadata_var] = np.nan
@@ -477,15 +478,17 @@ def get_ids_for_correction(data_df,metadata_df,adjust_cols_list,adjust_cols_dtyp
             corr_df.loc[idx, "pval_"+ metadata_var] = pval
 
     # Add number about not fitted precursors to log string
-        n_precursors = data_df.shape[1]
-        for metadata_var in adjust_cols_list:
-            if len(low_number_prec_dict[metadata_var])>0:
-                n_not_fitted = len(low_number_prec_dict[metadata_var])
-                fraction_not_fitted = n_not_fitted/n_precursors
-                log_string += (
-                    f"###WARNING###: {metadata_var:<20} "
-                    f"{n_not_fitted:>5}/{n_precursors:<2} "
-                    f"({fraction_not_fitted*100:2.2f}%) precursors could not be adjusted due to low sample size.\n"
+    n_precursors = data_df.shape[1]
+    for metadata_var, metadata_var_dtype in zip(
+        adjust_cols_list, adjust_cols_dtypes_list):
+        if len(low_number_prec_dict[metadata_var])>0:
+
+            n_not_fitted = len(low_number_prec_dict[metadata_var])
+            fraction_not_fitted = n_not_fitted/n_precursors
+            log_string += (
+                f"###WARNING###: {metadata_var:<20} "
+                f"{n_not_fitted:>5}/{n_precursors:<2} "
+                f"({fraction_not_fitted*100:2.2f}%) precursors could not be adjusted due to low sample size.\n"
         )
 
     return corr_df, log_string
