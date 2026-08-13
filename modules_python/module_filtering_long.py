@@ -1504,7 +1504,7 @@ if __name__ == "__main__":
                 sys.exit("###ERROR###: Long format Filtering failed. Please check the log for more details.")
         
         # Remove missing entries
-        if any(precursor_codes != -1):
+        if any(precursor_codes == -1):
             filter_codes = precursor_codes != -1
             file_codes = file_codes[filter_codes]
             precursor_codes = precursor_codes[filter_codes]
