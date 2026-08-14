@@ -607,7 +607,6 @@ def adjust_confounders(
                                                   fitsamples_idx_list=fitsamples_idx_list,
                                                   alpha_significance=alpha_significance)
         log_string += log_str
-        
     
     # iterate over features
     for idx in data_df.columns:
@@ -619,7 +618,7 @@ def adjust_confounders(
             continue
         
         min_samples = get_min_samples(m=len(metadata_vars))
-        
+    
         
         #transfer categorical covariates for model fitting
         idx_catgorical_list = [
@@ -631,12 +630,14 @@ def adjust_confounders(
 
             C_cat=pd.get_dummies(
                 metadata_df[col_cat_list].astype(str),
+                prefix=col_cat_list,
+                prefix_sep="__",
                 drop_first=True)
-            C_cat.columns = [c.split("_")[0] for c in C_cat.columns]
             C=C_cat.join(metadata_df[metadata_vars].drop(col_cat_list,axis=1))
+                    
         else:
             C=metadata_df[metadata_vars]
-        
+
         #order profiles and C in the same manner, remove samples with missing values
         common_samples=list(set(data_processed_df[idx].dropna().index) & set(C.index))
         '''
@@ -714,7 +715,6 @@ def adjust_confounders(
             except ValueError:
                 log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped.\n"
                 continue
-    
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
     
     return data_processed_df, log_string, corr_df
