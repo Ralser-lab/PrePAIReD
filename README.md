@@ -611,6 +611,31 @@ nextflow run "/Users/username/.../workflow/nextflow.nf"
 
 ------------------------------------------------------------------------
 
+# Alternative: Run Using the Helper Script
+
+If the standard Nextflow command causes Docker user/permission issues, or if you want to explicitly limit the resources used by the pipeline, you can run the provided run_pipeline.sh helper script instead.
+
+From any directory, run:
+
+``` bash
+~/path to Preprocessing folder/Preprocessing/run_pipeline.sh \
+  -profile linux_docker_user \
+  --memory '1 GB' \
+  --cpus 1
+```
+
+## Options
+
+- `-profile linux_docker_user` — runs the pipeline using the Linux Docker user profile, which can help avoid Docker file ownership and permission issues.
+- `--memory '1 GB'` — limits the memory available to each configured process.
+- `--cpus 1` — limits the number of CPUs available to each configured process.
+
+> **Recommended for Linux/WSL users:** If you encounter Docker permission or file ownership errors with the standard command, try the `linux_docker_user` profile.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
 # Resuming a Pipeline
 
 Resume previous run:
