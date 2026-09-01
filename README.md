@@ -596,7 +596,7 @@ Navigate to the working directory:
 cd "/Users/username/Desktop/test_pipeline"
 ```
 
-Run pipeline:
+Run the pipeline by specifying the path to the nextflow.nf file:
 
 ``` bash
 nextflow run /path/to/Preprocessing/nextflow.nf 
@@ -605,8 +605,41 @@ nextflow run /path/to/Preprocessing/nextflow.nf
 Example:
 
 ``` bash
-nextflow run "/Users/username/.../workflow/nextflow.nf"
+nextflow run ~/Desktop/Preprocessing/nextflow.nf \
+  -profile linux_docker_user \
 ```
+
+By default, the pipeline uses predefined memory and CPU settings, so no resource parameters are required.
+
+### Optional: Adjust Memory and CPUs
+
+Users with different system resources can override the defaults:
+
+```bash id="29v2pm"
+nextflow run ~/Desktop/Preprocessing/nextflow.nf \
+  -profile linux_docker_user \
+  --max_memory '24 GB' \
+  --module_memory '8 GB' \
+  --module_cpus 4
+```
+
+The main options are:
+
+- `--max_memory` — maximum memory available to the pipeline's retry logic.
+- `--module_memory` — initial memory for the main processing step.
+- `--module_cpus` — CPU cores used by the main processing step.
+
+Advanced users can also adjust `--init_memory`, `--init_cpus`, and `--memory_margin`. If not specified, the predefined values are used.
+
+> **Important:** Do not set `--max_memory` to your computer's total RAM. Leave sufficient resources for the operating system, Docker, and other applications. As a general guideline, use no more than **~80% of the system's RAM and CPU cores**.
+
+For example, on a computer with **32 GB RAM and 8 CPU cores**:
+
+```bash id="f0m22n"
+--max_memory '24 GB' --module_memory '8 GB' --module_cpus 6
+```
+
+If a process fails because it requires more memory, the pipeline automatically retries maximum three times with increased memory, up to the configured safe limit.
 
 [⬆ Back to top](#top)
 
