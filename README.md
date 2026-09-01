@@ -24,7 +24,7 @@ code is also designed for manual execution.
 -   [Configuration Files](#configuration-files)
 -   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
--   [Alternative: Run with Reduced Terminal Output](#Alternative:_Run_with_Reduced_Terminal_Output)
+-   [Alternative: Run with Reduced Terminal Output](#alternative_run_with_reduced_terminal_output)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
 -   [Example Commands](#example-commands)
 -   [Folder Structure Example](#folder-structure-example)
