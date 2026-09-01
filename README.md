@@ -24,6 +24,7 @@ code is also designed for manual execution.
 -   [Configuration Files](#configuration-files)
 -   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
+-   [Alternative: Run with Reduced Terminal Output](#running-the-pipeline_with_reduced_terminal_output)
 -   [Resuming a Pipeline](#resuming-a-pipeline)
 -   [Example Commands](#example-commands)
 -   [Folder Structure Example](#folder-structure-example)
@@ -611,9 +612,9 @@ nextflow run "/Users/username/.../workflow/nextflow.nf"
 
 ------------------------------------------------------------------------
 
-# Alternative: Run Using the Helper Script
+# Alternative: Run with Reduced Terminal Output
 
-If the standard Nextflow command causes Docker user/permission issues, or if you want to explicitly limit the resources used by the pipeline, you can run the provided run_pipeline.sh helper script instead.
+If you want to run the pipeline with **minimal terminal output** and avoid displaying unnecessary error messages in the terminal, use:
 
 From any directory, run:
 
@@ -624,13 +625,13 @@ From any directory, run:
   --cpus 1
 ```
 
-## Options
+### Options
 
-- `-profile linux_docker_user` — runs the pipeline using the Linux Docker user profile, which can help avoid Docker file ownership and permission issues.
-- `--memory '1 GB'` — limits the memory available to each configured process.
-- `--cpus 1` — limits the number of CPUs available to each configured process.
+- `-profile linux_docker_user` — runs the pipeline using the Linux Docker user profile with reduced terminal output.
+- `--memory '1 GB'` — sets the memory available to the pipeline to 1 GB.
+- `--cpus 1` — sets the number of CPUs to 1.
 
-> **Recommended for Linux/WSL users:** If you encounter Docker permission or file ownership errors with the standard command, try the `linux_docker_user` profile.
+> **Tip:** Use this command if you prefer a cleaner terminal with minimal error/output messages while the pipeline is running.
 
 [⬆ Back to top](#top)
 
@@ -651,9 +652,6 @@ nextflow run nextflow.nf -resume --cleanup_aggressive true
 ```
 
 [⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
 
 ------------------------------------------------------------------------
 
