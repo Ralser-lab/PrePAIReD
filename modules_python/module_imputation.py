@@ -845,7 +845,7 @@ if __name__ == "__main__":
     mask_df = mask_df.astype(float)
     
     # Define filepath of imputation procedures table #May be passed from wrapper? #TODO
-    imputation_table_fp = os.path.join(out_dir_fp, "imputation_procedures.tsv")
+    imputation_table_fp = os.path.join("imputation_procedures.tsv")
     
     # Log parameters
     #log = time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Imputation\n"

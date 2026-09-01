@@ -232,7 +232,8 @@ process RUN_ALL_MODULES {
           val(pipeline_log_path),
           path(prev_report),
           path(doc_tsv),
-          path(paramdir)
+          path(paramdir),
+          val(imputation_procedures_input)
 
     output:
     path("pipeline.done")
@@ -297,10 +298,38 @@ EOF_STEPS
         if [ -f Normalization_factors.tsv ]; then
             cp -f Normalization_factors.tsv "\$publish_step/" || true
         fi
+
+        case "\$publish_step" in
+            *IMPUTATION*)
+                if [ -f imputation_procedures.tsv ]; then
+                    cp -f imputation_procedures.tsv "\$publish_step/" || true
+                fi
+                ;;
+        esac
     }
 
     # Pipeline-level QA status table.
     printf 'module\\tqa_status\\texit_code\\n' > qa_status.tsv
+
+    data_two_back=""
+    mask_two_back=""
+    mask_dp_two_back=""
+    data_one_back="\$current_data"
+    mask_one_back="\$current_mask"
+    mask_dp_one_back="\$current_mask_dp"
+
+    cleanup_data_bundle() {
+        for input_path in "\$1" "\$2" "\$3"; do
+            if [ -n "\$input_path" ] &&
+               [ "\$input_path" != "\$current_data" ] &&
+               [ "\$input_path" != "\$current_mask" ] &&
+               [ "\$input_path" != "\$current_mask_dp" ] &&
+               [ -f "\$input_path" ]; then
+                rm -f -- "\$input_path"
+                log_both "[CLEANUP] Removed \$(basename "\$input_path")"
+            fi
+        done
+    }
 
     log_both ""
     log_both "============================================================"
@@ -308,6 +337,14 @@ EOF_STEPS
     log_both "[NEXTFLOW ATTEMPT] ${task.attempt}"
     log_both "[RESOURCE INFO] CPUs=${task.cpus} | Memory=${task.memory}"
     log_both "============================================================"
+
+    rm -f "\$BASE/imputation_procedures.tsv"
+    if [ -n "${imputation_procedures_input}" ]; then
+        cp -f "${imputation_procedures_input}" "\$BASE/imputation_procedures.tsv"
+        log_both "[IMPUTATION] Using provided imputation_procedures.tsv"
+    else
+        log_both "[IMPUTATION] No imputation_procedures.tsv provided; generation is enabled."
+    fi
 
     while IFS=\$'\\t' read -r counter base engine script_name param_name; do
 
@@ -326,6 +363,7 @@ EOF_STEPS
         rm -f QA.ok QA.fail QA.skip
         rm -f REP.ok REP.fail
 
+        rm -rf report_folder
         mkdir -p report_folder
 
         # Clear only the per-module log.
@@ -366,7 +404,7 @@ EOF_STEPS
 
             cp -f step_log.txt log.txt || true
             publish_current_step "\$publish_step" "\$counter"
-            printf '%s\\n' "[FATAL] \${module_name}: maxlfq_docker.so is missing" | tee -a "\$persistent_log" >&2
+            printf '%s\\n' "[FATAL] \${module_name}: maxlfq_docker.so is missing" >> "\$persistent_log"
             exit 100
         fi
 
@@ -395,7 +433,7 @@ EOF_STEPS
 
             cp -f step_log.txt log.txt || true
             publish_current_step "\$publish_step" "\$counter"
-            printf '%s\\n' "[FATAL] \${module_name}: unsupported engine '\${engine}'" | tee -a "\$persistent_log" >&2
+            printf '%s\\n' "[FATAL] \${module_name}: unsupported engine '\${engine}'" >> "\$persistent_log"
             exit 100
         fi
 
@@ -717,6 +755,10 @@ EOF_STEPS
         log_both "[REPORT STATUS] PASSED"
         log_both "----- REPORT END -----"
 
+        # Keep the cumulative report in the working directory up to date.
+        cp -f report.pdf "${publish_root}/report.pdf.tmp"
+        mv -f "${publish_root}/report.pdf.tmp" "${publish_root}/report.pdf"
+
         # Keep a module-local copy of the complete step log.
         cp -f step_log.txt log.txt
 
@@ -760,7 +802,25 @@ EOF_STEPS
         # Safety synchronization at the end of every module iteration.
         cd "\$BASE"
 
+        cleanup_data_bundle \
+            "\$data_two_back" \
+            "\$mask_two_back" \
+            "\$mask_dp_two_back"
+
+        data_two_back="\$data_one_back"
+        mask_two_back="\$mask_one_back"
+        mask_dp_two_back="\$mask_dp_one_back"
+        data_one_back="\$current_data"
+        mask_one_back="\$current_mask"
+        mask_dp_one_back="\$current_mask_dp"
+
     done < steps.tsv
+
+    # Remove the last retained previous-generation data files.
+    cleanup_data_bundle \
+        "\$data_two_back" \
+        "\$mask_two_back" \
+        "\$mask_dp_two_back"
 
     # Pipeline-level QA summary.
 
@@ -851,7 +911,11 @@ EOF_STEPS
     printf '%s\\n' "[PIPELINE STATUS] COMPLETED" |
         tee -a "\$persistent_log"
 
-    touch pipeline.done
+    # Required by the declared Nextflow output.
+    printf '%s\\n' "completed" > pipeline.done
+
+    # Persistent success marker used by onComplete and the launcher.
+    printf '%s\\n' "completed" > "${publish_root}/pipeline.done"
     """
 }
 
@@ -876,11 +940,19 @@ workflow {
 
     WORKING_PATH = cfgData.get('WORKING_PATH') ?: '.'
     WORKDIR_ABS = resolveFrom(launchDir.toString(), WORKING_PATH)
+    new File(WORKDIR_ABS, 'pipeline.done').delete()
 
     CONFIG_TXT_ABS = new File(WORKDIR_ABS, 'Config.txt').absolutePath
 
     ORIGINALDATA_ABS = cfgData.get('ORIGINALDATA') ? resolveFrom(WORKDIR_ABS, cfgData['ORIGINALDATA']) : null
     METADATA_ABS = cfgData.get('METADATA') ? resolveFrom(WORKDIR_ABS, cfgData['METADATA']) : null
+
+    def imputationProceduresValue = cfgData.get('IMPUTATION_PROCEDURES')?.toString()?.trim() ?: ''
+    IMPUTATION_PROCEDURES_ABS = imputationProceduresValue ?
+        resolveFrom(WORKDIR_ABS, imputationProceduresValue) : null
+
+    imputationProceduresFile = IMPUTATION_PROCEDURES_ABS ?
+        mustExist(IMPUTATION_PROCEDURES_ABS, 'imputation_procedures.tsv') : null
 
     cfgFile = mustExist(CONFIG_TXT_ABS, 'Config.txt')
 
@@ -961,7 +1033,35 @@ workflow {
 
     PIPELINE_LOG_ABS = new File(WORKDIR_ABS, 'pipeline_log.txt').absolutePath
     ensureExistsOrCreateEmpty(PIPELINE_LOG_ABS, 'pipeline_log.txt')
-    reportSeed = ensureExistsOrCreateEmpty(new File(start_dir, 'report.pdf').absolutePath, 'report seed')
+
+    def reportSeedPath = new File(start_dir, 'report.pdf').absolutePath
+
+    if( run_value.equalsIgnoreCase('new') ) {
+        def oldReport = new File(reportSeedPath)
+
+        if( oldReport.exists() && oldReport.length() > 0 ) {
+
+            def archiveDir = new File(start_dir, 'previous_reports')
+            archiveDir.mkdirs()
+
+            def timestamp = new Date().format('yyyyMMdd_HHmmss')
+            def archivedReport = new File(
+                archiveDir,
+                "report_${timestamp}.pdf"
+            )
+
+            println "Archiving previous complete report to: ${archivedReport}"
+
+            if( !oldReport.renameTo(archivedReport) ) {
+                die("Could not archive previous report.pdf")
+            }
+        }
+    }
+
+    reportSeed = ensureExistsOrCreateEmpty(
+        reportSeedPath,
+        'report seed'
+    )
 
     metaFile = mustExist(METADATA_ABS, 'Metadata.tsv')
 
@@ -1059,20 +1159,23 @@ workflow {
             PIPELINE_LOG_ABS,
             file(reportSeed.absolutePath),
             file(methodDoc.absolutePath),
-            paramdir
+            paramdir,
+            IMPUTATION_PROCEDURES_ABS ?: ''
         )
     }
 
     RUN_ALL_MODULES(run_input_ch)
 
-    onComplete:
+    workflow.onComplete = {
+        // Always run cleanup, even when the pipeline failed.
+        println ''
+        if( !workflow.success ) {
+            println '[CLEANUP] Running cleanup after pipeline failure.'
+        }
+        else {
+            println '[CLEANUP] Starting post-run cleanup.'
+        }
 
-    if( !workflow.success ) {
-        println ''
-        println '[CLEANUP] Skipped because pipeline failed.'
-        println ''
-    }
-    else {
         def cfgDataPath2 = resolveLaunch(config_data as String)
         def cfgData2 = parseKeyValueFile(cfgDataPath2)
         def workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
@@ -1094,30 +1197,42 @@ workflow {
         }
 
         println '[CLEANUP] Done.'
+
+        if( !workflow.success ) {
+            println ''
+            println '[PIPELINE FAILED]'
+            println 'Cleanup completed, but the pipeline failed.'
+            println ''
+        }
     }
 
-    onError:
 
-    println ''
-    println '[PIPELINE FAILED]'
-    println 'The pipeline stopped before completion.'
-    println ''
+    workflow.onError = {
+        println ''
+        println '============================================================'
+        println '[PIPELINE FAILED]'
+        println 'The pipeline stopped before completion.'
+        println 'Please check pipeline_log.txt and nextflow_trace.txt for details.'
+        println 'Nextflow task diagnostics remain available in the work directory.'
+        println '============================================================'
+        println ''
 
-    try {
-        def failureLog = new File(PIPELINE_LOG_ABS)
-        failureLog.parentFile?.mkdirs()
+        try {
+            def failureLog = new File(PIPELINE_LOG_ABS)
+            failureLog.parentFile?.mkdirs()
 
-        failureLog << System.lineSeparator()
-        failureLog << '============================================================' + System.lineSeparator()
-        failureLog << '[PIPELINE STATUS] FAILED' + System.lineSeparator()
-        failureLog << "[NEXTFLOW ERROR] ${workflow.errorMessage ?: 'Unknown error'}" + System.lineSeparator()
-        failureLog << "[NEXTFLOW EXIT STATUS] ${workflow.exitStatus}" + System.lineSeparator()
-        failureLog << '============================================================' + System.lineSeparator()
+            failureLog << System.lineSeparator()
+            failureLog << '============================================================' + System.lineSeparator()
+            failureLog << '[PIPELINE STATUS] FAILED' + System.lineSeparator()
+            failureLog << "[NEXTFLOW ERROR] ${workflow.errorMessage ?: 'Unknown error'}" + System.lineSeparator()
+            failureLog << "[NEXTFLOW EXIT STATUS] ${workflow.exitStatus}" + System.lineSeparator()
+            failureLog << '============================================================' + System.lineSeparator()
 
-        println "[PIPELINE LOG] Failure written to ${PIPELINE_LOG_ABS}"
-    }
-    catch( Throwable logError ) {
-        println "[PIPELINE LOG ERROR] Could not update pipeline_log.txt: ${logError.message}"
+            println "[PIPELINE LOG] Failure written to ${PIPELINE_LOG_ABS}"
+        }
+        catch( Throwable logError ) {
+            println "[PIPELINE LOG ERROR] Could not update pipeline_log.txt: ${logError.message}"
+        }
     }
 
 }
