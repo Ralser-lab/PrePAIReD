@@ -3459,7 +3459,10 @@ class WorkflowListPanel(QWidget):
         workflow_dict = self.get_configuration_dict()
         workdir = os.path.abspath(gs.work_dir.text())
         data_fp = os.path.abspath(gs.ms_file.text())
-        metadata_fp = os.path.abspath(gs.meta_file.text())
+        if gs.meta_file.text():
+            metadata_fp = os.path.abspath(gs.meta_file.text())
+        else:
+            metadata_fp = ""
         rerun = gs.rerun_checkbox.isChecked()
         if rerun:
             rerun_start = gs.dropdown.currentText()
@@ -3473,7 +3476,7 @@ class WorkflowListPanel(QWidget):
         try:
             gui_funcs.write_output(workflow_dict["workflow"], workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun, rerun_start, rerun_counter, docker_setup)
             gs.status_label.setText("Files successfully generated ✅")
-
+    
             QTimer.singleShot(
                 5000,
                 lambda: gs.status_label.clear()

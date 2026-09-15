@@ -7,7 +7,7 @@ Created on Thu Apr  9 16:22:54 2026
 """
 
 import pandas as pd
-import pickle
+import json
 import os
 import numpy as np
 from pyarrow.parquet import ParquetFile
@@ -85,6 +85,34 @@ def load_data_header(ms_data_fp):
         df = pa.Table.from_batches([first_row]).to_pandas()
         columns = df.columns.tolist()
     return columns
+
+def data_read_column(filename, column_name, dtype=str):
+    """
+    Reads in one column of a data file (.tsv or .parquet)
+    
+    Parameters
+    ----------
+    filename : str
+        Path of file to be read in.
+    column_name : str
+        Column of the file to be read in.
+    dtype : dtype
+        Data type of the column, e.g. str, int8, float64
+        
+    Returns
+    -------
+    column : np.array
+        Array containing all the values of the column
+    """
+    if "parquet" in filename.split("."):
+         column = pd.read_parquet(filename, columns=[column_name], engine="pyarrow")
+    else: # read tsv file
+         column = pd.read_csv(filename, usecols=[column_name], sep="\t") 
+    try:    
+        column = column.astype(dtype).values.reshape(-1)
+    except:
+        column = column.astype(str).values.reshape(-1)
+    return column
     
 def load_parameter_dictionaries(param_path_fp):
     """
@@ -104,9 +132,11 @@ def load_parameter_dictionaries(param_path_fp):
     
     """
     
-    flag_dict = pickle.load(open(os.path.join(param_path_fp,"dict_flags.pkl"),"rb"))
+    with open(os.path.join(param_path_fp, "dict_flags.json"), "r") as f:
+        flag_dict = json.load(f)
     flag_dict["FILTERING_WIDE"]["filtering_wide_methods"]["Default"] = None
-    parameters_dict = pickle.load(open(os.path.join(param_path_fp,"dict_parameters.pkl"),"rb"))
+    with open(os.path.join(param_path_fp, "dict_parameters.json"), "r") as f:
+        parameters_dict = json.load(f)
     return flag_dict, parameters_dict
 
 def get_steps(workflow_data, params_dict, rerun_counter=0):
@@ -136,6 +166,7 @@ def get_steps(workflow_data, params_dict, rerun_counter=0):
         Collection of counters.
         
     """
+        
     steps = {}
     fw_methods = []
     #collection = []
@@ -720,7 +751,78 @@ def write_config_data(workdir, data_fp, metadata_fp, additional_files=[]):
                 file.write("\""+file_+"\"")
                 if ind < len(additional_files)-1:
                     file.write(";")
+    return
 
+def generate_metadata(workdir, workflow_data, data_fp):
+    """
+    Generates artificial metadata.
+    
+    Parameters
+    ----------
+    workdir : str
+        Working directory.
+    workflow_data : list
+        Workflow setup.
+    data_fp : str
+        Path to input data.
+        
+    Returns
+    -------
+    flag_metadata_creation : bool
+        True if metadata were created.
+ 
+    """
+    
+    try:
+        filename_col = workflow_data[0]["params"]["metadata_filename_column"]
+        samplename_col = workflow_data[0]["params"]["metadata_sample_column"]
+        if len(workflow_data) > 1:
+            if workflow_data[1]["name"] == "Filtering_long":
+                input_filename_col = workflow_data[1]["params"]["input_filename_column"]
+                flag_metadata_creation = write_metadata(workdir, data_fp, input_filename_col, filename_col, samplename_col)
+                return flag_metadata_creation
+            else:
+                return False
+        else:
+            return False
+    except:
+        return False
+
+def write_metadata(workdir, data_fp, input_filename_col, filename_col, samplename_col):
+    """
+    Writes artificial metadata to disk.
+    
+    Parameters
+    ----------
+    workdir : str
+        Working directory.
+    data_fp : str
+        Path to input data.
+    input_filename_col : str
+        ID column in MS data.
+    filename_col : str
+        File name column in metadata.
+    samplename_col : str
+        Sample name in metadata.
+    
+    Returns
+    -------
+    flag_metadata_creation : bool
+        True if metadata were created.
+        
+    """
+    
+    try:
+        entries = list(set(data_read_column(data_fp, input_filename_col, dtype=str)))
+        if filename_col == samplename_col:
+            metadata_ = pd.DataFrame(index=[filename_col], data=[entries]*1).T
+        else:
+            metadata_ = pd.DataFrame(index=[filename_col,samplename_col], data=[entries]*2).T
+        metadata_.to_csv(os.path.join(workdir,"Metadata_generated_GUI.tsv"),sep="\t", index=False)
+        return True
+    except:
+        return False
+    
 def write_output(workflow_data, workdir, data_fp, metadata_fp, flags_dict, params_dict, rerun=False, rerun_start=None, rerun_counter=0, docker_setup=False):
     """
     Writes all data to disk.
@@ -757,6 +859,10 @@ def write_output(workflow_data, workdir, data_fp, metadata_fp, flags_dict, param
     step_names = write_config(workdir, steps, language, rerun, rerun_start)
     write_evaluation_config(workdir, step_names, methods, rerun=rerun, rerun_start=rerun_start, docker_setup=docker_setup)
     additional_files = write_parameter_file(workdir, workflow_data, step_names, step_collection, methods, precursor_metadata, flags_dict, params_dict, docker_setup)
+    if not metadata_fp:
+        flag_metadata_creation = generate_metadata(workdir, workflow_data, data_fp)
+        if flag_metadata_creation:
+            metadata_fp = os.path.join(workdir,"Metadata_generated_GUI.tsv")
     write_config_data(workdir, data_fp, metadata_fp, additional_files)
     return
 
