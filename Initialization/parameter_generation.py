@@ -10,7 +10,7 @@ import argparse
 import os
 import re
 import sys
-import pickle
+import json
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
@@ -691,6 +691,18 @@ def write_evaluation_config(config_evaluation_file_path, setup_order,blocks_flag
         
 #%%
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
+
 if __name__ == "__main__":
     
     # Get input arguments
@@ -729,12 +741,17 @@ if __name__ == "__main__":
     if not load_dictionaries:
         dict_flags, dict_parameters = generate_dictionaries(parameter_overview_table_file_path)
         if write_to_disc:
-            pickle.dump(dict_flags,open(os.path.join(dict_path,"dict_flags.pkl"),"wb"))
-            pickle.dump(dict_parameters,open(os.path.join(dict_path,"dict_parameters.pkl"),"wb"))
+            with open(os.path.join(dict_path, "dict_flags.json"), "w") as f:
+                json.dump(dict_flags, f, cls=NumpyEncoder)
+            with open(os.path.join(dict_path, "dict_parameters.json"), "w") as f:
+                json.dump(dict_parameters, f, cls=NumpyEncoder)
     else:
-        dict_flags = pickle.load(open(os.path.join(dict_path,"dict_flags.pkl"),"rb"))
-        dict_parameters = pickle.load(open(os.path.join(dict_path,"dict_parameters.pkl"),"rb"))
-    
+        with open(os.path.join(dict_path, "dict_flags.json"), "r") as f:
+            dict_flags = json.load(f)
+        
+        with open(os.path.join(dict_path, "dict_parameters.json"), "r") as f:
+            dict_parameters = json.load(f)
+            
     # Check for internal error
     check_steps(setup_order, dict_flags)
     
