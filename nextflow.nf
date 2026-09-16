@@ -1129,8 +1129,8 @@ workflow {
                 WORKDIR_ABS,
                 PIPELINE_LOG_ABS,
                 file("${projectDir}/Initialization/Initialize.py"),
-                file("${projectDir}/Initialization/dict_flags.pkl"),
-                file("${projectDir}/Initialization/dict_parameters.pkl"),
+                file("${projectDir}/Initialization/dict_flags.json"),
+                file("${projectDir}/Initialization/dict_parameters.json"),
                 file("${WORKDIR_ABS}/Parameters.txt"),
                 file(original_data.absolutePath),
                 file(metaFile.absolutePath)
