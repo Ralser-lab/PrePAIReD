@@ -263,15 +263,21 @@ if __name__ == "__main__":
     parameter_directory = "Parameter_Files"
 
     try:
-        flags_dict = pd.read_pickle(os.path.join(os.path.split(os.path.abspath(__file__))[0],"dict_flags.pkl")) # dictionary with information about flags
-        operation_dict = pd.read_pickle(os.path.join(os.path.split(os.path.abspath(__file__))[0],"dict_parameters.pkl")) # dictionary with information about non-flags
+        with open(os.path.join(os.path.split(os.path.abspath(__file__))[0], "dict_flags.json"), "r") as f:
+            flags_dict = json.load(f) # dictionary with information about flags
+        with open(os.path.join(os.path.split(os.path.abspath(__file__))[0], "dict_parameters.json"), "r") as f:
+            operation_dict = json.load(f) # dictionary with information about non-flags
     except:
         try:
-            flags_dict = pd.read_pickle(os.path.join("/Initialization","dict_flags.pkl")) # dictionary with information about flags
-            operation_dict = pd.read_pickle(os.path.join("/Initialization","dict_parameters.pkl")) # dictionary with information about non-flags
+            with open(os.path.join("/Initialization", "dict_flags.json"), "r") as f:
+                flags_dict = json.load(f) # dictionary with information about flags
+            with open(os.path.join("/Initialization", "dict_parameters.json"), "r") as f:
+                operation_dict = json.load(f) # dictionary with information about non-flags
         except:
-            flags_dict = pd.read_pickle(os.path.join(".","dict_flags.pkl")) # dictionary with information about flags
-            operation_dict = pd.read_pickle(os.path.join(".","dict_parameters.pkl")) # dictionary with information about non-flags
+            with open(os.path.join(".", "dict_flags.json"), "r") as f:
+                flags_dict = json.load(f) # dictionary with information about flags
+            with open(os.path.join(".", "dict_parameters.json"), "r") as f:
+                operation_dict = json.load(f) # dictionary with information about non-flags
     # read parameters and split parameters by module
     log = os.path.join(f"{path_to_project_directory}","logfile_setup.txt")
     create_logfile(log, path_to_project_directory, mass_spec_data_filename=mass_spec_data_filename, metadata_filename=metadata_filename, preprocessed_filename=preprocessed_filename, username=username, parameter_directory=parameter_directory)
