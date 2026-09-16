@@ -55,6 +55,7 @@ import os
 import re
 import module_helper as helper
 from scipy.sparse import coo_matrix
+import operator
 
 ##############################################################################
 # File handling
@@ -411,6 +412,8 @@ def select_custom_filtering_columns(ms_filter_columns, ms_filter_operators, ms_f
     
     return(filtering_operation_dict, mask_description_df, log)
 
+
+
 def filtering(filename, filtering_operation_dict, mask_description_df, mask_arr, values_col, keep_track=True):
     """
     Applies filters to values.
@@ -438,6 +441,16 @@ def filtering(filename, filtering_operation_dict, mask_description_df, mask_arr,
         string containing logs for the step to be written to disk later.
     """
     log = ""
+    
+    operators = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">":  operator.gt,
+    ">=": operator.ge,
+    "<":  operator.lt,
+    "<=": operator.le,
+    }
+    
     ### NOTE: Overlapping filters (not exclusive)
     if keep_track:
         filtering_tracker_df = pd.DataFrame(index=list(filtering_operation_dict.keys()),columns=["number of excluded precursors (not exclusive)","number of remaining precursors"])    
@@ -460,14 +473,13 @@ def filtering(filename, filtering_operation_dict, mask_description_df, mask_arr,
             apply_filter = False
         if apply_filter:
             try:
-                filter_arr = eval("filter_arr"+item["operator"]+str(item["value"]))
-            except:
-                try:
-                    filter_arr = eval("filter_arr"+item["operator"]+repr(item["value"]))
-                except:
-                    log += "###WARNING###: Filtering failed for "+f"{item['column']}{item['operator']}{str(item['value'])}"+", filter skipped.\n"
-                    log += "###WARNING###: Filtering failed for "+f"{item['column']}{item['operator']}{repr(item['value'])}"+", filter skipped\n"
-                    filter_arr = np.ones(len(filter_arr), dtype=bool)
+                cast_val = np.array(item["value"]).astype(item["dtype"]).item()
+                filter_arr = operators[item["operator"]](filter_arr, cast_val)
+            except Exception as e:
+                log += "###WARNING###: Filtering failed for "+f"{item['column']}{item['operator']}{str(item['value'])}"+", filter skipped.\n"
+                log += "###WARNING###: Filtering failed for "+f"{item['column']}{item['operator']}{repr(item['value'])}"+", filter skipped\n"
+                log += f"###WARNING###: Reason: {e}\n"
+                filter_arr = np.ones(len(filter_arr), dtype=bool)
             
             
             col_ = ""
@@ -644,366 +656,6 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
         except:
             log += "###WARNING###: "+column+" not found in input data. Skipped.\n"
     return id_mapping_df, log
-
-# DEPRECATED
-'''
-# filter DIA-NN output (except on number of peptides), by default all filters set to False (no filtering)
-def filtering(input_df, filters_dict, input_id_col="Precursor.Id", metadata_df=None, mask_df=None, mask_description_df=None, keep_track=True, values_col="Precursor.Quantity", filename_col="filename", diann_sample_column="File.Name"):
-    """
-    Filters rows in DIA-NN output report.tsv on filters as specified in filters_dict by True.
-    Number of filtered precursors in every step are saved to logfile.
-    
-    author: BZ
-    
-    Parameters
-    ----------
-    input_df : pd.DataFrame
-        E.g. DIA-NN output report.tsv, long format.
-    filters_dict : dict
-        dictionary containing the used filters and filtering parameters.
-    input_id_col : str
-        name of column with IDs extracted from DIA-NN report.tsv. The default is "Precursor.Id".
-    metadata_df : pd.DataFrame
-        Metadata mapping File.Name to shorter run names. The default is None. 
-    mask_df : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, calling creating_filtering_matrix() to create this variable.
-    mask_description_df: pd.DataFrame.
-        mapping numbers in mask_df to filters. The default is None, calling creating_filtering_matrix() to create this variable.
-    keep_track : bool, optional
-        Flag to activate/deactivate tracking of filtered values in mask_df. The default is True.
-    values_col : str
-        values extracted from DIA-NN report.tsv. The default is "Precursor.Quantity".
-    filename_col : str
-        name of the column in metadata_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
-    diann_sample_column : str, optional
-        name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
-    Returns
-    -------
-    input_df : pd.DataFrame
-        filtered DIA-NN output report.tsv.
-    mask_df : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description_df : pd.DataFrame.
-        mapping numbers in mask_df to filters.
-    log : str
-        string containing messages for report log.
-
-    """
-    #CREATE FILTERING MATRIX
-    log = ""
-    if keep_track:
-        if mask_df is None or mask_description_df is None:
-            mask_df,mask_description_df,log_create = helper.create_filtering_matrix(input_df,metadata_df,values=values_col,ids=input_id_col,filename_col=filename_col,diann_sample_column=diann_sample_column)
-            log += log_create
-    # FILTERING
-    filtering_tracker_df = pd.DataFrame(index={key:value for key,value in filters_dict.items() if value==True}.keys(),columns=["number of excluded precursors","number of remaining precursors"])
-    len_input_df_before = len(input_df)
-    len_input_df_after = len(input_df)
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tBegin DIA-NN Filtering\n"
-    # FILTER BY PROTEOTYPIC
-    # exclude non-proteotypic
-    if filters_dict["filter_proteotypic"]:
-        if "Proteotypic" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Proteotypic"]!=1][input_id_col].tolist()
-                cols = input_df[input_df["Proteotypic"]!=1][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Proteotypic","value"]
-            input_df = input_df[input_df["Proteotypic"] == 1]
-            filtering_tracker_df.loc["filter_proteotypic","number of excluded precursors"] = len_input_df_after-len(input_df)
-            filtering_tracker_df.loc["filter_proteotypic","number of remaining precursors"] = len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Proteotypic' not in input_df, filter skipped\n"
-    # FILTER BY Q-VALUE
-    # exclude by q-value threshold for gene group AND precursor
-    if filters_dict["filter_by_qvalue"]:
-        if "Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Q.Value","value"]
-            input_df = input_df[input_df["Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_q_value","number of excluded precursors"] = len_input_df_after-len(input_df)
-            filtering_tracker_df.loc["filter_by_q_value","number of remaining precursors"] = len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_global_qvalue"]:
-        if "Global.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Global.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Global.Q.Value"]>filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Global.Q.Value","value"]
-            input_df = input_df[input_df["Global.Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_global_qvalue","number of excluded precursors"] = len_input_df_after-len(input_df)
-            filtering_tracker_df.loc["filter_by_global_qvalue","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Global.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_gg_qvalue"]:
-        if "GG.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["GG.Q.Value"]>filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["GG.Q.Value"]>filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["GG.Q.Value","value"]
-            input_df = input_df[input_df["GG.Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_gg_qvalue","number of excluded precursors"]=len_input_df_after-len(input_df)
-            filtering_tracker_df.loc["filter_by_gg_qvalue","number of remaining precursors"]=len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'GG.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_pg_qvalue"]:
-        if "PG.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["PG.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["PG.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["PG.Q.Value","value"]
-            input_df = input_df[input_df["PG.Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_pg_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_pg_qvalue","number of remaining precursors"] = len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'PG.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_p_qvalue"]:
-        if "Protein.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Protein.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Protein.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Protein.Q.Value","value"]
-            input_df = input_df[input_df["Protein.Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_p_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_p_qvalue","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Protein.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_global_pg_qvalue"]:
-        if "Global.PG.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Global.PG.Q.Value"] > filters_dict["qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Global.PG.Q.Value"] > filters_dict["qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Global.PG.Q.Value","value"]
-            input_df = input_df[input_df["Global.PG.Q.Value"] <= filters_dict["qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of excluded precursors"]=len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_global_pg_qvalue","number of remaining precursors"]=len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Global.PG.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_lib_qvalue"]:
-        if "Lib.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Lib.Q.Value"] > filters_dict["lib_qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Lib.Q.Value"] > filters_dict["lib_qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Lib.Q.Value","value"]
-            input_df = input_df[input_df["Lib.Q.Value"] <= filters_dict["lib_qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_lib_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_lib_qvalue","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\tColumn 'Lib.Q.Value' not in input_df, filter skipped\n"
-    if filters_dict["filter_by_lib_pg_qvalue"]:
-        if "Lib.PG.Q.Value" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Lib.PG.Q.Value"] > filters_dict["lib_qvalue_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Lib.PG.Q.Value"] > filters_dict["lib_qvalue_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]]=mask_description_df.loc["Lib.PG.Q.Value","value"]
-            input_df = input_df[input_df["Lib.PG.Q.Value"] <= filters_dict["lib_qvalue_thresh"]]
-            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_lib_pg_qvalue","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'Lib.PG.Q.Value' not in input_df, filter skipped\n"
-
-    # FILTER BY PEP
-    # exclude rows with posterior error probability (PEP) for precursor identification exceeding pep_thresh
-    if filters_dict["filter_by_PEP"]:  # NOT CHECKED
-        if "PEP" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["PEP"] > filters_dict["pep_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["PEP"] > filters_dict["pep_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["PEP","value"]
-            input_df = input_df[input_df["PEP"] <= filters_dict["pep_thresh"]]
-            filtering_tracker_df.loc["filter_by_PEP","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_PEP","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tColumn 'PEP' not in input_df, filter skipped\n"
-    # FILTER ON MS-LEVEL
-    # exclude rows with correlation between MS1 and MS2 chromatograms below MScorr_thresh
-    if filters_dict["filter_by_MScorr"]:
-        if "Ms1.Profile.Corr" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Ms1.Profile.Corr"] < filters_dict["MScorr_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Ms1.Profile.Corr","value"]
-            input_df = input_df[input_df["Ms1.Profile.Corr"] >= filters_dict["MScorr_thresh"]]
-            filtering_tracker_df.loc["filter_by_MScorr","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_MScorr","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tMs1.Profile.Corr not in input_df, filter skipped\n"
-    # exclude rows with MS2 evidence below evidence_thresh
-    if filters_dict["filter_by_evidence"]:
-        if "Mass.Evidence" in input_df.columns:
-            if keep_track:
-                rows = input_df[input_df["Mass.Evidence"] < filters_dict["evidence_thresh"]][input_id_col].tolist()
-                cols = input_df[input_df["Mass.Evidence"] < filters_dict["evidence_thresh"]][diann_sample_column].tolist()
-                for r in range(len(rows)):
-                    mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Mass.Evidence","value"]
-            input_df = input_df[input_df["Mass.Evidence"] >= filters_dict["evidence_thresh"]]
-            filtering_tracker_df.loc["filter_by_evidence","number of excluded precursors"] = len_input_df_after-len(input_df)
-            filtering_tracker_df.loc["filter_by_evidence","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tMass.Evidence not in input_df, filter skipped\n"
-    if filters_dict["filter_by_MScorr_evidence_combined"]:
-        if "Ms1.Profile.Corr" in input_df.columns and "Mass.Evidence" in input_df.columns:
-            if keep_track:
-                log += "\t\t\t\t###WARNING###: tracking filtering for filter_by_MScorr_evidene_combined not implemented yet"#IMPLEMENT IF NECCESSARY
-            input_df = input_df[input_df["Ms1.Profile.Corr"] + 0.5 *
-                        input_df["Mass.Evidence"] >= filters_dict["MScorr_evidence_combined_thresh"]]
-            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of excluded precursors"] = len_input_df_after - len(input_df)
-            filtering_tracker_df.loc["filter_by_MScorr_evidence_combined","number of remaining precursors"] = len(input_df)
-            len_input_df_after = len(input_df)
-        else:
-            log += "\t\t\t\tMs1.Profile.Corr and/or Mass.Evidence not in input_df, filter skipped\n"
-    #filter out precursors with zero value
-    if filters_dict["filter_by_zero_values"]:
-        if keep_track:
-            rows = input_df[input_df[values_col] == 0][input_id_col].tolist()
-            cols = input_df[input_df[values_col] == 0][diann_sample_column].tolist()
-            for r in range(len(rows)):
-                mask_df.loc[rows[r],cols[r]] = mask_description_df.loc["Zero "+values_col,"value"]
-        input_df=input_df[input_df[values_col] > 0]
-        filtering_tracker_df.loc["filter_by_zero_values","number of excluded precursors"] = len_input_df_after - len(input_df)
-        filtering_tracker_df.loc["filter_by_zero_values","number of remaining precursors"] = len(input_df)
-        len_input_df_after = len(input_df)
-    len_input_df_after = len(input_df)
-    filtering_tracker_df.dropna(inplace=True)
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during DIA-NN-based filtering of input_df\n\n"
-    log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
-    if input_df.index.tolist() == []:
-        log += "\t\t\t\t###WARNING###: Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
-    return([input_df,mask_df,mask_description_df,log])
-
-def filtering_custom(input_df, ms_filter_columns, ms_filter_operators, ms_filter_values, input_id_col="Precursor.Id", metadata_df=None, mask_df=None, mask_description_df=None, keep_track=True, filename_col="filename", diann_sample_column="File.Name"):
-    """
-    Filters rows in report.tsv on filters as specified by the user.
-    Number of filtered precursors in every step are saved to logfile.
-    
-    author: OL
-    
-    Parameters
-    ----------
-    input_df : pd.DataFrame
-        E.g. DIA-NN output report.tsv, long format.
-    ms_filter_columns : str
-        ";"-separated string of filter columns.
-    ms_filter_operators : str
-        ";"-separated string of filter operators.
-    ms_filter_values : str
-        ";"-separated string of filter values.
-    input_id_col : str
-        name of column with IDs extracted from DIA-NN report.tsv. The default is "Precursor.Id".
-    metadata_df : pd.DataFrame
-        Metadata mapping File.Name to shorter run names. The default is None. 
-    mask_df : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The default is None, calling creating_filtering_matrix() to create this variable.
-    mask_description_df: pd.DataFrame.
-        mapping numbers in mask_df to filters. The default is None, calling creating_filtering_matrix() to create this variable.
-    keep_track : bool, optional
-        Flag to activate/deactivate tracking of filtered values in mask_df. The default is True.
-    filename_col : str
-        name of the column in metadata_df specifying filenames (including path) as in DIA-NN report.tsv. The default is "filename".
-    diann_sample_column : str, optional
-        name of the sample names in the DIA-NN run to match with metadata, either "Run" or "File.Name". The default is "File.Name".
-    Returns
-    -------
-    input_df : pd.DataFrame
-        filtered DIA-NN output report.tsv.
-    mask_df : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
-    mask_description_df : pd.DataFrame.
-        mapping numbers in mask_df to filters.
-    log : str
-        string containing messages for report log.
-
-    """
-    
-    log = ""
-    
-    filter_columns = str(ms_filter_columns).split(";")
-    operators = str(ms_filter_operators).split(";")
-    values = str(ms_filter_values).split(";")
-    
-    if len(filter_columns) != len(operators) or len(filter_columns) != len(values):
-        log = "###ERROR###: length of filters, operators, values not matching.\n"
-        return 
-    else:
-        filter_list = []
-        for column_,operator_,value_ in zip(filter_columns,operators,values):
-            filter_list.append(str(column_)+" "+str(operator_)+" "+str(value_))
-                
-        filter_list_mask_description_df = pd.DataFrame(columns=["filter","value"])
-        filter_list_mask_description_df["filter"] = filter_list
-        filter_list_mask_description_df["value"]=range(len(mask_description_df["value"]),len(mask_description_df)+len(filter_list))
-        log += "\nFiltering matrix to keep track over excluded precursors and proteins created.\nReasons for exclusion of precursors as specified in filter mask\n" + filter_list_mask_description_df.to_string(index=False) +"\n-----------------------------------------------\n\n"
-        filter_list_mask_description_df.set_index("filter",inplace=True)
-        filter_list_mask_description_df = filter_list_mask_description_df.astype(float)
-                
-        mask_description_df = pd.concat([mask_description_df,filter_list_mask_description_df],axis=0)
-    
-    # FILTERING
-    filtering_tracker_df = pd.DataFrame(index=filter_list,columns=["number of excluded precursors","number of remaining precursors"])
-    len_input_df_before = len(input_df)
-    len_input_df_after = len(input_df)
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tBegin Custom Filtering\n"
-    
-    for ind,(column_,operator_,value_) in enumerate(zip(filter_columns,operators,values)):
-        if column_ in input_df.columns:
-            try:
-                input_df = eval("input_df[input_df[column_]"+operator_+str(value_)+"]")
-                if keep_track:
-                    rows = eval("input_df[input_df[column_]"+operator_+str(value_)+"]")[input_id_col].tolist()
-                    cols = eval("input_df[input_df[column_]"+operator_+str(value_)+"]")[diann_sample_column].tolist()
-                    for r in range(len(rows)):
-                        mask_df.loc[rows[r],cols[r]]=mask_description_df.loc[filter_list[ind],"value"]
-            except:
-                try:
-                    input_df = eval("input_df[input_df[column_]"+operator_+repr(value_)+"]")
-                    if keep_track:
-                        rows = eval("input_df[input_df[column_]"+operator_+repr(value_)+"]")[input_id_col].tolist()
-                        cols = eval("input_df[input_df[column_]"+operator_+repr(value_)+"]")[diann_sample_column].tolist()
-                        for r in range(len(rows)):
-                            mask_df.loc[rows[r],cols[r]]=mask_description_df.loc[filter_list[ind],"value"]
-                except:
-                    log += "###ERROR###: Filtering on metadata failed for "+f"input_df[input_df[{column_}]{operator_}{str(value_)}]"+".\n"
-                    log += "###ERROR###: Filtering on metadata failed for "+f"input_df[input_df[{column_}]{operator_}{repr(value_)}]"+".\n"
-            filtering_tracker_df.loc[filter_list[ind],"number of excluded precursors"] = len_input_df_after-len(input_df)
-            filtering_tracker_df.loc[filter_list[ind],"number of remaining precursors"] = len(input_df)
-            len_input_df_after=len(input_df)
-        else:
-            log += "\t\t\t\tColumn "+str(column_)+" not in input_df, filter skipped\n"
-    
-    len_input_df_after = len(input_df)
-    filtering_tracker_df.dropna(inplace=True)
-    log += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tFiltering completed. "+str(len_input_df_before-len_input_df_after)+"("+str(np.round(100-len_input_df_after/len_input_df_before*100,2))+"%) Peptides were excluded during custom filtering of input_df\n\n"
-    log += filtering_tracker_df.to_string().replace("\n","\n\t") + "\n"
-    if input_df.index.tolist() == []:
-        log += "\t\t\t\t###WARNING###: Filtered input_df is empty. Please check if columns on which filters are based are not empty (sometimes depending on library used e.g. Genes and therefore Q-Values on gene-level are missing), else adjust filtering parameters.\n"
-    return([input_df,mask_df,mask_description_df,log])
-'''
-            
             
 #Construction site, improve if needed
 '''
