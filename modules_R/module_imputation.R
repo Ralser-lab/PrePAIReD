@@ -62,7 +62,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     
     ## call imputation function
     main_impute <- switch(
-        tolower(parameter_list[["imputation_method"]]),
+        parameter_list[["imputation_method"]], # to lower dropped because bpca_R was not working
         "missforest" = function() impute_missForest(quant_df, parameter_list, outpath),
         "bpca_R" = function() impute_pca(quant_df, parameter_list, outpath),
         "ppca" = function() impute_pca(quant_df, parameter_list, outpath),
@@ -213,7 +213,7 @@ impute_pca <- function(quant_df, parameter_list, outpath){
     
     imputed_list <- pcaMethods::pca(
         object = t(quant_df),
-        method = parameter_list[["imputation_method"]],
+        method = sub("_R$", "",parameter_list[["imputation_method"]]), # this is to ensure the pcaMethods::pca() recieves bpca instead of bpca_R
         nPcs = nPCs
     )
     
@@ -221,9 +221,10 @@ impute_pca <- function(quant_df, parameter_list, outpath){
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n\n")
     
     
-    if(parameter_list[["export_output_pca"]]){
-        saveRDS(imputed_list, file.path(outpath,
-                paste0("output_", parameter_list[["imputation_method"]],"_list.RData")))
+    if (isTRUE(as.logical(as.numeric(parameter_list[["export_output_pcaMethods"]])))) { # to match the parameter name and treat a missing value as FALSE
+      saveRDS(imputed_list, file.path(outpath,
+                                      paste0("output_", parameter_list[["imputation_method"]],"_list.RData")))
+    }
     }
     
     ## get the estimated complete observations
