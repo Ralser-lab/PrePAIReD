@@ -6,34 +6,38 @@ Created on Thu Aug 14 16:00:21 2025
 @author: oliverlemke
 """
 
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
-import numpy as np
-import pandas as pd
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-import matplotlib as mpl
-from scipy.interpolate import UnivariateSpline
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from scipy.stats import pearsonr, spearmanr, pointbiserialr
-from matplotlib.ticker import FormatStrFormatter
-import statsmodels.api as sm
-from scipy.optimize import curve_fit
-from sklearn.preprocessing import SplineTransformer
-from matplotlib.patches import Ellipse
-from scipy.stats import chi2
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
-
 import sys
-import module_helper as helper
-from tkinter.filedialog import askopenfilename, askdirectory
-import argparse
 import os
+import argparse
 import re
 import ast
+from tkinter.filedialog import askopenfilename, askdirectory
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+from matplotlib.lines import Line2D
+from matplotlib.patches import Ellipse, Patch
+from matplotlib.ticker import MaxNLocator, AutoMinorLocator, FormatStrFormatter
+
+from sklearn.decomposition import PCA
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.preprocessing import StandardScaler, SplineTransformer
+
+from scipy.interpolate import UnivariateSpline
+from scipy.optimize import curve_fit
+from scipy.stats import pearsonr, spearmanr, pointbiserialr, chi2
+
+import module_helper as helper
+
 
 ### Generalize colors as an input_variable
+### PCA: Option to plot centroids
+### Scatter: Dot size as input parameter
 
 ### Possible extensions
 ## Options to add later
@@ -41,10 +45,8 @@ import ast
 ## if sample list is provided samples vs. all
 ## Clustermap of DIANN metrics
 ## Clustermap with groups (before and after), multi layer (QC vs. biological)
-## PCA with explained confounders (MPCA?)
 
 ## More comments for main
-## _df for DataFrame (data, metadata, mask, mask_description)
 
 def log_legend(captions, key_figure, figure_path, addition=""):
     """
@@ -463,6 +465,369 @@ def get_confidence_ellipse(x, y, confidence=0.95, **kwargs):
 
     return angle, width, height, #min_x, max_x, min_y, max_y
 
+def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = True):
+    """
+    Calculation of the correlation vectors of a single transformed dataset.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    data_transformed : np.ndarray
+        Sample coordinates of the principal components (Indices: Samples, Columns: Components).
+    data_columns : list
+        Column names of the data, in the row order of data_transformed.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the coordinate is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings marking properties that are one-hot encoded regardless of their dtype. The default is None.
+    verbose : bool, optional
+        If True, the dropped and the re-encoded properties are printed. The default is False.
+
+    Returns
+    -------
+    vectors : pd.DataFrame
+        Coordinates of each property (Indices: Properties/Levels, Columns: PC_1 ... PC_n) in the range [-1,1].
+
+    """
+    metadata_, data_transformed, components = get_aligned_metadata(metadata, data_transformed, data_columns, n_components)
+    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+
+    vectors = pd.DataFrame(np.nan, index = design.columns, columns = components, dtype = float)
+    for property_name in design.columns:
+        values = design[property_name].to_numpy(dtype = float)
+        for i, component in enumerate(components):
+            coordinates = data_transformed[:,i]
+            mask = np.isfinite(values) & np.isfinite(coordinates)
+            if mask.sum() < min_samples:
+                continue
+            if (values[mask].std() < 1e-12) or (coordinates[mask].std() < 1e-12):
+                continue
+            vectors.loc[property_name,component] = float(np.corrcoef(values[mask], coordinates[mask])[0,1])
+    return vectors
+
+def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = True):
+    """
+    Calculation of the squared correlation ratio of a single transformed dataset.
+
+    All levels of a property are fitted jointly, so that the returned value is the fraction of the variance of a component explained by that property.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    data_transformed : np.ndarray
+        Sample coordinates of the principal components (Indices: Samples, Columns: Components).
+    data_columns : list
+        Column names of the data, in the row order of data_transformed.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the value is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings marking properties that are one-hot encoded regardless of their dtype. The default is None.
+    adjusted : bool, optional
+        If True, eta2 is corrected for the number of levels of a property. The default is False.
+    verbose : bool, optional
+        If True, the dropped and the re-encoded properties are printed. The default is False.
+
+    Returns
+    -------
+    eta2 : pd.DataFrame
+        Squared correlation ratio of each property (Indices: Properties, Columns: PC_1 ... PC_n) in the range [0,1].
+
+    """
+    metadata_, data_transformed, components = get_aligned_metadata(metadata, data_transformed, data_columns, n_components)
+    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+
+    blocks = {}
+    for property_name in metadata_.columns:
+        levels = [entry for entry in design.columns if (entry == property_name) or str(entry).startswith("%s=" % property_name)]
+        if len(levels) > 0:
+            blocks[property_name] = levels
+
+    eta2 = pd.DataFrame(np.nan, index = list(blocks.keys()), columns = components, dtype = float)
+    for property_name, levels in blocks.items():
+        block = design[levels].to_numpy(dtype = float)
+        for i, component in enumerate(components):
+            coordinates = data_transformed[:,i]
+            mask = np.isfinite(coordinates) & np.all(np.isfinite(block), axis = 1)
+            if mask.sum() < min_samples:
+                continue
+            target = coordinates[mask]
+            total = float(((target - target.mean())**2).sum())
+            if total < 1e-12:
+                continue
+            predictors = np.column_stack([np.ones(int(mask.sum())), block[mask,:]])
+            coefficients = np.linalg.lstsq(predictors, target, rcond = None)[0]
+            residual = float(((target - predictors.dot(coefficients))**2).sum())
+            value = 1.0 - (residual/total)
+            degrees = int(np.linalg.matrix_rank(predictors)) - 1
+            if adjusted and ((mask.sum() - degrees - 1) > 0):
+                value = 1.0 - ((1.0 - value)*(mask.sum() - 1)/(mask.sum() - degrees - 1))
+            elif not adjusted:
+                value = min(max(value, 0.0), 1.0)
+            eta2.loc[property_name,component] = value
+    return eta2
+
+def get_aligned_metadata(metadata, data_transformed, data_columns, n_components):
+    """
+    Alignment of the metadata with the samples of a transformed dataset.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    data_transformed : np.ndarray
+        Sample coordinates of the principal components (Indices: Samples, Columns: Components).
+    data_columns : list
+        Column names of the data, in the row order of data_transformed.
+    n_components : int
+        Requested number of principal components.
+
+    Returns
+    -------
+    metadata_ : pd.DataFrame
+        Metadata restricted to the samples of the dataset and ordered like data_transformed.
+    data_transformed : np.ndarray
+        Sample coordinates restricted to the first n_components components.
+    components : list of str
+        Names of the components ("PC_1" ... "PC_n").
+
+    """
+    data_columns = list(data_columns)
+    data_transformed = np.asarray(data_transformed, dtype = float)
+    if data_transformed.ndim != 2:
+        raise ValueError("data_transformed has to be two-dimensional (Indices: Samples, data_columns: Components).")
+    if data_transformed.shape[0] != len(data_columns):
+        raise ValueError("data_transformed (%i samples) and data_columns (%i samples) do not match." % (data_transformed.shape[0], len(data_columns)))
+    missing = [entry for entry in data_columns if entry not in metadata.index]
+    if len(missing) > 0:
+        raise ValueError("%i samples are not contained in the metadata, e.g. %s." % (len(missing), missing[0]))
+
+    metadata_ = metadata.loc[data_columns]
+    n_components = min(n_components, data_transformed.shape[1])
+    components = ["PC_%i" % (i+1) for i in range(n_components)]
+    return metadata_, data_transformed[:,:n_components], components
+
+def get_design_matrix(metadata, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False):
+    """
+    Transformation of the metadata into a purely numeric design matrix.
+
+    Numeric and boolean properties are kept as they are, every other property is one-hot encoded into one indicator column per level ("Property=Level"). 
+    Missing values are kept as NaN, also in the indicator columns, so that samples without a label are excluded instead of being counted as a zero. 
+    Properties with exactly two levels are encoded by a single indicator column, since the second one would only mirror the first.
+
+    Numeric properties whose name matches categorical_properties are one-hot encoded as well. 
+    This covers label-encoded categories such as a batch numbered 1,2,3, whose numbering carries no order and whose effect would be invisible in a linear orrelation unless it happens to be monotone in the numbering.
+
+    Categorical properties with a single level carry no information and categorical properties with too many levels (identifiers, free text) are too fragmented to be interpretable, both are dropped. T
+    he upper limit is max_entries, or the usually more generous max_entries_forced for the properties matched by categorical_properties, whose number of levels is not known beforehand.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    max_entries : int, optional
+        Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously, since the number of batches of a study is not known beforehand, but low enough to still catch free text. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
+    verbose : bool, optional
+        If True, the dropped properties and the numeric properties encoded as categories are printed. The default is False.
+
+    Returns
+    -------
+    design : pd.DataFrame
+        Numeric representation of the metadata (Indices: Samples, Columns: Properties/Levels).
+
+    """
+    categorical_properties = [] if categorical_properties is None else [str(entry).lower() for entry in categorical_properties]
+
+    blocks = []
+    dropped = {}
+    encoded = []
+    for property_name in metadata.columns:
+        values = metadata[property_name]
+        is_forced = any([entry in str(property_name).lower() for entry in categorical_properties])
+        is_numeric = pd.api.types.is_bool_dtype(values) or pd.api.types.is_numeric_dtype(values)
+
+        if is_numeric and not is_forced:
+            blocks.append(values.astype(float).rename(property_name))
+            continue
+        if is_numeric:
+            encoded.append(property_name)
+            if np.all(np.mod(values.dropna().to_numpy(dtype = float), 1) == 0):
+                values = values.astype("Int64")
+
+        n_entries = values.dropna().nunique()
+        limit = max_entries_forced if is_forced else max_entries
+        if (n_entries < 2) or (n_entries > limit) or (n_entries >= len(metadata)):
+            dropped[property_name] = n_entries
+            continue
+
+        dummies = pd.get_dummies(values, prefix = property_name, prefix_sep = "=", dtype = float)
+        if n_entries == 2:
+            dummies = dummies.iloc[:,[1]]
+        dummies.loc[values.isna(),:] = np.nan
+        blocks.append(dummies)
+
+    if verbose and (len(encoded) > 0):
+        print("Encoded %i numeric properties as categories: %s" % (len(encoded), ", ".join([str(entry) for entry in encoded])))
+    if verbose and (len(dropped) > 0):
+        print("Dropped %i categorical properties (allowed: 2-%i levels, 2-%i for %s): %s" % (len(dropped), max_entries, max_entries_forced, "/".join(categorical_properties) if len(categorical_properties) > 0 else "none", ", ".join(["%s (%i levels)" % (key,value) for key,value in dropped.items()])))
+    if len(blocks) == 0:
+        raise ValueError("metadata does not contain any property that can be projected.")
+    return pd.concat(blocks, axis = 1)
+
+def get_metadata_property_colors(entries, metadata, cmap = "tab10"):
+    """
+    Assignment of one color per metadata property to the rows of a vector or eta2 table.
+
+    Parameters
+    ----------
+    entries : list
+        Row names of the table ("Property" or "Property=Level").
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    cmap : str, optional
+        Colormap the colors are taken from. The default is "tab10".
+
+    Returns
+    -------
+    properties : list
+        Property each entry belongs to, in the order of entries.
+    labels : list
+        Level of each entry, or the property itself for a property without levels.
+    colors : dict
+        Color for each property.
+
+    """
+    properties = []
+    labels = []
+    for entry in entries:
+        name = str(entry)
+        for property_name in metadata.columns:
+            if (entry == property_name) or name.startswith("%s=" % property_name):
+                name = str(property_name)
+                break
+        properties.append(name)
+        labels.append(str(entry)[len(name)+1:] if str(entry) != name else name)
+
+    palette = plt.get_cmap(cmap)
+    unique = list(dict.fromkeys(properties))
+    colors = {name: palette(index % palette.N) for index, name in enumerate(unique)}
+    return properties, labels, colors
+
+def get_visible_entries(table, i, j, top_n = None, noise_level = None):
+    """
+    Selection of the entries of a vector or eta2 table drawn within the plane of two principal components.
+
+    The entries are ranked by their distance from the origin within that plane, which is the length of the vector for get_metadata_vectors and the distance within the relationship square for get_metadata_eta2. 
+    In both cases the squared distance is the fraction of the variance of the property that the two components account for, so a property that is barely represented within the plotted plane is ranked last.
+    Entries without a finite value in one of the two components are never drawn.
+
+    Parameters
+    ----------
+    table : pd.DataFrame
+        Coordinates of each property (Indices: Properties/Levels, Columns: PC_1 ... PC_n).
+    i : int
+        Component plotted along the x-axis.
+    j : int
+        Component plotted along the y-axis.
+    top_n : int, optional
+        If set, only the top_n entries with the highest distance are returned. The default is None.
+    noise_level : float, optional
+        If set, entries with a distance below noise_level are not returned. The default is None.
+
+    Returns
+    -------
+    entries : list
+        Rows to be drawn, ordered by decreasing distance from the origin.
+
+    """
+    x = table["PC_%i" % (i+1)]
+    y = table["PC_%i" % (j+1)]
+    distances = np.sqrt(x**2 + y**2)
+    distances = distances[np.isfinite(x) & np.isfinite(y)]
+    if noise_level is not None:
+        distances = distances[distances >= noise_level]
+    distances = distances.sort_values(ascending = False)
+    if top_n is not None:
+        distances = distances.iloc[:top_n]
+    return list(distances.index)
+
+def get_axis_limits(table, n_components, axis_offset = 0.1):
+    """
+    Calculation of one axis limit per principal component, shared by the whole row and column of a dataset.
+
+    Parameters
+    ----------
+    table : pd.DataFrame
+        Coordinates of each property (Indices: Properties, Columns: PC_1 ... PC_n).
+    n_components : int
+        Number of components shown in the grid.
+    axis_offset : float, optional
+        Fraction of the span added as a margin, so that a property lying on the origin is not cut by the axis. The default is 0.1.
+
+    Returns
+    -------
+    limits : list of tuple of float
+        Lower and upper limit of each component, in the order PC_1 ... PC_n.
+
+    """
+    components = ["PC_%i" % (index+1) for index in range(n_components)]
+    values = table[components].to_numpy(dtype = float)
+    values = np.where(np.isfinite(values), values, np.nan)
+    if not np.isfinite(values).any():
+        return [(-0.05,1.05) for component in components]
+
+    lower = min(0.0, float(np.nanmin(values)))
+    span = float(np.nanmax(values)) - lower
+    if span < 1e-12:
+        span = 1.0
+    margin = span*axis_offset/2.0
+    return [(lower-margin, lower+span+margin) for component in components]
+
+def merge_duplicate_entries(table, separator = " / ", decimals = 12):
+    """
+    Merging of properties that have identical coordinates into a single entry.
+ 
+    Parameters
+    ----------
+    table : pd.DataFrame
+        Coordinates of each property (Indices: Properties, Columns: PC_1 ... PC_n).
+    separator : str, optional
+        String the merged property names are joined with. The default is " / ".
+    decimals : int, optional
+        Number of decimals the coordinates are rounded to before they are compared. The default is 12.
+ 
+    Returns
+    -------
+    merged : pd.DataFrame
+        Table with one row per unique set of coordinates, in the order of the input.
+ 
+    """
+    keys = {}
+    for property_name in table.index:
+        key = tuple(table.loc[property_name].round(decimals).fillna(np.inf))
+        keys.setdefault(key, []).append(str(property_name))
+ 
+    merged = table.loc[[names[0] for names in keys.values()]].copy()
+    merged.index = [separator.join(names) for names in keys.values()]
+    return merged
+
 ### For all modules to check how either plot changes, adjust labels for summarization
 def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sample_type=None, sample_type_column=None, size = (10, 10), fontsize = 15, ylabel_int = "# Precursors", y_label_box = "log2(Precursor quantity)", x_label = "Samples", step = "", outfile = "Intensity_distribution_boxplot.png", column_color = None, use_metadata_coloring = False, cmap=None, continuous=False):
     """
@@ -863,7 +1228,7 @@ def plot_CV_violin(data_origin, metadata, data_processed = None, group_columns =
 # Corrections: columns used -> continuous scale
 # Normalization: mean intensities and summed intensities (log) -> continuous scale
 # Imputation: mean intensities and summed intensities (log) and missingness -> continuous scale
-def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1, return_fitted_model = False):
+def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 15, outfile = "PCA.png", continuous = True, column_color = None, use_metadata_coloring = False, coloring_property = "Missingness", base=2, cmap=None, plot_confidence_ellipse=False, confidence=0.95, set_axis_lim = False, axis_offset = 0.1, return_fitted_data = False):
     """
     Plotting of the first n_components principal components with different coloring options.
 
@@ -909,15 +1274,19 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         Set axis-limits automatically (sometimes needed if plot_confidence_ellipse == True). The default is False.
     axis_offset : float, optional
         Axis offset for automatic axis-limits. The default is 0.1.
-    return_fitted_model : bool, optional
-        If True returns the fitted model for additional analysis
+    return_fitted_data : bool, optional
+        If True returns the fitted data for additional analysis
         
     Returns
     -------
-    pca_origin : obj, optional
+    data_origin_transformed : np.ndarray, optional
         Fitted model for origin data
-    pca_processed : obj, optional
+    data_processed_transformed : np.ndarray, optional
         Fitted model for processed data
+    data_origin_columns : list, optional
+        Column names of data_origin
+    data_preocessed_columns : list, optional
+        Column names of data_processed
     
     """
     
@@ -1115,11 +1484,586 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         cbar.ax.set_yticklabels(values_dict.keys())
     
     plt.savefig(outfile, bbox_inches="tight")
-    if return_fitted_model:
+    if return_fitted_data:
         if data_processed is not None:
-            return pca_origin, pca_processed
+            return data_origin_transformed, data_processed_transformed, list(data_origin_pca.columns), list(data_processed_pca.columns)
         else:
-            return pca_origin
+            return data_origin_transformed, data_origin_pca.columns
+    return
+
+def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False, top_n = None, noise_level = None, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_vectors.png"):
+    """
+    Plots vector of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties) with the same indices as the columns of data_origin.
+    data_origin_transformed : np.ndarray
+        Sample coordinates of the principal components of data_origin (Indices: Samples, Columns: Components).
+    data_origin_columns : list
+        Column names of data_origin, in the row order of data_origin_transformed.
+    data_processed_transformed : np.ndarray, optional
+        Sample coordinates of the principal components of data_processed (Indices: Samples, Columns: Components). The default is None.
+    data_processed_columns : list, optional
+        Column names of data_processed, in the row order of data_processed_transformed. The default is None.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the coordinate is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
+    verbose : bool, optional
+        If True, the dropped properties and the numeric properties encoded as categories are printed. The default is False.
+    top_n : int, optional
+        If set, only the top_n vectors with the highest length are drawn within each pair of components. The default is None.
+    noise_level : float, optional
+        If set, vectors with a length below noise_level are not drawn. The length is the fraction of the variance of a property explained by the two components, so a value of 0.3 hides everything below 9% explained variance. The default is None.
+    size : tuple of float, optional
+        Size of the plot. The default is (10,10).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_title : int, optional
+        Fontsize of the title. The default is 15.
+    line_offset : float, optional
+        Offset of diagonal line (needs to adjusted if a lot of components are plotted. The default is 0.025.
+    fontsize_label : int, optional
+        Font size of the vector labels. The default is 12.
+    outfile : str, optional
+        File path for the figure. The default is "PCA_metadata_vectors.png".
+    """
+
+    vectors_origin = get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    vectors_processed = None
+    if (data_processed_transformed is not None) and (data_processed_columns is not None):
+        vectors_processed = get_metadata_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+
+    n_components = min(n_components, vectors_origin.shape[1])
+    #properties, labels, colors = get_metadata_property_colors(vectors_origin.index, metadata)
+    visible = []
+
+    # Plotting
+    fig = plt.figure(figsize=(n_components*2.5,n_components*2.5))
+    gs = GridSpec(n_components,n_components, hspace= 0.1, wspace = 0.1)
+
+    for i in range(n_components-1):
+        for j in range(i+1,n_components):
+            ax = fig.add_subplot(gs[j,i])
+            entries = draw_vectors(ax, vectors_origin, metadata, i, j, fontsize_label, top_n = top_n, noise_level = noise_level)
+            visible += [entry for entry in entries if entry not in visible]
+
+            ax.tick_params(labelsize = fontsize)
+            if i != 0:
+                ax.set_yticklabels([])
+            else:
+                ax.set_ylabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
+            if j != n_components-1:
+                ax.set_xticklabels([])
+            else:
+                ax.set_xlabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
+
+            ax.set_axisbelow(True)
+            ax.grid()
+
+            if vectors_processed is not None:
+                ax = fig.add_subplot(gs[i,j])
+                entries = draw_vectors(ax, vectors_processed, metadata, j, i, fontsize_label, top_n = top_n, noise_level = noise_level)
+                visible += [entry for entry in entries if entry not in visible]
+
+                ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
+                ax.yaxis.tick_right()
+                ax.yaxis.set_label_position("right")
+                ax.xaxis.tick_top()
+                ax.xaxis.set_label_position("top")
+
+                if j != n_components-1:
+                    ax.set_yticklabels([])
+                else:
+                    ax.set_ylabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
+                if i != 0:
+                    ax.set_xticklabels([])
+                else:
+                    ax.set_xlabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
+
+                ax.set_axisbelow(True)
+                ax.grid()
+
+    if vectors_processed is not None:
+        s = 2.5*(np.log2(n_components)+1)/n_components
+        s_min = 0.01*n_components
+        s_max = 1 - s_min
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
+        line = plt.Line2D((s_min,s_max-(.9/n_components)),
+                          (s_max,s_min+(.9/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
+        fig.add_artist(line)
+
+    #lax = fig.add_subplot(gs[n_components-1,n_components-1])
+    #lax.set_axis_off()
+    #drawn = [name for entry, name in zip(vectors_origin.index, properties) if entry in visible]
+    #handles = [plt.Line2D([0],[0], color=colors[name], linewidth=2, label=name) for name in dict.fromkeys(drawn)]
+    #lax.legend(handles=handles, loc="center", fontsize=fontsize_label, frameon=False)
+
+    plt.savefig(outfile, bbox_inches="tight")
+    return
+
+
+def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = False, top_n = None, noise_level = None, merge_duplicates = False, set_axis_lim = False, axis_offset = 0.1, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_eta2.png",):
+    """
+    Plots the squared correlation ratio (eta2) of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
+ 
+    All levels of a property are summarised by a single value in the range [0,1], so a property is a point within the unit square (relationship square) instead of a vector within the unit circle. 
+    The distance from the origin measures how much of the plotted plane a property accounts for, the position along an axis how the effect is distributed over the two components.
+ 
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties) with the same indices as the columns of data_origin.
+    data_origin_transformed : np.ndarray
+        Sample coordinates of the principal components of data_origin (Indices: Samples, Columns: Components).
+    data_origin_columns : list
+        Column names of data_origin, in the row order of data_origin_transformed.
+    data_processed_transformed : np.ndarray, optional
+        Sample coordinates of the principal components of data_processed (Indices: Samples, Columns: Components). The default is None.
+    data_processed_columns : list, optional
+        Column names of data_processed, in the row order of data_processed_transformed. The default is None.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the value is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
+    adjusted : bool, optional
+        If True, eta2 is corrected for the number of levels of a property, which makes properties with many levels comparable to properties with few levels and can become slightly negative. The default is False.
+    verbose : bool, optional
+        If True, the dropped properties and the numeric properties encoded as categories are printed. The default is False.
+    top_n : int, optional
+        If set, only the top_n properties with the highest distance from the origin are drawn within each pair of components. The default is None.
+    noise_level : float, optional
+        If set, properties with a distance from the origin below noise_level are not drawn. The default is None.
+    merge_duplicates : bool, optional
+        If True, properties with identical values are merged into a single entry whose name lists all of them, since a property that is contained twice in the metadata (a batch as a name and as an identifier) explains exactly the same variance and would be drawn on top of itself. The default is False.
+    set_axis_lim : bool, optional
+        If True, the axes are limited to the range of the values instead of the full unit square, which separates the properties if all of them explain only a small fraction of the variance. One limit is calculated per component, so that it stays constant along the whole row and column of a dataset, and all components share the same span, so that the panels stay square. The default is False.
+    axis_offset : float, optional
+        Fraction of the span added on both sides if set_axis_lim == True. The default is 0.1.
+    size : tuple of float, optional
+        Size of the plot. The default is (10,10).
+    fontsize : int, optional
+        Font size of the labels. The default is 15.
+    fontsize_title : int, optional
+        Fontsize of the title. The default is 15.
+    line_offset : float, optional
+        Offset of diagonal line (needs to adjusted if a lot of components are plotted. The default is 0.025.
+    fontsize_label : int, optional
+        Font size of the point labels. The default is 12.
+    outfile : str, optional
+        File path for the figure. The default is "PCA_metadata_eta2.png".
+    """
+ 
+    eta2_origin = get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    eta2_processed = None
+    if (data_processed_transformed is not None) and (data_processed_columns is not None):
+        eta2_processed = get_metadata_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+ 
+    if merge_duplicates:
+        eta2_origin = merge_duplicate_entries(eta2_origin)
+        if eta2_processed is not None:
+            eta2_processed = merge_duplicate_entries(eta2_processed)
+ 
+    n_components = min(n_components, eta2_origin.shape[1])
+    lower = min(0.0, float(np.nanmin(eta2_origin.to_numpy())) if eta2_origin.notna().any().any() else 0.0)
+    limits_origin = get_axis_limits(eta2_origin, n_components, axis_offset = axis_offset) if set_axis_lim else None
+    limits_processed = None
+    if eta2_processed is not None:
+        limits_processed = get_axis_limits(eta2_processed, n_components, axis_offset = axis_offset) if set_axis_lim else None
+ 
+    # Plotting
+    fig = plt.figure(figsize=(n_components*2.5,n_components*2.5))
+    gs = GridSpec(n_components,n_components, hspace= 0.1, wspace = 0.1)
+ 
+    for i in range(n_components-1):
+        for j in range(i+1,n_components):
+            ax = fig.add_subplot(gs[j,i])
+            draw_eta2(ax, eta2_origin, metadata, i, j, fontsize_label, top_n = top_n, noise_level = noise_level, lower = lower, limits = limits_origin)
+ 
+            ax.tick_params(labelsize = fontsize)
+            if i != 0:
+                ax.set_yticklabels([])
+            else:
+                ax.set_ylabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
+            if j != n_components-1:
+                ax.set_xticklabels([])
+            else:
+                ax.set_xlabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
+ 
+            ax.set_axisbelow(True)
+            ax.grid()
+ 
+            if eta2_processed is not None:
+                ax = fig.add_subplot(gs[i,j])
+                draw_eta2(ax, eta2_processed, metadata, j, i, fontsize_label, top_n = top_n, noise_level = noise_level, lower = lower, limits = limits_processed)
+ 
+                ax.tick_params(labelsize = fontsize, labeltop=True, labelright=True, labelbottom=False, labelleft = False)
+                ax.yaxis.tick_right()
+                ax.yaxis.set_label_position("right")
+                ax.xaxis.tick_top()
+                ax.xaxis.set_label_position("top")
+ 
+                if j != n_components-1:
+                    ax.set_yticklabels([])
+                else:
+                    ax.set_ylabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
+                if i != 0:
+                    ax.set_xticklabels([])
+                else:
+                    ax.set_xlabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
+ 
+                ax.set_axisbelow(True)
+                ax.grid()
+ 
+    if eta2_processed is not None:
+        s = 2.5*(np.log2(n_components)+1)/n_components
+        s_min = 0.01*n_components
+        s_max = 1 - s_min
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "Before", rotation=315, va="center", ha="right",color="royalblue", fontsize = fontsize_title)
+        fig.text(1.5/(s*n_components),(s*n_components-1.5)/(s*n_components), "After", rotation=315, va="center", ha="left",color="orange", fontsize = fontsize_title)
+        line = plt.Line2D((s_min,s_max-(.9/n_components)),
+                          (s_max,s_min+(.9/n_components)+(line_offset)*(n_components-1)/n_components), color="k", linewidth=1, linestyle=":")
+        fig.add_artist(line)
+ 
+    plt.savefig(outfile, bbox_inches="tight")
+    return
+
+def get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False):
+    """
+    Calculation of the vector of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
+    Each coordinate is the Pearson correlation between the property and the sample coordinates of a principal component for supplementary variables. 
+    Non-numeric properties are one-hot encoded beforehand and every level is projected separately as "Property=Level". 
+    Properties with two levels are represented by a single vector.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties) with the same indices as the columns of data_origin.
+    data_origin_transformed : np.ndarray
+        Sample coordinates of the principal components of data_origin (Indices: Samples, Columns: Components).
+    data_origin_columns : list
+        Column names of data_origin, in the row order of data_origin_transformed.
+    data_processed_transformed : np.ndarray, optional
+        Sample coordinates of the principal components of data_processed (Indices: Samples, Columns: Components). The default is None.
+    data_processed_columns : list, optional
+        Column names of data_processed, in the row order of data_processed_transformed. The default is None.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the coordinate is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
+    verbose : bool, optional
+        If True, the dropped properties and the numeric properties encoded as categories are printed. The default is False.
+
+    Returns
+    -------
+    vectors_origin : pd.DataFrame
+        Coordinates of each property of data_origin (Indices: Properties/Levels, Columns: PC_1 ... PC_n) in the range [-1,1].
+    vectors_processed : pd.DataFrame, optional
+        Coordinates of each property of data_processed (Indices: Properties/Levels, Columns: PC_1 ... PC_n) in the range [-1,1]. Only returned if data_processed_transformed and data_processed_columns are provided.
+
+    """
+    vectors_origin = get_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    if (data_processed_transformed is None) or (data_processed_columns is None):
+        return vectors_origin
+    vectors_processed = get_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    return vectors_origin, vectors_processed
+
+def get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = False):
+    """
+    Calculation of the squared correlation ratio (eta2) of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
+
+    Eta2 is the fraction of the variance of a principal component that is explained by a property, i.e. the coefficient of determination of the component regressed on all levels of that property. 
+    Unlike the correlation vectors, all levels of a property are summarised by a single value in the range [0,1], which makes properties of different types and with a different number of levels comparable.
+    This allows to track the effect size of a property before and after a processing step.
+    For a numeric property eta2 is the squared Pearson correlation, for a property with two levels it is the squared coordinate of get_metadata_vectors.
+
+    Eta2 increases with the number of levels of a property even for random labels, since one parameter is fitted per level. 
+    adjusted = True applies the usual correction for the degrees of freedom, which makes properties with many levels Batch) comparable to properties with few levels (Sex) and can become slightly negative if a property explains no more than noise.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties) with the same indices as the columns of data_origin.
+    data_origin_transformed : np.ndarray
+        Sample coordinates of the principal components of data_origin (Indices: Samples, Columns: Components).
+    data_origin_columns : list
+        Column names of data_origin, in the row order of data_origin_transformed.
+    data_processed_transformed : np.ndarray, optional
+        Sample coordinates of the principal components of data_processed (Indices: Samples, Columns: Components). The default is None.
+    data_processed_columns : list, optional
+        Column names of data_processed, in the row order of data_processed_transformed. The default is None.
+    n_components : int, optional
+        First (highest Eigenvalue) n_components the properties are projected on. The default is 4.
+    min_samples : int, optional
+        Minimum number of samples with a finite value in both the property and the component, below which the value is set to NaN. The default is 3.
+    max_entries : int, optional
+        Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    max_entries_forced : int, optional
+        Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously, since the number of batches of a study is not known beforehand, but low enough to still catch free text. The default is 30.
+    categorical_properties : tuple of str, optional
+        Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
+    adjusted : bool, optional
+        If True, eta2 is corrected for the number of levels of a property. The default is False.
+    verbose : bool, optional
+        If True, the dropped properties and the numeric properties encoded as categories are printed. The default is False.
+
+    Returns
+    -------
+    eta2_origin : pd.DataFrame
+        Squared correlation ratio of each property of data_origin (Indices: Properties, Columns: PC_1 ... PC_n) in the range [0,1].
+    eta2_processed : pd.DataFrame, optional
+        Squared correlation ratio of each property of data_processed (Indices: Properties, Columns: PC_1 ... PC_n) in the range [0,1]. Only returned if data_processed_transformed and data_processed_columns are provided.
+
+    """
+    eta2_origin = get_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    if (data_processed_transformed is None) or (data_processed_columns is None):
+        return eta2_origin
+    eta2_processed = get_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    return eta2_origin, eta2_processed
+
+def draw_vectors(ax, vectors, metadata, i, j, fontsize_label, top_n = None, noise_level = None):
+    """
+    Drawing of the correlation circle of two principal components into a single axis.
+
+    Parameters
+    ----------
+    ax : obj
+        Axis the vectors are drawn into.
+    vectors : pd.DataFrame
+        Coordinates of each property (Indices: Properties/Levels, Columns: PC_1 ... PC_n).
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    i : int
+        Component plotted along the x-axis.
+    j : int
+        Component plotted along the y-axis.
+    fontsize_label : int
+        Font size of the vector labels.
+    top_n : int, optional
+        If set, only the top_n vectors with the highest length are drawn. The default is None.
+    noise_level : float, optional
+        If set, vectors with a length below noise_level are not drawn. The default is None.
+
+    Returns
+    -------
+    entries : list
+        Rows of vectors that have been drawn.
+
+    """
+    properties, labels, colors = get_metadata_property_colors(vectors.index, metadata)
+    entries = get_visible_entries(vectors, i, j, top_n = top_n, noise_level = noise_level)
+
+    ax.set_xlim(-1.25,1.25)
+    ax.set_ylim(-1.25,1.25)
+    ax.set_xticks([-1,0,1])
+    ax.set_yticks([-1,0,1])
+    ax.set_xticks([-0.5,0.5], minor=True)
+    ax.set_yticks([-0.5,0.5], minor=True)
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"], alpha=plt.rcParams["grid.alpha"])
+    ax.set_aspect("equal")
+
+    ax.add_patch(plt.Circle((0,0), 1, edgecolor="k", facecolor="None", linewidth=1))
+    ax.axhline(0, color="k", linewidth=0.5)
+    ax.axvline(0, color="k", linewidth=0.5)
+
+    points = []
+    texts = []
+    label_colors = []
+    for entry in entries:
+        index = list(vectors.index).index(entry)
+        property_name = properties[index]
+        label = labels[index]
+        x = vectors.loc[entry,"PC_%i" % (i+1)]
+        y = vectors.loc[entry,"PC_%i" % (j+1)]
+        ax.annotate("", xy=(x,y), xytext=(0,0), arrowprops=dict(arrowstyle="-|>", color=colors[property_name], linewidth=1.5, shrinkA=0, shrinkB=0))
+        points.append((x,y))
+        texts.append(property_name if label == property_name else "%s : %s" % (property_name, label))
+        label_colors.append(colors[property_name])
+
+    draw_repelled_labels(ax, points, texts, label_colors, fontsize_label)
+    return entries
+
+def draw_eta2(ax, eta2, metadata, i, j, fontsize_label, top_n = None, noise_level = None, lower = 0.0, limits = None):
+    """
+    Drawing of the relationship square of two principal components into a single axis.
+ 
+    Parameters
+    ----------
+    ax : obj
+        Axis the points are drawn into.
+    eta2 : pd.DataFrame
+        Squared correlation ratio of each property (Indices: Properties, Columns: PC_1 ... PC_n).
+    metadata : pd.DataFrame
+        Metadata for each sample (Indices: Samples, Columns: Properties).
+    i : int
+        Component plotted along the x-axis.
+    j : int
+        Component plotted along the y-axis.
+    fontsize_label : int
+        Font size of the point labels.
+    top_n : int, optional
+        If set, only the top_n properties with the highest distance from the origin are drawn. The default is None.
+    noise_level : float, optional
+        If set, properties with a distance from the origin below noise_level are not drawn. The default is None.
+    lower : float, optional
+        Lower limit of both axes, below 0 for adjusted values. Ignored if limits is given. The default is 0.0.
+    limits : list of tuple of float, optional
+        Lower and upper limit of each component as returned by get_axis_limits. If None, the full unit square is shown. The default is None.
+ 
+    Returns
+    -------
+    entries : list
+        Rows of eta2 that have been drawn.
+ 
+    """
+    properties, labels, colors = get_metadata_property_colors(eta2.index, metadata)
+    entries = get_visible_entries(eta2, i, j, top_n = top_n, noise_level = noise_level)
+ 
+    if limits is None:
+        ax.set_xlim(lower-0.05,1.05)
+        ax.set_ylim(lower-0.05,1.05)
+        ax.set_xticks([0,1])
+        ax.set_yticks([0,1])
+        ax.set_xticks([0.5], minor=True)
+        ax.set_yticks([0.5], minor=True)
+    else:
+        ax.set_xlim(limits[i])
+        ax.set_ylim(limits[j])
+        ax.xaxis.set_major_locator(MaxNLocator(nbins = 3))
+        ax.yaxis.set_major_locator(MaxNLocator(nbins = 3))
+        ax.xaxis.set_minor_locator(AutoMinorLocator(2))
+        ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"], alpha=plt.rcParams["grid.alpha"])
+    ax.set_aspect("equal")
+ 
+    points = []
+    texts = []
+    label_colors = []
+    for entry in entries:
+        index = list(eta2.index).index(entry)
+        property_name = properties[index]
+        label = labels[index]
+        x = eta2.loc[entry,"PC_%i" % (i+1)]
+        y = eta2.loc[entry,"PC_%i" % (j+1)]
+        ax.scatter(x, y, color=colors[property_name], s=60, zorder=3)
+        points.append((x,y))
+        texts.append(property_name if label == property_name else "%s : %s" % (property_name, label))
+        label_colors.append(colors[property_name])
+ 
+    draw_repelled_labels(ax, points, texts, label_colors, fontsize_label)
+    return entries
+
+def draw_repelled_labels(ax, points, texts, label_colors, fontsize_label, padding = 1.5, marker_size = 6.0):
+    """
+    Drawing of labels next to their anchor, avoiding the other labels and the markers.
+
+    The size of each label is estimated from its number of characters and the font size and converted into data coordinates.
+    Every label is then placed on the first free position out of eight directions around its anchor and three distances, which is the classical placement of a point label and needs no iteration.
+    The labels are placed in the order they are given, so the most important one should come first, and a thin line is drawn as soon as a label could only be placed further away.
+
+    Parameters
+    ----------
+    ax : obj
+        Axis the labels are drawn into. The limits and the aspect have to be set beforehand.
+    points : list of tuple of float
+        Anchor of each label in data coordinates.
+    texts : list of str
+        Text of each label.
+    label_colors : list
+        Color of each label.
+    fontsize_label : int
+        Font size of the labels.
+    padding : float, optional
+        Additional space around each label in points. The default is 1.5.
+    marker_size : float, optional
+        Radius of a marker in points, kept free around each anchor. The default is 6.0.
+
+    Returns
+    -------
+    None
+
+    """
+    if len(points) == 0:
+        return
+
+    origin = ax.transData.inverted().transform((0.0,0.0))
+    unit = ax.transData.inverted().transform((1.0,1.0))
+    pixel = ax.get_figure().dpi/72.0
+    per_x = abs(unit[0]-origin[0])*pixel
+    per_y = abs(unit[1]-origin[1])*pixel
+
+    widths = np.array([(0.55*len(text)*fontsize_label + 2*padding)*per_x for text in texts])
+    heights = np.array([(1.15*fontsize_label + 2*padding)*per_y for text in texts])
+
+    anchors = np.array(points, dtype = float)
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+    marker_x = marker_size*per_x
+    marker_y = marker_size*per_y
+
+    directions = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]
+    distances = [1.0,1.8,2.6]
+
+    positions = np.zeros_like(anchors)
+    scales = np.ones(len(anchors))
+    for index in range(len(anchors)):
+        best_position = None
+        best_cost = None
+        best_distance = 1.0
+        for distance in distances:
+            for direction_x, direction_y in directions:
+                position = np.array([anchors[index,0] + direction_x*(widths[index]/2.0+marker_x)*distance,
+                                     anchors[index,1] + direction_y*(heights[index]/2.0+marker_y)*distance])
+                cost = 0.0
+                cost += max(0.0, (x_min+widths[index]/2.0)-position[0]) + max(0.0, position[0]-(x_max-widths[index]/2.0))
+                cost += max(0.0, (y_min+heights[index]/2.0)-position[1]) + max(0.0, position[1]-(y_max-heights[index]/2.0))
+                cost = cost*1000.0
+                for other in range(index):
+                    overlap_x = (widths[index]+widths[other])/2.0 - abs(position[0]-positions[other,0])
+                    overlap_y = (heights[index]+heights[other])/2.0 - abs(position[1]-positions[other,1])
+                    if (overlap_x > 0) and (overlap_y > 0):
+                        cost += overlap_x*overlap_y/(widths[index]*heights[index])
+                for other in range(len(anchors)):
+                    overlap_x = widths[index]/2.0 + marker_x - abs(position[0]-anchors[other,0])
+                    overlap_y = heights[index]/2.0 + marker_y - abs(position[1]-anchors[other,1])
+                    if (overlap_x > 0) and (overlap_y > 0):
+                        cost += overlap_x*overlap_y/(widths[index]*heights[index])
+                if (best_cost is None) or (cost < best_cost):
+                    best_cost = cost
+                    best_position = position
+                    best_distance = distance
+            if best_cost < 1e-9:
+                break
+        positions[index] = best_position
+        scales[index] = best_distance
+
+    for index, text in enumerate(texts):
+        if scales[index] > 1.0:
+            ax.plot([anchors[index,0],positions[index,0]], [anchors[index,1],positions[index,1]], color=label_colors[index], linewidth=0.5, alpha=0.6, zorder=2)
+        ax.text(positions[index,0], positions[index,1], text, color=label_colors[index], fontsize=fontsize_label, ha="center", va="center", zorder=4)
     return
 
 def plot_distribution(data_origin, metadata, data_processed=None, sample_type = None, sample_type_column = None, step="", outfile = "Distribution.png", size = (10,5), nbins = 50, smoothing_factor = 1e-2, fontsize = 15, xlabel = "log2(PQ)", cmap = "Spectral"):
@@ -1267,7 +2211,6 @@ def plot_distribution(data_origin, metadata, data_processed=None, sample_type = 
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-### TODO: Add LinReg per selection e.g. Batch
 ### TODO: Add that also a list of peptides can be provided instead of plot_by
 def plot_scatter_series(data_origin, metadata, column_metadata, data_processed = None, sample_type = None, sample_type_column = None, plot_by = "Correlation", outfile = "Scatter_series.png", data_type = "continuous", top_n = 3, size = (5,3), ylabel = "log2(Prec. Abundance)", fontsize = 15, use_metadata_coloring = False, cmap = None, continuous = False, column_color = None, plot_linreg = False, base = 2, step="", min_samples=10, limit_y_label=None):
     """
