@@ -1567,7 +1567,7 @@ def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_col
                 ax.set_xlabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
 
             ax.set_axisbelow(True)
-            ax.grid()
+            ax.grid(alpha=0.5)
 
             if vectors_processed is not None:
                 ax = fig.add_subplot(gs[i,j])
@@ -1590,7 +1590,7 @@ def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_col
                     ax.set_xlabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
 
                 ax.set_axisbelow(True)
-                ax.grid()
+                ax.grid(alpha=0.5)
 
     if vectors_processed is not None:
         s = 2.5*(np.log2(n_components)+1)/n_components
@@ -1706,7 +1706,7 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
                 ax.set_xlabel("PC "+str(i+1), fontsize = fontsize, labelpad = 5)
  
             ax.set_axisbelow(True)
-            ax.grid()
+            ax.grid(alpha=0.5)
  
             if eta2_processed is not None:
                 ax = fig.add_subplot(gs[i,j])
@@ -1728,7 +1728,7 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
                     ax.set_xlabel("PC "+str(j+1), fontsize = fontsize, labelpad = 5)
  
                 ax.set_axisbelow(True)
-                ax.grid()
+                ax.grid(alpha=0.5)
  
     if eta2_processed is not None:
         s = 2.5*(np.log2(n_components)+1)/n_components
@@ -1881,7 +1881,7 @@ def draw_vectors(ax, vectors, metadata, i, j, fontsize_label, top_n = None, nois
     ax.set_xticks([-0.5,0.5], minor=True)
     ax.set_yticks([-0.5,0.5], minor=True)
     ax.tick_params(which="minor", length=0)
-    ax.grid(True, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"], alpha=plt.rcParams["grid.alpha"])
+    ax.grid(True, alpha=0.5, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"])
     ax.set_aspect("equal")
 
     ax.add_patch(plt.Circle((0,0), 1, edgecolor="k", facecolor="None", linewidth=1))
@@ -1956,7 +1956,7 @@ def draw_eta2(ax, eta2, metadata, i, j, fontsize_label, top_n = None, noise_leve
         ax.xaxis.set_minor_locator(AutoMinorLocator(2))
         ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(which="minor", length=0)
-    ax.grid(True, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"], alpha=plt.rcParams["grid.alpha"])
+    ax.grid(True, alpha=0.5, which="minor", color=plt.rcParams["grid.color"], linestyle=plt.rcParams["grid.linestyle"], linewidth=plt.rcParams["grid.linewidth"])
     ax.set_aspect("equal")
  
     points = []
