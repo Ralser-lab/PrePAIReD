@@ -220,9 +220,6 @@ process RUN_ALL_MODULES {
           path(report_script),
           path(qa_script),
           path(eval_cfg),
-          path(maxlfqdll),
-          path(maxlfqdylib),
-          val(maxlfqso),
           path(figscptn),
           path(seed_data),
           path(meta_file),
@@ -381,32 +378,6 @@ EOF_STEPS
         log_both "============================================================"
         log_both "[MODULE INFO] Running \${module_name}"
         log_both "----- MODULE START (\${module_name}) -----"
-
-        # Prepare the MaxLFQ shared library.
-        set +e
-        cp -f "${maxlfqso}" ./maxlfq_docker.so
-        maxlfq_cp_rc=\$?
-        set -e
-
-        if [ "\$maxlfq_cp_rc" -ne 0 ] ||
-           [ ! -f ./maxlfq_docker.so ]; then
-
-            log_both "###MOD_ERROR### maxlfq_docker.so could not be prepared: ${maxlfqso}"
-            log_both "[MODULE STATUS] FAILED"
-            log_both "[QA STATUS] SKIPPED because the module could not start."
-            log_both "----- MODULE END -----"
-
-            touch MOD.fail
-            touch QA.skip
-
-            printf '%s\\t%s\\t%s\\n' \
-                "\$module_name" "SKIPPED" "NA" >> qa_status.tsv
-
-            cp -f step_log.txt log.txt || true
-            publish_current_step "\$publish_step" "\$counter"
-            printf '%s\\n' "[FATAL] \${module_name}: maxlfq_docker.so is missing" >> "\$persistent_log"
-            exit 100
-        fi
 
         # Resolve module runner and script.
         if [ "\$engine" = "py" ]; then
@@ -922,16 +893,13 @@ EOF_STEPS
 workflow {
 
     main:
-    
+
     def config_data = pget('config_data', 'Config_data.txt')
     def code_py = pget('code_py', 'modules_python')
     def code_r = pget('code_r', 'modules_R')
     def method_doc = pget('method_doc', 'docs/Method_description.tsv')
     def qa_script_param = pget('qa_script', 'modules_python/module_quality_assessment.py')
     def eval_config_param = pget('eval_config', 'Config_evaluation.txt')
-    def maxlfq_dll_param = pget('maxlfq_dll', 'modules_python/maxlfq.dll')
-    def maxlfq_dylib_param = pget('maxlfq_dylib', 'modules_python/maxlfq.dylib')
-    def maxlfq_so_param = pget('maxlfq_so', '/workflow/modules_python/maxlfq_docker.so')
     def figs_cptn_param = pget('figs_cptn', 'modules_python/Figures_Captions.tsv')
     def cleanup_aggressive = pget('cleanup_aggressive', false)
 
@@ -1070,8 +1038,6 @@ workflow {
     reportPy = mustExist(resolveCode("${code_py}/report.py"), 'modules_python/report.py')
     qaScript = mustExist(resolveCode(qa_script_param as String), 'QA script')
     evalConfig = mustExist(resolveFrom(WORKDIR_ABS, eval_config_param as String), 'Config_evaluation.txt')
-    maxlfqdll = mustExist(resolveCode(maxlfq_dll_param as String), 'maxlfq dll')
-    maxlfqdylib = mustExist(resolveCode(maxlfq_dylib_param as String), 'maxlfq dylib')
 
     figscptn = mustExist(resolveCode(figs_cptn_param as String), 'Figures Captions')
     codePyDir = mustExist(resolveCode(code_py as String), 'modules_python')
@@ -1147,9 +1113,6 @@ workflow {
             file(reportPy.absolutePath),
             file(qaScript.absolutePath),
             file(evalConfig.absolutePath),
-            file(maxlfqdll.absolutePath),
-            file(maxlfqdylib.absolutePath),
-            maxlfq_so_param as String,
             file(figscptn.absolutePath),
             file(seed_data.absolutePath),
             file(metaFile.absolutePath),

@@ -15,17 +15,15 @@ dependencies:
   - seaborn
   - statsmodels
   - python-igraph
-  - tqdm    
+  - tqdm
   - scikit-misc
-  - procps-ng 
+  - procps-ng
   - reportlab
   - pypdf
   - pyarrow
-  - fastparquet 
-  - openpyxl 
-  - cxx-compiler
-  - eigen
-  
+  - fastparquet
+  - openpyxl
+
   # PyTorch CPU builds (lock-file safe)
   - pytorch=2.4.1=cpu_*
   - torchvision=0.19.1=cpu_*
@@ -40,7 +38,7 @@ dependencies:
   - r-missforest
   - r-mice
   - r-imputelcmd
-  
+
   # Bioconductor
   - bioconductor-deseq2
   - bioconductor-edger
