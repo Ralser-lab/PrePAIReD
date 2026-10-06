@@ -1,0 +1,21 @@
+Package	Reference (doi)
+pandas	Data structures for statistical computing in python, McKinney, Proceedings of the 9th Python in Science Conference, 2010, pages 56–61.
+sva	https://doi.org/10.1093/bioinformatics/bts034
+numpy	https://doi.org/10.1038/s41586-020-2649-2
+statsmodels	Seabold, Skipper, and Josef Perktold. “statsmodels: Econometric and statistical modeling with python.” Proceedings of the 9th Python in Science Conference. 2010
+scipy	https://doi.org/10.1038/s41592-019-0686-2
+sklearn	https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html
+igraph	Gábor Csárdi, Tamás Nepusz: The igraph software package for complex network research. InterJournal Complex Systems, 1695, 2006.
+bpca	https://github.com/unifey/bPCAfill
+harmony-pytorch	https://pypi.org/project/harmony-pytorch/
+pycombat	https://github.com/CoAxLab/pycombat
+limma	https://doi.org/10.1093/nar/gkv007
+vsn	Huber, W., von Heydebreck, A., Sueltmann, H., Poustka, A., & Vingron, M. (2002). Variance Stabilization Applied to Microarray Data Calibration and to the Quantification of Differential Expression. In Bioinformatics: Vol. 18 Suppl. 1 (pp. S96–S104).
+harmony	https://www.nature.com/articles/s41592-019-0619-0
+mice	https://doi.org/10.18637/jss.v045.i03
+missForest	https://doi.org/10.1093/bioinformatics/btr597
+pcaMethods	https://doi.org/10.1093/bioinformatics/btm069
+iq	https://doi.org/10.1093/bioinformatics/btz961
+preprocessCore	https://doi.org/10.18129/B9.bioc.preprocessCore
+matplotlib	J. D. Hunter, "Matplotlib: A 2D Graphics Environment", Computing in Science & Engineering, vol. 9, no. 3, pp. 90-95, 2007.
+-	-
