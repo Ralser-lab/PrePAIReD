@@ -1,24 +1,22 @@
-# Preprocessing Pipeline --- Nextflow
+# Preprocessing Pipeline
 
-This repository contains a **Nextflow-based preprocessing workflow** for
-proteomics data. For a more detailed description and other use cases
-please check out docs/Manual_alpha_version.pdf.
+This repository contains a **Nextflow-based preprocessing workflow** for MS-based bottom-up proteomics data. It is designed to run reproducibly using **Docker containers** and requires only a small number of dependencies (see requirements). 
 
-The pipeline is designed to run reproducibly using **Docker containers**
-and requires only a small number of dependencies, but each Python or R 
-code is also designed for manual execution.
+The provided modules also allow for manual execution of every module or the use of single functions within a module (see environment.yml).
+
+For a more detailed description and other use cases please check out docs/Manual_alpha_version.pdf.
 
 ------------------------------------------------------------------------
 
 # Table of Contents
 
 -   [Requirements](#requirements)
+-   [Download the Pipeline](#download-the-pipeline)
 -   [Installation](#installation)
     -   [Docker Installation](#docker-installation)
     -   [Java Installation](#java-installation)
     -   [Nextflow Installation](#nextflow-installation)
     -   [Git Installation](#git-installation)
--   [Download the Pipeline](#download-the-pipeline)
 -   [Starting Docker](#starting-docker)
 -   [Working Directory Setup](#working-directory-setup)
 -   [Configuration Files](#configuration-files)
@@ -36,12 +34,29 @@ code is also designed for manual execution.
 
 # Requirements
 
-You need:
+For a fully automated run you need:
 
 -   Java (JDK 11 or newer recommended)
 -   Docker
 -   Nextflow
 -   Git (optional but recommended)
+
+For manual use no further software is required (see environment.yml for the required packages)
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Download the Pipeline
+
+Clone the repository:
+
+``` bash
+git clone https://github.com/Ralser-lab/Preprocessing.git
+cd Preprocessing
+```
+
+Or download manually via GitHub **Code → Download ZIP**.
 
 [⬆ Back to top](#top)
 
@@ -327,21 +342,6 @@ brew install git
 # Linux / WSL
 sudo apt-get install -y git
 ```
-
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-# Download the Pipeline
-
-Clone the repository:
-
-``` bash
-git clone https://github.com/Ralser-lab/Preprocessing.git
-cd Preprocessing
-```
-
-Or download manually via GitHub **Code → Download ZIP**.
 
 [⬆ Back to top](#top)
 
