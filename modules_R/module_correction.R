@@ -300,10 +300,10 @@ batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
 
     mod <- NULL
-    if (!is.null(parameter_list[["covariates_preserve"]])) {
+    if (!is.null(parameter_list[["combat_cols_preserve_meta"]])) {
         mod <- stats::model.matrix(
             ~ .,
-            data = meta_df[, parameter_list[["covariates_preserve"]], drop = FALSE]
+            data = meta_df[, parameter_list[["combat_cols_preserve_meta"]], drop = FALSE]
         )
     }
 
@@ -333,17 +333,17 @@ batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
 #'
 #' @param quant_df Quantitative data.frame (features × samples).
 #' @param meta_df Metadata data.frame (samples × annotations).
-#' @param parameter_list Parameter list from JSON file.
+#' @param  Parameter list from JSON file.
 #'
 #' @return Corrected data.frame.
-#batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
+#batchcorrect_harmony <- function(quant_df, meta_df, ){
 #
 #    library(harmony)
 #
 #    cat("\n\nStarting Harmony batch correction. ",
 #        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
 #
-#    n_pcs <- parameter_list[["n_pcs"]]
+#    n_pcs <- [["n_pcs"]]
 #    if (is.null(n_pcs)) n_pcs <- 20
 #
 #    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
