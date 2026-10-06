@@ -333,17 +333,17 @@ batchcorrect_combat <- function(quant_df, meta_df, parameter_list){
 #'
 #' @param quant_df Quantitative data.frame (features × samples).
 #' @param meta_df Metadata data.frame (samples × annotations).
-#' @param  Parameter list from JSON file.
+#' @param parameter_list Parameter list from JSON file.
 #'
 #' @return Corrected data.frame.
-#batchcorrect_harmony <- function(quant_df, meta_df, ){
+#batchcorrect_harmony <- function(quant_df, meta_df, parameter_list){
 #
 #    library(harmony)
 #
 #    cat("\n\nStarting Harmony batch correction. ",
 #        format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
 #
-#    n_pcs <- [["n_pcs"]]
+#    n_pcs <- parameter_list[["n_pcs"]]
 #    if (is.null(n_pcs)) n_pcs <- 20
 #
 #    pca <- prcomp(t(quant_df), center = TRUE, scale. = FALSE)
