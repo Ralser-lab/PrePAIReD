@@ -117,7 +117,7 @@ def batchcorrect_combat(
     Parameters
     ----------
     data_df : pd.DataFrame
-        features (e.g. precursors) as rows, samples as columns
+        sample as rows, features as columns
     batch_key : str
         column level to correct by (e.g. "batch")
     fitsamples_idx_list : list, optional
