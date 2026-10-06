@@ -1,10 +1,10 @@
 # Preprocessing Pipeline
 
-This repository contains a **Nextflow-based preprocessing workflow** for MS-based bottom-up proteomics data. It is designed to run reproducibly using **Docker containers** and requires only a small number of dependencies (see requirements). 
+This repository contains a **Nextflow-based preprocessing workflow** for MS-based bottom-up proteomics data. It is designed to run reproducibly using **Docker containers** and requires only a small number of dependencies (see [Requirements](#requirements)). 
 
-The provided modules also allow for manual execution of every module or the use of single functions within a module (see environment.yml).
+The provided modules also allow for manual execution of every module or the use of single functions within a module (see [Environment setup](environment.yml)).
 
-For a more detailed description and other use cases please check out docs/Manual_alpha_version.pdf.
+For a more detailed description and other use cases please check out the [Manual](docs/Manual_alpha_version.pdf).
 
 ------------------------------------------------------------------------
 
