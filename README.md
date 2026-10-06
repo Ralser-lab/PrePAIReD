@@ -50,7 +50,7 @@ For a fully automated run you need:
 -   Nextflow
 -   Git (optional but recommended)
 
-For manual use no further software is required (see environment.yml for the required packages)
+For manual use no further software is required (see [Environment setup](environment.yml) for the required packages)
 
 [⬆ Back to top](#top)
 
