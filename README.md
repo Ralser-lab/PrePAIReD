@@ -1,20 +1,9 @@
-<!-- License -->
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-
-<!-- Language -->
 ![Python](https://img.shields.io/badge/Python-3.12-green.svg)
 ![R](https://img.shields.io/badge/R-4.4-276DC3.svg?logo=r&logoColor=white)
-
-<!-- Last commit -->
 ![Last Commit](https://img.shields.io/github/last-commit/Ralser-lab/Preprocessing)
-
-<!-- Version -->
 ![Version](https://img.shields.io/badge/Version-0.1-orange.svg)
-
-<!-- Status -->
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
-
-<!-- Documentation -->
 [![Docs](https://img.shields.io/badge/Docs-PDF-blue.svg)](docs/Manual_alpha_version.pdf)
 
 # Preprocessing Pipeline
