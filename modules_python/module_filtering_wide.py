@@ -1003,7 +1003,7 @@ if __name__ == "__main__":
                     #apply filtering of samples by detecction proportion (missingness)
                     data_processed_df, log = filter_samples_by_detection_proportion(data_df=data_processed_df, 
                                                                                     sample_thresh=parameters_dict['sample_missingness_thresh'], 
-                                                                                    sample_alpha=parameters_dict['sample_missingness_alpha'])
+                                                                                    sample_alpha=parameters_dict['sample_missingness_confidence'])
                     #catch errors
                     if "###ERROR###" in log:
                         helper.logger(log_file,log)
@@ -1042,7 +1042,7 @@ if __name__ == "__main__":
                     data_processed_df, log = filter_precursors_by_detection_proportion(data_df=data_processed_df, 
                                                                                        id_mapping_df=id_mapping_df,
                                                                                        precursor_thresh=parameters_dict["precursor_missingness_thresh"], 
-                                                                                       precursor_alpha=parameters_dict["precursor_missingness_alpha"],
+                                                                                       precursor_alpha=parameters_dict["precursor_missingness_confidence"],
                                                                                        filter_per_protein=parameters_dict["proteinwise_precursor_missingness"],
                                                                                        protein_col=parameters_dict["protein_col"],
                                                                                        precursor_col=parameters_dict["precursor_col"])
