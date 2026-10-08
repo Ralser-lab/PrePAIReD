@@ -45,7 +45,7 @@ Python	module_filtering_long	FILTERING_LONG	name_unknown_proteins	alternative_pr
 Python	module_filtering_long	FILTERING_LONG	main	expand_precursor_name	bool		0	1	0;1			1	If 1 expands precursor name by another columns entries e.g. Channel for labelling peptides)	check	C1		
 Python	module_filtering_long	FILTERING_LONG	main	precursor_suffix_col	None;str			1	column header in data_df	expand_precursor_name	1	0	Column which should be use to define extended precursor names	existence in data_df.columns	D1		
 Python	module_filtering_long	FILTERING_LONG	main	precursor_suffix_separator	None;str		-	1	string of any separator	expand_precursor_name	1	0	Suffix for expansion of precursor name	no additional check needed	T1		
-Python	module_normalization	NORMALISATION	__main__	normalization_method	str	median_scaling	median_scaling	0	quantile;quantile_ranked;median_scaling;median;mean;delayed			1	Method to be used	check	L1		
+Python	module_normalization	NORMALISATION	__main__	normalization_method	str	median_scaling	median_scaling	0	quantile;quantile_ranked;median_scaling;median;mean			1	Method to be used	check	L1		
 Python	module_normalization	NORMALISATION	normalize_quantile	distribution	str	normal	normal	1	normal;uniform	normalization_method	quantile	0	Distribution for Quantile normalization	check	L1		
 Python	module_normalization	NORMALISATION	__main__	on_peptide_list	bool	0	0	0	0;1	normalization_method	median_scaling	1	Should the normalization be done on a certain list of peptides (only implemented for median scaling)	check	C1		
 Python	module_normalization	NORMALISATION	__main__	peptide_list_fp	str			1	file path to existing file	on_peptide_list	1	0	IMPORTANT: Needs to be set manually!!! Path for the peptide list location	existence of path	F1		
