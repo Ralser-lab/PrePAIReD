@@ -56,8 +56,85 @@ File ensureExistsOrCreateEmpty(String path, String label) {
     return f
 }
 
-String bashQuote(String s) {
-    return s.replace("'", "'\\''")
+/*
+ * CLOUD-SYNC SAFEGUARD (iCloud, OneDrive, Dropbox, Google Drive, Box, ...)
+ *
+ * Cloud-sync clients can keep files "online-only": the file is listed and
+ * has a size, but its contents are not on the disk. The host OS downloads
+ * such a file automatically when a program on the host reads it, but a
+ * Docker container cannot trigger that download and fails with
+ * "OSError: [Errno 5] Input/output error" (or similar).
+ *
+ * Nextflow runs on the host, so every input is read once here, before any
+ * container starts. This forces the sync client to download online-only
+ * files. Files that are already local are just read quickly.
+ * If a file cannot be downloaded (offline, sync paused, signed out), the
+ * pipeline stops here with a clear message instead of failing in Docker.
+ */
+def materialize(File f, String label, Map stats) {
+    if( f == null || !f.exists() ) return
+
+    if( f.isDirectory() ) {
+        f.listFiles()?.each { child -> materialize(child, label, stats) }
+        return
+    }
+
+    def t0 = System.currentTimeMillis()
+    // Count bytes in a map: closures should not reassign outer local variables.
+    def counter = [bytes: 0L]
+    try {
+        f.eachByte(1048576) { buf, len -> counter.bytes += len }
+    }
+    catch( Exception e ) {
+        die("""
+Cannot read input file: ${f.absolutePath} (${label})
+Reason: ${e.message}
+
+This file is probably stored online-only by a cloud-sync service
+(iCloud Drive, OneDrive, Dropbox, Google Drive, ...) and could not be downloaded.
+Fix: make sure you are online and the sync client is running and signed in,
+or mark the folder as "Keep Downloaded" / "Always keep on this device",
+or move the project to a folder that is not synced.
+""")
+    }
+
+    def ms = System.currentTimeMillis() - t0
+    def n = counter.bytes
+    if( n != f.length() ) {
+        die("Incomplete read of ${f.absolutePath}: got ${n} of ${f.length()} bytes. " +
+            "The file may be online-only in a cloud-sync folder and could not be fully downloaded.")
+    }
+
+    stats.files += 1
+    stats.bytes += n
+    if( ms > 500 ) {
+        stats.slow << "${f.absolutePath} (${ms} ms)"
+    }
+}
+
+/*
+ * Run an external command WITHOUT a shell.
+ *
+ * Each list element is passed to the program as exactly one argument,
+ * so paths containing spaces (or quotes) are never split or misread.
+ * (A plain "command string".execute() splits on every space and does not
+ * understand quotes, which breaks for any path with spaces.)
+ * Output is printed; failures only produce a warning.
+ */
+def runCommand(List cmd) {
+    try {
+        def proc = cmd.collect { it.toString() }.execute()
+        def out = new StringBuilder()
+        def err = new StringBuilder()
+        proc.waitForProcessOutput(out, err)
+        if( out.toString().trim() ) println out.toString().trim()
+        if( proc.exitValue() != 0 && err.toString().trim() ) {
+            println "[CLEANUP WARNING] ${err.toString().trim()}"
+        }
+    }
+    catch( Exception e ) {
+        println "[CLEANUP WARNING] Could not run ${cmd[0]}: ${e.message}"
+    }
 }
 
 process INIT_PARAMS {
@@ -1043,6 +1120,35 @@ workflow {
     codePyDir = mustExist(resolveCode(code_py as String), 'modules_python')
     codeRDir = mustExist(resolveCode(code_r as String), 'modules_R')
 
+    // Cloud-sync safeguard: download any online-only inputs before Docker starts.
+    println "Checking inputs for online-only cloud files ..."
+    def cloudStats = [files: 0, bytes: 0L, slow: []]
+    [
+        'ORIGINALDATA'          : original_data,
+        'seed data'             : seed_data,
+        'METADATA'              : metaFile,
+        'seed idmap'            : seed_idmap,
+        'seed mask'             : seed_mask,
+        'seed mask description' : seed_maskdp,
+        'report seed'           : reportSeed,
+        'method doc'            : methodDoc,
+        'report.py'             : reportPy,
+        'QA script'             : qaScript,
+        'Config_evaluation.txt' : evalConfig,
+        'Figures Captions'      : figscptn,
+        'IMPUTATION_PROCEDURES' : imputationProceduresFile,
+        'Parameters.txt'        : new File("${WORKDIR_ABS}/Parameters.txt"),
+        'modules_python'        : codePyDir,
+        'modules_R'             : codeRDir,
+        'Initialization'        : new File("${projectDir}/Initialization")
+    ].each { label, f -> materialize(f, label, cloudStats) }
+
+    println "Inputs checked    : ${cloudStats.files} files, ${cloudStats.bytes.intdiv(1048576)} MB"
+    if( cloudStats.slow ) {
+        println "[CLOUD] Downloaded / slow-read files (were likely online-only):"
+        cloudStats.slow.each { println "[CLOUD]   ${it}" }
+    }
+
 
     stepsResolved = []
 
@@ -1144,16 +1250,35 @@ workflow {
         def workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
         def workdirAbs2 = resolveFrom(launchDir.toString(), workingPath2)
 
+        // Nextflow's own folders are never touched by the file cleanup below.
+        def nfWorkDir = workDir.toString()
+        def nfMetaDir = new File(launchDir.toString(), '.nextflow').absolutePath
+
         println '[CLEANUP] Remove 0-byte files from output folder'
-        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f -size 0 -print -delete || true\"".execute().waitFor()
+        runCommand([
+            'find', workdirAbs2,
+            '-type', 'f', '-size', '0',
+            '-not', '-path', "${nfWorkDir}/*",
+            '-not', '-path', "${nfMetaDir}/*",
+            '-print', '-delete'
+        ])
 
         println '[CLEANUP] Remove common hidden junk files'
-        "bash -lc \"find '${bashQuote(workdirAbs2)}' -type f \\( -name '.DS_Store' -o -name '._*' -o -name 'Thumbs.db' \\) -print -delete || true\"".execute().waitFor()
+        runCommand([
+            'find', workdirAbs2,
+            '-type', 'f',
+            '(', '-name', '.DS_Store', '-o', '-name', '._*', '-o', '-name', 'Thumbs.db', ')',
+            '-not', '-path', "${nfWorkDir}/*",
+            '-not', '-path', "${nfMetaDir}/*",
+            '-print', '-delete'
+        ])
 
         if( cleanup_aggressive ) {
             println '[CLEANUP] Aggressive cleanup enabled'
-            "bash -lc \"rm -rf '${bashQuote(workDir.toString())}' || true\"".execute().waitFor()
-            "bash -lc \"rm -rf '${bashQuote(launchDir.toString())}/.nextflow' '${bashQuote(launchDir.toString())}/.nextflow.log' || true\"".execute().waitFor()
+            // rm -rf removes symlinks themselves and never follows them,
+            // so linked input folders (e.g. modules_python) stay untouched.
+            runCommand(['rm', '-rf', nfWorkDir])
+            runCommand(['rm', '-rf', nfMetaDir, new File(launchDir.toString(), '.nextflow.log').absolutePath])
         }
         else {
             println '[CLEANUP] Aggressive cleanup disabled'
