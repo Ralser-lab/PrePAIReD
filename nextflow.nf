@@ -137,11 +137,45 @@ def runCommand(List cmd) {
     }
 }
 
+/*
+ * Quote a value for the shell: wraps it in single quotes, so spaces and
+ * special characters stay inside one argument. An apostrophe inside the
+ * value is written as '\'' (close quote, escaped apostrophe, reopen quote).
+ */
+String shellQuote(String s) {
+    return "'" + s.replace("'", "'\\''") + "'"
+}
+
+/*
+ * Extra Docker volume options for folders the processes write to directly.
+ *
+ * nextflow.config only mounts params.docker_mount_root (the parent of the
+ * launch folder). If WORKING_PATH (or another written/read folder) lies
+ * outside it, Docker would write into the container's own temporary disk,
+ * and the files would silently disappear when the container stops.
+ * Every folder not already covered by that mount is mounted here.
+ */
+String dockerMountOpts(List folders, String mountRoot) {
+    def roots = []
+    folders.findAll { it }.each { folder ->
+        def abs = new File(folder.toString()).absolutePath
+        def covered = (mountRoot && (abs == mountRoot || abs.startsWith(mountRoot + '/'))) ||
+                      roots.any { r -> abs == r || abs.startsWith(r + '/') }
+        if( !covered ) {
+            roots << abs
+        }
+    }
+    return roots.collect { r -> "-v " + shellQuote("${r}:${r}") }.join(' ')
+}
+
 process INIT_PARAMS {
 
     tag "INIT_PARAMS | attempt=${task.attempt} | mem=${task.memory} | cpus=${task.cpus}"
 
     maxForks 1
+
+    // Mount WORKING_PATH if it lies outside the default Docker mount (see dockerMountOpts).
+    containerOptions { container_mounts }
 
     publishDir { publish_root }, mode: 'copy', overwrite: true
 
@@ -153,7 +187,8 @@ process INIT_PARAMS {
           path(params_pkl),
           path(params_txt),
           path(original_data),
-          path(meta_file)
+          path(meta_file),
+          val(container_mounts)
 
     output:
     tuple path("Parameter_Files"), path("logfile_setup.txt"), path("init.done")
@@ -196,10 +231,13 @@ process INIT_PARAMS {
 
     set +e
 
-    python "${init_script}" \
+    # Staged input file names are inserted by Nextflow already shell-escaped
+    # (e.g. my\\ metadata.xlsx), so they must NOT be wrapped in double quotes,
+    # otherwise the backslash becomes part of the file name.
+    python ${init_script} \
         -w "." \
-        -m "${meta_file}" \
-        -d "${original_data}" 2>&1 |
+        -m ${meta_file} \
+        -d ${original_data} 2>&1 |
         tee -a "${pipeline_log_path}"
 
     py_exit=\${PIPESTATUS[0]}
@@ -274,6 +312,9 @@ process RUN_ALL_MODULES {
 
     maxForks 1
 
+    // Mount WORKING_PATH if it lies outside the default Docker mount (see dockerMountOpts).
+    containerOptions { container_mounts }
+
     /*
      * Retry only memory/preemption-related termination.
      *
@@ -307,7 +348,8 @@ process RUN_ALL_MODULES {
           path(prev_report),
           path(doc_tsv),
           path(paramdir),
-          val(imputation_procedures_input)
+          val(imputation_procedures_input),
+          val(container_mounts)
 
     output:
     path("pipeline.done")
@@ -323,11 +365,14 @@ process RUN_ALL_MODULES {
 ${steps_tsv}
 EOF_STEPS
 
-    current_data="\$BASE/${seed_data}"
-    current_id="\$BASE/${id_file}"
-    current_mask="\$BASE/${mask_file}"
-    current_mask_dp="\$BASE/${mask_dp_file}"
-    current_report="\$BASE/${prev_report}"
+    # Staged input file names are inserted by Nextflow already shell-escaped
+    # (e.g. my\\ data.tsv), so they are placed OUTSIDE the double quotes:
+    # "\$BASE/"${seed_data} gives one argument, even with spaces in the name.
+    current_data="\$BASE/"${seed_data}
+    current_id="\$BASE/"${id_file}
+    current_mask="\$BASE/"${mask_file}
+    current_mask_dp="\$BASE/"${mask_dp_file}
+    current_report="\$BASE/"${prev_report}
 
 
     # The one cumulative log for the whole workflow.
@@ -458,13 +503,13 @@ EOF_STEPS
 
         # Resolve module runner and script.
         if [ "\$engine" = "py" ]; then
-            script_path="\$BASE/${code_py_dir}/\${script_name}"
+            script_path="\$BASE/"${code_py_dir}"/\${script_name}"
             runner="python"
 
         elif [ "\$engine" = "r" ] ||
              [ "\$engine" = "R" ]; then
 
-            script_path="\$BASE/${code_r_dir}/\${script_name}"
+            script_path="\$BASE/"${code_r_dir}"/\${script_name}"
             runner="Rscript"
 
         else
@@ -485,7 +530,7 @@ EOF_STEPS
             exit 100
         fi
 
-        param_file="\$BASE/${paramdir}/\${param_name}"
+        param_file="\$BASE/"${paramdir}"/\${param_name}"
 
         # Validate module script.
         if [ ! -f "\$script_path" ]; then
@@ -556,7 +601,7 @@ EOF_STEPS
             -d "\$current_data" \
             -p "\$param_file" \
             -o . \
-            -m "\$BASE/${meta_file}" \
+            -m "\$BASE/"${meta_file} \
             -l step_log.txt \
             -i "\$current_id" \
             -c "\$counter" 2>&1 |
@@ -648,11 +693,11 @@ EOF_STEPS
 
         set +e
 
-        python "\$BASE/${qa_script}" \
+        python "\$BASE/"${qa_script} \
             -w . \
-            -m "\$BASE/${meta_file}" \
+            -m "\$BASE/"${meta_file} \
             -s "\${module_name}" \
-            -e "\$BASE/${eval_cfg}" \
+            -e "\$BASE/"${eval_cfg} \
             --docker 2>&1 |
             tee -a \
                 step_log.txt \
@@ -719,11 +764,11 @@ EOF_STEPS
         if [ -f "\$current_report" ] &&
            [ -s "\$current_report" ]; then
 
-            python "\$BASE/${report_script}" \
+            python "\$BASE/"${report_script} \
                 --log step_log.txt \
                 --in_pdf "\$current_report" \
                 --out report_new.pdf \
-                --doc_tsv "\$BASE/${doc_tsv}" 2>&1 |
+                --doc_tsv "\$BASE/"${doc_tsv} 2>&1 |
                 tee -a \
                     step_log.txt \
                     "\$persistent_log"
@@ -731,10 +776,10 @@ EOF_STEPS
             rep_rc=\${PIPESTATUS[0]}
 
         else
-            python "\$BASE/${report_script}" \
+            python "\$BASE/"${report_script} \
                 --log step_log.txt \
                 --out report_new.pdf \
-                --doc_tsv "\$BASE/${doc_tsv}" 2>&1 |
+                --doc_tsv "\$BASE/"${doc_tsv} 2>&1 |
                 tee -a \
                     step_log.txt \
                     "\$persistent_log"
@@ -1003,8 +1048,10 @@ workflow {
 
     lines = cfgFile.readLines()
 
+    // Match the keys exactly ("Run =" / "Order ="), not just lines that
+    // start with these letters (e.g. "run_error_check = 1" or "Runtime = ...").
     run_value = lines.find {
-        it.trim().toLowerCase().startsWith('run')
+        it ==~ /(?i)^\s*run\s*=.*/
     }?.split('=', 2)?.getAt(1)?.trim()
 
     if( !run_value ) {
@@ -1012,7 +1059,7 @@ workflow {
     }
 
     order_line = lines.find {
-        it.trim().toLowerCase().startsWith('order')
+        it ==~ /(?i)^\s*order\s*=.*/
     }
 
     if( !order_line ) {
@@ -1078,6 +1125,19 @@ workflow {
 
     PIPELINE_LOG_ABS = new File(WORKDIR_ABS, 'pipeline_log.txt').absolutePath
     ensureExistsOrCreateEmpty(PIPELINE_LOG_ABS, 'pipeline_log.txt')
+
+    // Extra Docker mounts for folders outside params.docker_mount_root.
+    CONTAINER_MOUNTS = dockerMountOpts(
+        [
+            WORKDIR_ABS,
+            IMPUTATION_PROCEDURES_ABS ? new File(IMPUTATION_PROCEDURES_ABS).parent : null
+        ],
+        params.docker_mount_root ? params.docker_mount_root.toString() : ''
+    )
+
+    if( CONTAINER_MOUNTS ) {
+        println "Extra Docker mounts: ${CONTAINER_MOUNTS}"
+    }
 
     def reportSeedPath = new File(start_dir, 'report.pdf').absolutePath
 
@@ -1205,7 +1265,8 @@ workflow {
                 file("${projectDir}/Initialization/dict_parameters.json"),
                 file("${WORKDIR_ABS}/Parameters.txt"),
                 file(original_data.absolutePath),
-                file(metaFile.absolutePath)
+                file(metaFile.absolutePath),
+                CONTAINER_MOUNTS
             )
         )
     )
@@ -1229,7 +1290,8 @@ workflow {
             file(reportSeed.absolutePath),
             file(methodDoc.absolutePath),
             paramdir,
-            IMPUTATION_PROCEDURES_ABS ?: ''
+            IMPUTATION_PROCEDURES_ABS ?: '',
+            CONTAINER_MOUNTS
         )
     }
 
