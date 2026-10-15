@@ -138,6 +138,38 @@ def runCommand(List cmd) {
 }
 
 /*
+ * Run an external command WITHOUT a shell and return its output (trimmed).
+ * Returns an empty string if the command fails or does not exist.
+ * Used for the version information in env_log.txt.
+ */
+String captureCommand(List cmd) {
+    try {
+        def proc = cmd.collect { it.toString() }.execute()
+        def out = new StringBuilder()
+        def err = new StringBuilder()
+        proc.waitForProcessOutput(out, err)
+        return proc.exitValue() == 0 ? out.toString().trim() : ''
+    }
+    catch( Exception e ) {
+        return ''
+    }
+}
+
+/*
+ * env_log.txt layout helpers (same layout as the in-image command
+ * "environment_versions"): a section title with a dashed line, then
+ * "label   value" lines with the value starting at column 24.
+ */
+String envSection(String title) {
+    return "\n${title}\n" + ('-' * 79)
+}
+
+String envLine(String label, Object value) {
+    def shown = (value == null || value.toString().trim() == '') ? 'unknown' : value.toString().trim()
+    return "${label.padRight(23)}${shown}"
+}
+
+/*
  * Quote a value for the shell: wraps it in single quotes, so spaces and
  * special characters stay inside one argument. An apostrophe inside the
  * value is written as '\'' (close quote, escaped apostrophe, reopen quote).
@@ -166,6 +198,82 @@ String dockerMountOpts(List folders, String mountRoot) {
         }
     }
     return roots.collect { r -> "-v " + shellQuote("${r}:${r}") }.join(' ')
+}
+
+/*
+ * ENV_LOG
+ *
+ * Runs first, inside the same Docker image as all other steps, and writes
+ * env_log.txt (+ env_log.pdf) into WORKING_PATH: "What did this particular run use?"
+ *
+ * - The run details (Nextflow version, pipeline git commit, Docker image
+ *   name AND unique image ID, Docker version, resources, ...) are collected
+ *   on the host by the workflow and passed in as run_header.
+ * - The package versions are collected inside the container by the
+ *   command "environment_versions", which the Dockerfile installs in the
+ *   image and also uses to write image_versions.txt at build time, so both
+ *   files have the same layout and can be compared directly.
+ *
+ * A previous env_log.txt is moved to previous_env_logs/ by the workflow,
+ * so the history of reruns in the same working directory is kept.
+ */
+process ENV_LOG {
+
+    tag "ENV_LOG"
+
+    maxForks 1
+
+    publishDir { publish_root }, mode: 'copy', overwrite: true
+
+    input:
+    tuple val(publish_root),
+          val(run_header),
+          val(run_changes)
+
+    output:
+    path("env_log.*")
+
+    script:
+    """
+    cat > run_header.txt <<'EOF_RUN_HEADER'
+${run_header}
+EOF_RUN_HEADER
+
+    cat > run_changes.txt <<'EOF_RUN_CHANGES'
+${run_changes}
+EOF_RUN_CHANGES
+
+    # The container this logging task actually runs in. All processes take
+    # their image from the single setting process.container = params.container_image
+    # in nextflow.config (no process overrides it), and the record compares
+    # this value with the recorded image name, so a mismatch is visible.
+    sed -i 's|@@TASK_CONTAINER@@|${task.container}|' run_header.txt || true
+
+    # Writes env_log.txt (authoritative) and env_log.pdf (best effort).
+    # Nothing here may stop the pipeline: every command is allowed to fail,
+    # and env_log.txt is guaranteed to exist afterwards.
+    if command -v environment_versions >/dev/null 2>&1; then
+        environment_versions env_log.txt RUN run_header.txt run_changes.txt || true
+    fi
+
+    if [ ! -s env_log.txt ]; then
+        # Image built before the reproducibility record was added to the Dockerfile.
+        {
+            printf '%s\n' "==============================================================================="
+            printf '%s\n' "                                 PIPELINE RUN"
+            printf '%s\n' "                            REPRODUCIBILITY RECORD"
+            printf '%s\n' "==============================================================================="
+            cat run_header.txt
+            printf '\n%s\n' "WARNING: the package versions could not be recorded (this Docker image"
+            printf '%s\n'   "has no working 'environment_versions' command). Rebuild the image with the"
+            printf '%s\n'   "current Dockerfile. Run details above were recorded on the host."
+            if grep -q '[^[:space:]]' run_changes.txt 2>/dev/null; then
+                printf '\n%s\n\n' "UNCOMMITTED PIPELINE CHANGES"
+                cat run_changes.txt
+            fi
+        } > env_log.txt || true
+    fi
+    """
 }
 
 process INIT_PARAMS {
@@ -1255,8 +1363,114 @@ workflow {
     println "Metadata          : ${METADATA_ABS}"
     println "Steps             : ${stepsResolved.size()}"
 
-    init_ch = INIT_PARAMS(
+    // ------------------------------------------------------------------
+    // Environment log (env_log.txt): run details collected on the host.
+    // ------------------------------------------------------------------
+    def imageName = params.container_image ? params.container_image.toString() : 'not set (params.container_image missing in nextflow.config)'
+    def gitDir = projectDir.toString()
+    def gitCommit = captureCommand(['git', '-C', gitDir, 'rev-parse', 'HEAD'])
+    def gitBranch = captureCommand(['git', '-C', gitDir, 'rev-parse', '--abbrev-ref', 'HEAD'])
+    def gitRemote = captureCommand(['git', '-C', gitDir, 'config', '--get', 'remote.origin.url'])
+    def gitChanges = captureCommand(['git', '-C', gitDir, 'status', '--porcelain'])
+
+    // If the code has uncommitted changes, preserve the tracked git diff
+    // (subject to the size limit) and list untracked files by name.
+    def runChanges = ''
+    if( gitChanges ) {
+        def diffText = captureCommand(['git', '-C', gitDir, 'diff', 'HEAD', '--no-color', '--no-ext-diff'])
+        def untracked = captureCommand(['git', '-C', gitDir, 'ls-files', '--others', '--exclude-standard'])
+        def maxChars = 5000000
+        if( diffText.length() > maxChars ) {
+            diffText = diffText.substring(0, maxChars) +
+                "\n[... diff truncated after ${maxChars} characters ...]"
+        }
+        runChanges = "[git status --porcelain]\n${gitChanges}\n\n" +
+                     "[git diff HEAD]\n${diffText ?: '(no changes to tracked files)'}\n\n" +
+                     "[Untracked files (content not included)]\n${untracked ?: '(none)'}"
+    }
+    def imageId = captureCommand(['docker', 'image', 'inspect', '--format', '{{.Id}}', imageName])
+    def imageDigests = captureCommand(['docker', 'image', 'inspect', '--format', '{{join .RepoDigests ", "}}', imageName])
+    def imageCreated = captureCommand(['docker', 'image', 'inspect', '--format', '{{.Created}}', imageName])
+    def imagePlatform = captureCommand(['docker', 'image', 'inspect', '--format', '{{.Os}}/{{.Architecture}}', imageName])
+    def dockerVersion = captureCommand(['docker', 'version', '--format', '{{.Server.Version}}'])
+    def dockerSystem = captureCommand(['docker', 'info', '--format', '{{.OperatingSystem}} | {{.NCPU}} CPUs | {{.MemTotal}} bytes memory'])
+
+    def headerLines = [
+        envSection('RUN'),
+        envLine('Run name', workflow.runName),
+        envLine('Run started', workflow.start),
+        envLine('Nextflow', "${workflow.nextflow.version} (build ${workflow.nextflow.build})"),
+        envLine('Session', workflow.sessionId),
+        envLine('Command line', workflow.commandLine),
+        envLine('Profile', workflow.profile),
+        envLine('Run mode', run_value),
+        envLine('Steps', ordered.join(', ')),
+        envLine('Working path', WORKDIR_ABS),
+        envLine('Original data', ORIGINALDATA_ABS),
+        envLine('Metadata', METADATA_ABS),
+
+        envSection('PIPELINE'),
+        envLine('Git commit', gitCommit ?: 'unknown (not a git checkout)'),
+        envLine('Git branch', gitBranch),
+        envLine('Git remote', gitRemote),
+        envLine('Uncommitted changes', gitChanges ? 'YES - see "Uncommitted pipeline changes" at the end of this record' : 'NONE'),
+        envLine('Pipeline folder', gitDir),
+
+        envSection('CONTAINER'),
+        envLine('Image', imageName),
+        envLine('Image run by ENV_LOG', '@@TASK_CONTAINER@@'),
+        envLine('Image ID', imageId ?: 'unknown (image not found locally)'),
+        envLine('Image digest', imageDigests ?: 'none (image built locally, not pulled from a registry)'),
+        envLine('Created', imageCreated),
+        envLine('Image platform', imagePlatform),
+
+        envSection('COMPUTE'),
+        envLine('Docker', dockerVersion),
+        envLine('Docker system', dockerSystem),
+        envLine('Host system', "${System.getProperty('os.name')} ${System.getProperty('os.version')} (${System.getProperty('os.arch')})"),
+        envLine('Java', System.getProperty('java.version')),
+        envLine('Pipeline CPUs', params.cpus),
+        envLine('Pipeline start memory', params.memory),
+        envLine('Pipeline max memory', params.max_memory ?: 'auto (Docker memory minus --memory_margin)'),
+        envLine('Memory margin', params.memory_margin),
+        envLine('Note', 'requested settings; each task can get more memory on retries (see nextflow_trace.txt)')
+    ]
+    def runHeader = headerLines.join('\n')
+
+    // Keep earlier env logs of this working directory (reruns) instead of overwriting them.
+    def envLogFile = new File(WORKDIR_ABS, 'env_log.txt')
+    if( envLogFile.exists() && envLogFile.length() > 0 ) {
+        def envArchiveDir = new File(WORKDIR_ABS, 'previous_env_logs')
+        envArchiveDir.mkdirs()
+        def envStamp = new Date(envLogFile.lastModified()).format('yyyyMMdd_HHmmss')
+        def envTarget = new File(envArchiveDir, "env_log_${envStamp}.txt")
+        if( envLogFile.renameTo(envTarget) ) {
+            println "Previous env log  : moved to ${envTarget}"
+            def envPdf = new File(WORKDIR_ABS, 'env_log.pdf')
+            if( envPdf.exists() ) {
+                envPdf.renameTo(new File(envArchiveDir, "env_log_${envStamp}.pdf"))
+            }
+        }
+        else {
+            println "[WARN] Could not move previous env_log.txt to ${envTarget}; it will be overwritten."
+        }
+    }
+
+    println "Docker image      : ${imageName} (${imageId ?: 'ID unknown'})"
+
+    env_ch = ENV_LOG(
         Channel.of(
+            tuple(
+                WORKDIR_ABS,
+                runHeader,
+                runChanges
+            )
+        )
+    )
+
+    // INIT_PARAMS starts only after env_log.txt has been written.
+    init_ch = INIT_PARAMS(
+        env_ch.map { env_log ->
             tuple(
                 WORKDIR_ABS,
                 PIPELINE_LOG_ABS,
@@ -1268,7 +1482,7 @@ workflow {
                 file(metaFile.absolutePath),
                 CONTAINER_MOUNTS
             )
-        )
+        }
     )
 
     run_input_ch = init_ch.map { paramdir, setup_log, init_done ->
@@ -1386,3 +1600,4 @@ workflow {
     }
 
 }
+
