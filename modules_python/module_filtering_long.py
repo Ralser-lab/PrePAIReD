@@ -1100,7 +1100,11 @@ if __name__ == "__main__":
         
         # Create mask description
         mask_description_df = pd.DataFrame(columns=["filter","value"])
-        mask_description_df["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value","GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value","Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence","Zero "+parameters_dict["input_values_column"],"Precursor.Charge","sample missingness","precursor missingness","Min. "+"XXX"+" Peptides","Min. "+"XXX"+" Precursors","Imputed"]
+        mask_description_df["filter"] = ["not measured","measured and kept","Proteotypic","Q.Value","Global.Q.Value",
+                                         "GG.Q.Value","PG.Q.Value","Protein.Q.Value","Global.PG.Q.Value","Lib.Q.Value",
+                                         "Lib.PG.Q.Value","PEP","Ms1.Profile.Corr","Mass.Evidence","Ms1.Profile.Corr + Mass.Evidence",
+                                         "Zero "+parameters_dict["input_values_column"],"Precursor.Charge","sample missingness","precursor missingness",
+                                         "Min. "+"XXX"+" Peptides","Min. "+"XXX"+" Precursors","Normalisation Factors","Correction Missingness","Imputed"]
         mask_description_df["value"]=range(0,len(mask_description_df))
         
         # Generate filter operations (column, operator, value, dtype) for DIA-NN
@@ -1131,6 +1135,7 @@ if __name__ == "__main__":
         mask_description_df.set_index("filter",inplace=True)
         mask_description_df = mask_description_df.astype("float32")
         mask_description_df.loc["Imputed","value"] = 0.99
+        mask_description_df.sort_values(by="value",inplace=True)
         
         # Apply filter operations and fill mask array
         mask_arr, log = filtering(data_df_fp, 
