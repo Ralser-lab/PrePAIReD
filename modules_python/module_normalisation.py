@@ -704,6 +704,11 @@ if __name__ == "__main__":
                                                                       min_nf=parameters_dict["min_nf"],
                                                                       max_nf=parameters_dict["max_nf"],
                                                                       axis=0)
+               if parameters_dict["exclude_outlier_nfs"]:
+                   removed_samples = list(set(data_df.columns)-set(data_processed_df.columns))
+                   if removed_samples:
+                       mask = masked_df[removed_samples] == 1
+                       masked_df[removed_samples] = masked_df[removed_samples].mask(mask, mask_description_df.loc["Normalisation Factors"].value)
     
         elif parameters_dict["normalization_method"] == "median":
             module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\t"+"Performing median normalization.\n"
