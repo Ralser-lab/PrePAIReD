@@ -465,7 +465,7 @@ def get_confidence_ellipse(x, y, confidence=0.95, **kwargs):
 
     return angle, width, height, #min_x, max_x, min_y, max_y
 
-def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = True):
+def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, categorical_properties = None, verbose = True):
     """
     Calculation of the correlation vectors of a single transformed dataset.
 
@@ -485,6 +485,8 @@ def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_
         Maximum number of levels of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings marking properties that are one-hot encoded regardless of their dtype. The default is None.
     verbose : bool, optional
@@ -497,8 +499,8 @@ def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_
 
     """
     metadata_, data_transformed, components = get_aligned_metadata(metadata, data_transformed, data_columns, n_components)
-    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
-
+    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
+    
     vectors = pd.DataFrame(np.nan, index = design.columns, columns = components, dtype = float)
     for property_name in design.columns:
         values = design[property_name].to_numpy(dtype = float)
@@ -512,7 +514,7 @@ def get_vectors(metadata, data_transformed, data_columns, n_components = 4, min_
             vectors.loc[property_name,component] = float(np.corrcoef(values[mask], coordinates[mask])[0,1])
     return vectors
 
-def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = True):
+def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, min_residual_df = 5, categorical_properties = None, adjusted = False, verbose = True):
     """
     Calculation of the squared correlation ratio of a single transformed dataset.
 
@@ -534,6 +536,10 @@ def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_sam
         Maximum number of levels of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
+    min_residual_df : int, optional
+        Minimum number of residual degrees of freedom required to adjust eta2, below which the value is left as NaN instead. The adjustment divides by these degrees of freedom, so a value fitted on barely more samples than levels is multiplied by a large factor and becomes strongly negative. Only used if adjusted == True. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings marking properties that are one-hot encoded regardless of their dtype. The default is None.
     adjusted : bool, optional
@@ -548,8 +554,8 @@ def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_sam
 
     """
     metadata_, data_transformed, components = get_aligned_metadata(metadata, data_transformed, data_columns, n_components)
-    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
-
+    design = get_design_matrix(metadata_, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
+    
     blocks = {}
     for property_name in metadata_.columns:
         levels = [entry for entry in design.columns if (entry == property_name) or str(entry).startswith("%s=" % property_name)]
@@ -573,7 +579,9 @@ def get_eta2(metadata, data_transformed, data_columns, n_components = 4, min_sam
             residual = float(((target - predictors.dot(coefficients))**2).sum())
             value = 1.0 - (residual/total)
             degrees = int(np.linalg.matrix_rank(predictors)) - 1
-            if adjusted and ((mask.sum() - degrees - 1) > 0):
+            if adjusted and ((mask.sum() - degrees - 1) < min_residual_df):
+                continue
+            if adjusted:
                 value = 1.0 - ((1.0 - value)*(mask.sum() - 1)/(mask.sum() - degrees - 1))
             elif not adjusted:
                 value = min(max(value, 0.0), 1.0)
@@ -620,7 +628,7 @@ def get_aligned_metadata(metadata, data_transformed, data_columns, n_components)
     components = ["PC_%i" % (i+1) for i in range(n_components)]
     return metadata_, data_transformed[:,:n_components], components
 
-def get_design_matrix(metadata, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False):
+def get_design_matrix(metadata, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, categorical_properties = None, verbose = False):
     """
     Transformation of the metadata into a purely numeric design matrix.
 
@@ -642,6 +650,8 @@ def get_design_matrix(metadata, max_entries = 10, max_entries_forced = 30, categ
         Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously, since the number of batches of a study is not known beforehand, but low enough to still catch free text. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
     verbose : bool, optional
@@ -672,8 +682,9 @@ def get_design_matrix(metadata, max_entries = 10, max_entries_forced = 30, categ
                 values = values.astype("Int64")
 
         n_entries = values.dropna().nunique()
+        n_samples = values.dropna().shape[0]
         limit = max_entries_forced if is_forced else max_entries
-        if (n_entries < 2) or (n_entries > limit) or (n_entries >= len(metadata)):
+        if (n_entries < 2) or (n_entries > limit) or (n_entries >= len(metadata)) or (n_samples/n_entries < min_samples_per_entry):
             dropped[property_name] = n_entries
             continue
 
@@ -1488,10 +1499,10 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
         if data_processed is not None:
             return data_origin_transformed, data_processed_transformed, list(data_origin_pca.columns), list(data_processed_pca.columns)
         else:
-            return data_origin_transformed, data_origin_pca.columns
+            return data_origin_transformed, None, data_origin_pca.columns, None
     return
 
-def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False, top_n = None, noise_level = None, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_vectors.png"):
+def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, categorical_properties = None, verbose = False, top_n = None, noise_level = None, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_vectors.png"):
     """
     Plots vector of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
 
@@ -1515,6 +1526,8 @@ def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_col
         Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
     verbose : bool, optional
@@ -1537,10 +1550,10 @@ def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_col
         File path for the figure. The default is "PCA_metadata_vectors.png".
     """
 
-    vectors_origin = get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    vectors_origin = get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
     vectors_processed = None
     if (data_processed_transformed is not None) and (data_processed_columns is not None):
-        vectors_processed = get_metadata_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+        vectors_processed = get_metadata_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
 
     n_components = min(n_components, vectors_origin.shape[1])
     #properties, labels, colors = get_metadata_property_colors(vectors_origin.index, metadata)
@@ -1612,7 +1625,7 @@ def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_col
     return
 
 
-def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = False, top_n = None, noise_level = None, merge_duplicates = False, set_axis_lim = False, axis_offset = 0.1, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_eta2.png",):
+def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, min_residual_df = 5, categorical_properties = None, adjusted = False, verbose = False, top_n = None, noise_level = None, merge_duplicates = False, set_axis_lim = False, axis_offset = 0.1, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_eta2.png",):
     """
     Plots the squared correlation ratio (eta2) of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
  
@@ -1639,6 +1652,10 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
         Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
+    min_residual_df : int, optional
+        Minimum number of residual degrees of freedom required to adjust eta2, below which the value is left as NaN instead. The adjustment divides by these degrees of freedom, so a value fitted on barely more samples than levels is multiplied by a large factor and becomes strongly negative. Only used if adjusted == True. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
     adjusted : bool, optional
@@ -1669,16 +1686,21 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
         File path for the figure. The default is "PCA_metadata_eta2.png".
     """
  
-    eta2_origin = get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    eta2_origin = get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, min_residual_df = min_residual_df, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
     eta2_processed = None
     if (data_processed_transformed is not None) and (data_processed_columns is not None):
-        eta2_processed = get_metadata_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+        eta2_processed = get_metadata_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, min_residual_df = min_residual_df, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
  
     if merge_duplicates:
         eta2_origin = merge_duplicate_entries(eta2_origin)
         if eta2_processed is not None:
             eta2_processed = merge_duplicate_entries(eta2_processed)
- 
+    
+    # Hide negative entries as there distance is positive which overshadows real effects
+    eta2_origin = eta2_origin.clip(lower = -0.05)
+    if eta2_processed is not None:
+        eta2_processed = eta2_processed.clip(lower = -0.05)
+
     n_components = min(n_components, eta2_origin.shape[1])
     lower = min(0.0, float(np.nanmin(eta2_origin.to_numpy())) if eta2_origin.notna().any().any() else 0.0)
     limits_origin = get_axis_limits(eta2_origin, n_components, axis_offset = axis_offset) if set_axis_lim else None
@@ -1743,7 +1765,7 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
     plt.savefig(outfile, bbox_inches="tight")
     return
 
-def get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, verbose = False):
+def get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, categorical_properties = None, verbose = False):
     """
     Calculation of the vector of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
     Each coordinate is the Pearson correlation between the property and the sample coordinates of a principal component for supplementary variables. 
@@ -1770,6 +1792,8 @@ def get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns,
         Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously to catch free text. The default is 30.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
     categorical_properties : tuple of str, optional
         Substrings, matched case-insensitively against the column names, marking properties that are one-hot encoded regardless of their dtype and limited by max_entries_forced instead of max_entries. An exact column name works as well, since it is a substring of itself. The default is None.
     verbose : bool, optional
@@ -1783,13 +1807,13 @@ def get_metadata_vectors(metadata, data_origin_transformed, data_origin_columns,
         Coordinates of each property of data_processed (Indices: Properties/Levels, Columns: PC_1 ... PC_n) in the range [-1,1]. Only returned if data_processed_transformed and data_processed_columns are provided.
 
     """
-    vectors_origin = get_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    vectors_origin = get_vectors(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
     if (data_processed_transformed is None) or (data_processed_columns is None):
         return vectors_origin
-    vectors_processed = get_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, verbose = verbose)
+    vectors_processed = get_vectors(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, categorical_properties = categorical_properties, verbose = verbose)
     return vectors_origin, vectors_processed
 
-def get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, categorical_properties = None, adjusted = False, verbose = False):
+def get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, min_residual_df = 5, categorical_properties = None, adjusted = False, verbose = False):
     """
     Calculation of the squared correlation ratio (eta2) of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
 
@@ -1819,6 +1843,10 @@ def get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, da
         Minimum number of samples with a finite value in both the property and the component, below which the value is set to NaN. The default is 3.
     max_entries : int, optional
         Maximum number of levels (excluding missing values) of a categorical property, above which the property is dropped. The default is 10.
+    min_samples_per_entry : int, optional
+        Minimum average number of samples with a value per level of a categorical property, below which the property is dropped. One parameter is fitted per level, so a property that is populated for a few samples only fits noise and gives an unstable, often strongly negative adjusted eta2. The default is 5.
+    min_residual_df : int, optional
+        Minimum number of residual degrees of freedom required to adjust eta2, below which the value is left as NaN instead. The adjustment divides by these degrees of freedom, so a value fitted on barely more samples than levels is multiplied by a large factor and becomes strongly negative. Only used if adjusted == True. The default is 5.
     max_entries_forced : int, optional
         Maximum number of levels of a property matched by categorical_properties, above which the property is dropped. Set generously, since the number of batches of a study is not known beforehand, but low enough to still catch free text. The default is 30.
     categorical_properties : tuple of str, optional
@@ -1836,10 +1864,10 @@ def get_metadata_eta2(metadata, data_origin_transformed, data_origin_columns, da
         Squared correlation ratio of each property of data_processed (Indices: Properties, Columns: PC_1 ... PC_n) in the range [0,1]. Only returned if data_processed_transformed and data_processed_columns are provided.
 
     """
-    eta2_origin = get_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    eta2_origin = get_eta2(metadata, data_origin_transformed, data_origin_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, min_residual_df = min_residual_df, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
     if (data_processed_transformed is None) or (data_processed_columns is None):
         return eta2_origin
-    eta2_processed = get_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
+    eta2_processed = get_eta2(metadata, data_processed_transformed, data_processed_columns, n_components = n_components, min_samples = min_samples, max_entries = max_entries, max_entries_forced = max_entries_forced, min_samples_per_entry = min_samples_per_entry, min_residual_df = min_residual_df,  categorical_properties = categorical_properties, adjusted = adjusted, verbose = verbose)
     return eta2_origin, eta2_processed
 
 def draw_vectors(ax, vectors, metadata, i, j, fontsize_label, top_n = None, noise_level = None):
@@ -3284,16 +3312,41 @@ if __name__ == "__main__":
                 addition = " "+dict_config_setup[step][key_figure]["coloring_property"]+"."
                 
             try:
-                plot_PCA(data_origin, 
+                data_origin_transformed, data_processed_transformed, data_origin_columns, data_processed_columns = plot_PCA(
+                        data_origin, 
                          metadata_df, 
                          data_processed = data_processed, 
                          outfile = dict_config_setup[step][key_figure]["outfile"], 
                          continuous = ast.literal_eval(dict_config_setup[step][key_figure]["continuous"]),
                          column_color = dict_config_setup[step][key_figure]["column_color"], 
                          use_metadata_coloring = ast.literal_eval(dict_config_setup[step][key_figure]["use_metadata_coloring"]),
-                         coloring_property = dict_config_setup[step][key_figure]["coloring_property"]
+                         coloring_property = dict_config_setup[step][key_figure]["coloring_property"],
+                         return_fitted_data = True
                          )
                 log_legend(captions, key_figure, dict_config_setup[step][key_figure]["outfile"], addition=addition)
+                try:
+                    plot_pca_metadata_vectors(metadata_df, 
+                                              data_origin_transformed, 
+                                              data_origin_columns, 
+                                              data_processed_transformed, 
+                                              data_processed_columns, 
+                                              categorical_properties = ("batch",), 
+                                              top_n = 5, 
+                                              noise_level = 0.3,
+                                              outfile = dict_config_setup[step][key_figure]["outfile_A"])
+                    plot_pca_metadata_eta2(metadata_df, 
+                                           data_origin_transformed, 
+                                           data_origin_columns, 
+                                           data_processed_transformed, 
+                                           data_processed_columns, 
+                                           categorical_properties = ("batch",), 
+                                           adjusted = True, 
+                                           top_n = 5, 
+                                           noise_level = 0.1, 
+                                           merge_duplicates = True, 
+                                           outfile = dict_config_setup[step][key_figure]["outfile_B"])
+                except:
+                    print("Error in PCA correlation plotting. Skipped.")
             except:
                 print("Error in PCA plotting. Skipped.")
     

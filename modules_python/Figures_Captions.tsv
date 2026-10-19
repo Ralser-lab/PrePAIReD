@@ -3,6 +3,8 @@ F01	Overall quality	Number of unique IDs (top) and log2(quantity) distribution (
 F02	Number of Filtered IDs	Number of Unique IDs dropped by selected filters up to this step.	0
 F03	Coefficient of variation	Distribution of the coefficient of variation calculated on a log-normal scale for base 2. Only CVs with a maximal value of 2 are shown. Selected sets according to:	1
 F04	Principal component analysis	Principal component analysis highlighting the 4 components with highest variance. Colored according to:	1
+F04A	Principal component analysis (Metadata correlation)	Correlation of each metadata property with the principal components. The vector length denotes the fraction of its variance explained by the plotted plane. Only the 5 properties with largest impact are shown. Properties explaining less than 30% are not shown.	0
+F04B	Principal component analysis (Metadata Eta2)	Fraction of the variance of each principal component explained by a metadata property (eta2) adjusted for the number of levels. Only the 5 properties with largest impact are shown. Properties explaining less than 10 % are not shown	0
 F05	Distribution of intensities	Smoothed normalized intensity distributions per sample.	0
 F06	Dependency on covariate	log2(Quantity) versus covariate of the top 3 IDs with highest correlation. Correlation Type: Continuous - Pearson, Ordinal - Spearman, Nominal - Point Biserial. Covariate:	1
 F07	Decision boundary estimation	Completeness versus Mean(log2(Quantity)) with different logistic fits. The chosen fit is highlighted solid. Chosen fit:	1
