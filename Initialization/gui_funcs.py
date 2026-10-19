@@ -409,6 +409,8 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             if module in ["NORMALISATION","IMPUTATION","CORRECTION","SUMMARISATION"]:
                 file.write("plot_pca = 1"+"\n")
                 file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F04.png"+"\n"))
+                file.write("outfile_A = "+ os.path.join(outpath,steps_[ind],"report_folder","F04A.png"+"\n"))
+                file.write("outfile_B = "+ os.path.join(outpath,steps_[ind],"report_folder","F04B.png"+"\n"))
                 if module == "NORMALISATION":
                     file.write("continuous = True"+"\n")
                     file.write("coloring_property = Missingness"+"\n")
@@ -428,6 +430,8 @@ def write_evaluation_config(workdir, step_names, methods, rerun=False, rerun_sta
             else:
                 file.write("plot_pca = 0"+"\n")
                 file.write("outfile = "+ os.path.join(outpath,steps_[ind],"report_folder","F04.png"+"\n"))
+                file.write("outfile_A = "+ os.path.join(outpath,steps_[ind],"report_folder","F04A.png"+"\n"))
+                file.write("outfile_B = "+ os.path.join(outpath,steps_[ind],"report_folder","F04B.png"+"\n"))
                 file.write("continuous = True"+"\n")
                 file.write("coloring_property = Missingness"+"\n")
                 file.write("use_metadata_coloring = False"+"\n")
