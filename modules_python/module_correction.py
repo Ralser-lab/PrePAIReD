@@ -168,7 +168,8 @@ def batchcorrect_combat(
     # temporary imputation: feature median per batch, then over all samples
     missing_values = data_df.isna()
     if missing_values.any().any():
-        log_string += "###WARNING###: Missing values detected for ComBat. Inserting feature median per batch temporary. The imputed values will be removed after this step.\n"
+        log_string += "###WARNING###: Missing values detected for ComBat. Feature median per batch is inserted temporarily."\
+            + "\n\t\t\t\tThe imputed values will be removed after this step.\n"
         data_df = data_df.fillna(data_df.groupby(batch_series).transform("median"))
         data_df = data_df.fillna(data_df.median())
 
@@ -210,8 +211,8 @@ def batchcorrect_combat(
 
     # Check if output df consists of NA's exclusively
     if data_processed_df.isna().all().all():
-        log_string += "###ERROR###: All Values in DF were transformed to NA.\n"\
-                +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance.\n"
+        log_string += "###ERROR###: All values were transformed to NA by ComBat."\
+                +"\n\t\t\t\tPlease filter the input data for features with high missingness or low variance.\n"
         return None, log_string
 
     log_string += _timestamp("Finished COMBAT batch correction successfully.")
@@ -295,11 +296,14 @@ def get_ids_for_correction(
             - "group 'X' too small (n=.. < ..)": smallest group below min. samples
             - "only one level": nominal covariate with a single level
             - "test not possible (e.g. constant values)": test returned NaN
+            " (correlation and ANOVA disagree)" is appended to "adjusted" or
+            "no association" if the p-value of the correlation leads to the
+            opposite decision (nominal with 2 levels and ordinal covariates).
         Coefficient and p-value are NaN if the feature was not tested.
 
     log_string : str
-        Warnings: disagreement between correlation and ANOVA per feature, and
-        per covariate the number of features that were not corrected.
+        One warning per covariate with the number of features that were not
+        corrected. Details per feature are given in the comment columns of corr_df.
 
     Notes:
     ------
@@ -424,11 +428,13 @@ def get_ids_for_correction(
         r = np.where(skip, np.nan, r)
         pval = np.where(skip, np.nan, pval)
 
+        # features where correlation and ANOVA disagree on rejecting the null hypothesis
+        # (documented in the comment column only)
         if pval_corr is not None:
             disagree = ~skip & (
                 (pval <= alpha_significance) != (pval_corr <= alpha_significance))
-            for idx in features[disagree]:
-                log_string += f"###WARNING###: p-value from correlation and ANOVA disagree on neglecting null hypothesis for {idx}\n"
+        else:
+            disagree = np.zeros(n_features, dtype=bool)
 
         corr_dict[coef_type_str + metadata_var] = r
         corr_dict["pval_" + metadata_var] = pval
@@ -457,6 +463,7 @@ def get_ids_for_correction(
             g_min = n_group[:, j].argmin()
             comment_arr[j] = f"group '{levels[g_min]}' too small (n={n_group[g_min, j]} < {min_samples})"
         comment_arr[status_arr == "test not possible"] = "test not possible (e.g. constant values)"
+        comment_arr[disagree] = comment_arr[disagree] + " (correlation and ANOVA disagree)"
         corr_dict["comment_" + metadata_var] = comment_arr
 
         # global warning: how many features are not corrected for this covariate
@@ -637,7 +644,7 @@ def adjust_confounders(
         sample_index=C_f.index
         
         if len(sample_index) < min_samples:
-            log_string += f"\t\t\t\t\t###WARNING###: not enough measured values (less than 10 samples) for given ID. ID {idx} skipped.\n"
+            log_string += f"###WARNING###: Less than {min_samples} measured values for model fitting. ID {idx} skipped.\n"
             continue
         
         #create a linear model with significantly associated/correlated metadata variables
@@ -691,7 +698,7 @@ def adjust_confounders(
                 corr_df.loc[idx,"R2_"+";".join(metadata_vars)]= metrics.r2_score(C_fz,data_processed_df.loc[sample_index, idx]) 
                 data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
             except ValueError:
-                log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes), ID {idx} skipped.\n"
+                log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes). ID {idx} skipped.\n"
                 continue
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
     
@@ -883,9 +890,9 @@ def adjust_confounders_batchwise(
             idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
             fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
             if len(fitsamples_idx_batch_list)==0:
-                warning_batch_level_str = "###ERROR###: No correction variable defined.\n"
-                log_string += warning_batch_level_str
-                log_string += "###ERROR###: No samples for model-fitting present in batch "+str(batch)+"\n\t\t\t\tPlease adjust fitsamples argument.\n" 
+                log_string += \
+                    f"###ERROR###: No samples for model fitting in batch '{batch}'."\
+                    + "\n\t\t\t\tPlease adjust 'adjust_fitsamples_meta_column' and 'adjust_fitsamples_meta_level'.\n"
                 return data_processed_df, log_string, corr_dfs
             
             #call correction
@@ -976,7 +983,6 @@ if __name__ == "__main__":
             counter=counter,
             outname=outname)
 
-
     # Check if loading was successful, else pass error to log and exit   
     helper.logger(log_file,log_string)
     if metadata_df is None:
@@ -984,9 +990,9 @@ if __name__ == "__main__":
         if exit_module:
             sys.exit("###ERROR###: Metadata loading failed.")
     if "###WARNING###" in log_string:
-        helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+        helper.logger(log_file, f"###ERROR###: Metadata does not contain the column '{parameters_dict['metadata_filename_column']}' defined by 'metadata_filename_column'.\n")
         if exit_module:
-            sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
+            sys.exit(f"###ERROR###: Metadata does not contain the column '{parameters_dict['metadata_filename_column']}' defined by 'metadata_filename_column'.")
 
     # reset log string
     log_string = ""
@@ -998,12 +1004,12 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------#
     
     # check if batchcolumns in metafile
-    if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
+    if parameters_dict["correct_method"] in ["harmony", "combat", "adjust_confounders_batchwise"]:
         log_string_batchcol = ""
 
         for batch_col in parameters_dict["batch_cols_meta"]:
             if batch_col not in metadata_df.columns:
-                log_string_batchcol += f"###ERROR###: Batch Column {batch_col} not in metafile columns!"
+                log_string_batchcol += f"###ERROR###: Batch column '{batch_col}' not found in metadata.\n"
         if "###ERROR" in log_string_batchcol:
             log_string += log_string_batchcol
             helper.logger(log_file, log_string)
@@ -1019,39 +1025,29 @@ if __name__ == "__main__":
     data_df = data_df.loc[:, common_idx_list]
     metadata_df = metadata_df.loc[common_idx_list]
     
-    # Warn user that some samples do not have a batch annotation
-    if parameters_dict["correct_method"] == "harmony" or parameters_dict["correct_method"] == "combat":
+    # Warn user that some samples do not have a batch annotation and drop them
+    if parameters_dict["correct_method"] in [
+        "harmony", "combat", "adjust_confounders_batchwise"]:
+
         for batch_col in parameters_dict["batch_cols_meta"]:
-            samples_na_list = []
-            if metadata_df[batch_col].isna().sum() > 0:
-                count_na_int = metadata_df[batch_col].isna().sum()
-                samples_na_list = list(
-                    metadata_df[metadata_df[batch_col].isna()].index)
-                warning_na_meta_str = \
-                    f"###ERROR###: {count_na_int} sample(s) do(es) not have an {batch_col} value:"\
-                    + "\n\t\t\t\t".join(samples_na_list) + "\n"
-                if "###ERROR" in log_string_batchcol:
-                    log_string += log_string_batchcol
-                    helper.logger(log_file, log_string)
-                    if exit_module:
-                        sys.exit(1)
-    
-                # drop samples
-                if len(samples_na_list) > 0:
-                    drop_samples = set(samples_na_list) & set(data_df.index)
-                    data_df = data_df.drop(drop_samples, axis=0)
-                    metadata_df = metadata_df.drop(drop_samples, axis=0)
+            samples_na_list = list(metadata_df.index[metadata_df[batch_col].isna()])
 
-        helper.logger(log_file, log_string)
+            if len(samples_na_list) > 0:
+                helper.logger(log_file,
+                    f"###WARNING###: {len(samples_na_list)} sample(s) without value in batch column '{batch_col}' will be dropped:"
+                    + "\n\t\t\t\t" + ", ".join(map(str, samples_na_list)) + "\n")
+                # data_df: precursors as rows, samples as columns (not transposed yet)
+                data_df = data_df.drop(columns=samples_na_list)
+                metadata_df = metadata_df.drop(index=samples_na_list)
 
-        # Exit module if there are multiple levels in batch_cols of meta file
-        for b in parameters_dict["batch_cols_meta"]:
-            if len(np.unique(metadata_df[b])) == 1:
-                warning_batch_level_str = \
-                    f"###ERROR###: Batch Level {b} does only have 1 level:{np.unique(metadata_df[b])[0]} value:"\
-                    + "\n\t\t\t\tMultiple levels are required to perform batch correction"  + "\n"
-                log_string += warning_batch_level_str
-                helper.logger(log_file, log_string)
+    # Exit module if there is only one level in a batch column of the meta file
+    # (not needed for adjust_confounders_batchwise, one batch is a valid case there)
+    if parameters_dict["correct_method"] in ["harmony", "combat"]:
+        for batch_col in parameters_dict["batch_cols_meta"]:
+            if metadata_df[batch_col].nunique() < 2:
+                helper.logger(log_file,
+                        f"###ERROR###: Batch column '{batch_col}' has only one level ({', '.join(map(str, metadata_df[batch_col].dropna().unique()))})."\
+                        + "\n\t\t\t\tMultiple levels are required to perform batch correction.\n")
                 if exit_module:
                     sys.exit(1)
 
@@ -1076,11 +1072,13 @@ if __name__ == "__main__":
                     .mean()
                 )
                 if (presence_batch_df<batch_presence_th).sum(axis=1).sum() > 0:
-                    log_str_presence += f"###ERROR###: Not every precursor has a presence of >{batch_presence_th*100}% in every batch.\nThe following number of precursors are missing per batch:\n"
+                    log_str_presence += \
+                        f"###ERROR###: Not every precursor has a presence of >= {batch_presence_th*100:.0f}% in every level of batch column '{batch}'."\
+                        + "\n\t\t\t\tNumber of precursors below threshold per batch:\n"
                     for batch_level in presence_batch_df.index:
                         n_missing_batch_level = (
                             presence_batch_df<batch_presence_th).sum(axis=1).loc[batch_level]
-                        log_str_presence += f"\t {batch} {batch_level} :{n_missing_batch_level} \t\t\n"
+                        log_str_presence += f"\t\t\t\t{batch} {batch_level}: {n_missing_batch_level}\n"
                         presence_dfs[batch][batch_level] = list(
                             data_df.index[(presence_batch_df<batch_presence_th).loc[batch_level]==True]
                             )
@@ -1093,7 +1091,7 @@ if __name__ == "__main__":
             if flag_presence_batch:
                 helper.logger(log_file, log_str_presence)
             else:
-                helper.logger(log_file, f"All precursor have presence of > {batch_presence_th*100}% in all batches.")
+                helper.logger(log_file, time.strftime("%Y-%m-%d%t%H:%M:%S") + f"\tAll precursors have a presence of >= {batch_presence_th*100:.0f}% in all batches.\n")
 
 
 
@@ -1120,7 +1118,7 @@ if __name__ == "__main__":
 
                 id_mapping_df.to_csv(
                     os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
-                sys.exit("###ERROR###: Precursor presence in some batches below threshold!")
+                sys.exit("###ERROR###: Precursor presence in some batches below threshold.")
     
     # transpose data
     data_df = data_df.T
@@ -1152,8 +1150,8 @@ if __name__ == "__main__":
             # Check if only one batch col is defined!
             if len(parameters_dict["batch_cols_meta"]) > 1:
                 info_batch_str = \
-                        "###ERROR###: COMBAT is only implemented for one batch variable.\n"\
-                        +f"\n\t\t\t\t{len(parameters_dict['batch_cols_meta'])} levels are provided: {parameters_dict['batch_cols_meta']}"
+                        "###ERROR###: ComBat is only implemented for one batch column."\
+                        +f"\n\t\t\t\t{len(parameters_dict['batch_cols_meta'])} columns are provided in 'batch_cols_meta': {parameters_dict['batch_cols_meta']}.\n"
                 log_string += info_batch_str
                 helper.logger(log_file,log_string)
                 if exit_module:
@@ -1184,8 +1182,8 @@ if __name__ == "__main__":
                     metadata_df[parameters_dict["batch_cols_meta"][0]])
                 if len(levels_data) != len(levels_fitsamples):
                     info_fitsamples_str = \
-                        f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit COMBAT model (n={len(levels_fitsamples)})."\
-                        +f"\n\t\t\t\tLevel(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model and samples will be discarded"  + "\n"
+                        f"###WARNING###: Uneven numbers of batch levels in whole dataset (n={len(levels_data)}) and samples selected to fit ComBat model (n={len(levels_fitsamples)})."\
+                        +f"\n\t\t\t\tLevel(s) {list(levels_data-levels_fitsamples)} do not appear in samples to fit model, these samples will be discarded.\n"
                     log_string += info_fitsamples_str
                 # Remove samples of batch levels do not appear in fit samples
                 metadata_df = metadata_df[
@@ -1216,7 +1214,7 @@ if __name__ == "__main__":
     
             # check if number of cols and datatypes have same length
             if not len(parameters_dict["adjust_cols"]) == len(parameters_dict["adjust_cols_dtypes"]):
-                log_string += "###ERROR###: Number of columns for adjustment and number of datatypes are different.\n"
+                log_string += "###ERROR###: Number of columns in 'adjust_cols' and number of datatypes in 'adjust_cols_dtypes' are different.\n"
                 helper.logger(log_file, log_string)
                 if exit_module:
                     sys.exit(1)
@@ -1229,7 +1227,7 @@ if __name__ == "__main__":
                     invalid_dtypes_list.append(dt)
             
             if len(invalid_dtypes_list) > 0:
-                log_string += f"###ERROR###: The following datatypes are not valid: {invalid_dtypes_list}.\n"
+                log_string += f"###ERROR###: The following datatypes in 'adjust_cols_dtypes' are not valid: {invalid_dtypes_list}.\n"
                 helper.logger(log_file, log_string)
                 if exit_module:
                     sys.exit(1)
@@ -1239,7 +1237,7 @@ if __name__ == "__main__":
             for var in parameters_dict["adjust_cols"]:
                 if metadata_df[var].isna().any():
                     n_na = metadata_df[metadata_df[var].isna()].shape[0]
-                    log_string += f"###ERROR###: Column {var} contains n={n_na} missing values.\n"
+                    log_string += f"###ERROR###: Column '{var}' contains {n_na} missing value(s).\n"
             if "###ERROR###" in log_string:
                 helper.logger(log_file, log_string)
                 if exit_module:
@@ -1255,33 +1253,34 @@ if __name__ == "__main__":
                     try:
                         metadata_df[var] = metadata_df[var].astype(float)
                     except:
-                        log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                        log_string += f"###ERROR###: Column '{var}' could not be cast to {dt}.\n"
     
                 elif dt == "ordinal":
                     try:
                         metadata_df[var] = metadata_df[var].astype(int)
                     except:
-                        log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                        log_string += f"###ERROR###: Column '{var}' could not be cast to {dt}.\n"
                 
                 elif dt == "nominal":
                     #nominal variable should be casted to string -> object in pandas
                     try:
                         metadata_df[var] = metadata_df[var].astype(str)
                     except:
-                        log_string += f"###ERROR###: Column {var} could not be casted to {dt}.\n"
+                        log_string += f"###ERROR###: Column '{var}' could not be cast to {dt}.\n"
                 else:
-                    log_string += "###ERROR###: Datatype not valid.\n"                
+                    log_string += f"###ERROR###: Datatype '{dt}' of column '{var}' not valid.\n"
     
             # Check if requested model is implemented
             if parameters_dict["adjust_model"].lower() not in [
                     "ols","ridge","lasso","elasticnet","huber","bayesian","loess"]:
                     
-                    log_string += f"###ERROR###: Model {parameters_dict['adjust_model']} not implemented, no correction applied.\n"                
+                    log_string += f"###ERROR###: Model '{parameters_dict['adjust_model']}' not implemented, no correction applied.\n"
             
             #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
             if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
                 parameters_dict["adjust_covariates_onebyone"] = 1
-                log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+                log_string += "###WARNING###: 'adjust_covariates_onebyone' set to 1 for 'adjust_model' LOESS."\
+                    + "\n\t\t\t\tLOESS cannot be applied to correct for several variables at once.\n"
             
             if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
                 
@@ -1364,7 +1363,7 @@ if __name__ == "__main__":
             
             if parameters_dict["adjust_cols"] is None:
                 warning_batch_level_str = \
-                    "###ERROR###: No correction variable defined \n"
+                    "###ERROR###: No correction variable defined in 'adjust_cols'.\n"
                 log_string += warning_batch_level_str
                 helper.logger(log_file, log_string)
                 if exit_module:
@@ -1373,7 +1372,8 @@ if __name__ == "__main__":
             #if adjustment model is LOESS, switch adjust_covariates_onebyone on because LOESS correction cannot deal with several variables
             if parameters_dict["adjust_model"] == "loess" and not parameters_dict["adjust_covariates_onebyone"]:
                 parameters_dict["adjust_covariates_onebyone"] = 1
-                log_string += "###WARNING###: Variable adjust_covariates_onebyone set to 1 for adjust_model LOESS, LOESS cannot be applied to correct for several variables at once.\n"
+                log_string += "###WARNING###: 'adjust_covariates_onebyone' set to 1 for 'adjust_model' LOESS."\
+                    + "\n\t\t\t\tLOESS cannot be applied to correct for several variables at once.\n"
     
     
             fitsamples_idx_list = None
@@ -1423,11 +1423,11 @@ if __name__ == "__main__":
             
         else:
             data_processed_df = data_df
-            log_string += f"###WARNING###: Unknown correction method: {parameters_dict['correct_method']} — skipping.\n"
+            log_string += f"###WARNING###: Unknown correction method '{parameters_dict['correct_method']}', no correction applied.\n"
     except Exception as e:
                 e_type, e_obj, e_tb = sys.exc_info()
                 script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-                helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+                helper.logger(log_file, f"###ERROR###: Module {script_name} ran into an error at line {e_tb.tb_lineno}.\n\t\t\t\t{e}\n")
                 if exit_module:
                     sys.exit("Correction exited with an error.")
 
