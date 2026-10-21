@@ -135,133 +135,75 @@ def batchcorrect_combat(
     -------
     Corrected feature matrix as pd.DataFrame, same shape as input profiles.
     """
-    log_string = ""
-    log_string += time.strftime(
-            "%Y-%m-%d%t%H:%M:%S"+"\tStart ComBat batch correction.\n")
-    
+    def _timestamp(msg):
+        return time.strftime("%Y-%m-%d%t%H:%M:%S") + f"\t{msg}\n"
+
+    def _encode(df, nominal_cols):
+        """One-hot encode nominal columns; pycombat only uses numeric numpy arrays."""
+        if len(nominal_cols) > 0:
+            df = pd.concat([
+                df.drop(columns=nominal_cols),
+                pd.get_dummies(df[nominal_cols].astype(str), drop_first=True)
+            ], axis=1)
+        return df.to_numpy(dtype=float)
+
+    log_string = _timestamp("Start ComBat batch correction.")
+
+    # align metadata to data once; all arrays below share this sample order
+    metadata_df = metadata_df.loc[data_df.index]
+    batch_series = metadata_df[batch_key].astype(str)
+
+    # temporary imputation: feature median per batch, then over all samples
     missing_values = data_df.isna()
-    if missing_values.sum().sum()>0:
-        log_string += time.strftime(
-                "###WARNING###: Missing values detected for ComBat. Inserting feature median per batch temporary. The imputed values will be removed after this step.\n")
-    
-    for item in metadata_df[batch_key].unique():
-        indices_batch = metadata_df[metadata_df[batch_key]==item].index
-        imp_tmp = data_df.loc[indices_batch]
-        imp_tmp = imp_tmp.fillna(imp_tmp.median())
-        data_df.loc[imp_tmp.index] = imp_tmp
-    # If a precursor is missing in full batch set it to median temporarily
-    data_df = data_df.fillna(data_df.median())
-                
-    # effects to preserve during batch correction
+    if missing_values.any().any():
+        log_string += "###WARNING###: Missing values detected for ComBat. Inserting feature median per batch temporary. The imputed values will be removed after this step.\n"
+        data_df = data_df.fillna(data_df.groupby(batch_series).transform("median"))
+        data_df = data_df.fillna(data_df.median())
+
+    Y = data_df.to_numpy()
+    b = batch_series.to_numpy()
+
+    # effects to preserve during batch correction (non-numeric columns one-hot encoded)
+    X = None
     if cov_preserve_list is not None:
         x_df = metadata_df[cov_preserve_list]
-    else:
-        x_df = None
+        X = _encode(x_df, [
+            c for c in cov_preserve_list if not pd.api.types.is_numeric_dtype(x_df[c])])
 
-    # covariates to adjust for during batch correction
+    # covariates to adjust for during batch correction (nominal columns one-hot encoded)
+    C = None
     if cov_adjust_list is not None:
-        c_df = metadata_df[cov_adjust_list]
-        c_vars_nom = [
-            c for c, dtype in zip(
-                cov_adjust_list, cov_adjust_list_dtypes) if dtype == "nominal"]
-        c_vars_not_nom = [
-            c for c, dtype in zip(
-                cov_adjust_list, cov_adjust_list_dtypes) if dtype != "nominal"]
-        
-        if  len(c_vars_nom) > 0:
-            c_df = pd.concat([
-                c_df[c_vars_not_nom], 
-                pd.get_dummies(c_df[c_vars_nom].astype(str), drop_first=True)
-                        ], axis=1)
+        C = _encode(metadata_df[cov_adjust_list], [
+            c for c, dt in zip(cov_adjust_list, cov_adjust_list_dtypes) if dt == "nominal"])
+
+    # fit on selected samples (default: all), transform all samples
+    if fitsamples_idx_list is None:
+        fit_mask = np.ones(len(Y), dtype=bool)
+        log_string += _timestamp("Fit ComBat Class on all samples.")
     else:
-        c_df = None
+        fit_mask = data_df.index.isin(fitsamples_idx_list)
+        log_string += _timestamp("Fit ComBat Class on defined samples.")
 
-    # Init combat Model
-    combat_model=pycombat.Combat()
-    # fit combat model on selected samples
-    if fitsamples_idx_list is not None:
-        log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on defined samples.\n")
+    def _rows(A):
+        return None if A is None else A[fit_mask]
 
-        Y_fit = data_df.loc[fitsamples_idx_list].to_numpy()
-        b_fit = metadata_df[batch_key].loc[fitsamples_idx_list].astype(str).to_numpy()
-        if x_df is not None:
-            X_fit = x_df.loc[fitsamples_idx_list]
-        else:
-            X_fit = None
-        if c_df is not None:
-            C_fit = c_df.loc[fitsamples_idx_list]
-        else:
-            C_fit = None
+    combat_model = pycombat.Combat().fit(Y=Y[fit_mask], b=b[fit_mask], X=_rows(X), C=_rows(C))
 
-        c_fit = combat_model.fit(
-            Y=Y_fit,
-            b=b_fit,
-            X=X_fit,
-            C=C_fit
-        )
-    else:
-        log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"+"\tFit ComBat Class on all samples.\n")
-
-        c_fit = combat_model.fit(
-            Y=data_df.to_numpy(),
-            b=metadata_df[batch_key].to_numpy(),
-            X=x_df, 
-            C=c_df
-        )
-
-    log_string += time.strftime(
-                "%Y-%m-%d%t%H:%M:%S"+"\tTransform data.\n")
-
-    samples_all = data_df.index
-    Y_all = data_df.to_numpy()
-    
-    if fitsamples_idx_list is not None:
-        b_all =  metadata_df[batch_key].loc[samples_all].astype(str).to_numpy()
-    else:
-        b_all = metadata_df[batch_key].to_numpy()
-    
-
-    X_all = x_df.loc[samples_all] if x_df is not None else None
-    C_all = c_df.loc[samples_all] if c_df is not None else None
-
-    # Check if all samples have the same number of observations
-    if X_all is not None and C_all is not None:
-        assert Y_all.shape[0] == X_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-    elif X_all is not None:
-        assert Y_all.shape[0] == X_all.shape[0] == b_all.shape[0]
-    elif C_all is not None:
-        assert Y_all.shape[0] == C_all.shape[0] == b_all.shape[0]
-    else:
-        assert Y_all.shape[0] == b_all.shape[0]
-
-    data_processed_arr = c_fit.transform(
-        Y=Y_all,
-        b=b_all,
-        X=X_all,
-        C=C_all
-    )
-
+    log_string += _timestamp("Transform data.")
     data_processed_df = pd.DataFrame(
-        data_processed_arr,
+        combat_model.transform(Y=Y, b=b, X=X, C=C),
         index=data_df.index,
         columns=data_df.columns)
-    
     data_processed_df[missing_values] = np.nan
 
     # Check if output df consists of NA's exclusively
-    # if so return error in Log and don't return processed df
     if data_processed_df.isna().all().all():
         log_string += "###ERROR###: All Values in DF were transformed to NA.\n"\
-                +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance."  + "\n"
-        return log_string
-    else:
-        log_string += time.strftime(
-            "%Y-%m-%d%t%H:%M:%S"\
-            +"\tFinished COMBAT batch correction successfully.\n")
+                +"\t\t\t\tPlease filter input dataframe for features with high missing values or low variance.\n"
+        return None, log_string
 
-        return data_processed_df, log_string
+    log_string += _timestamp("Finished COMBAT batch correction successfully.")
+    return data_processed_df, log_string
         
 def get_min_samples(m):
     """
@@ -962,7 +904,9 @@ if __name__ == "__main__":
         ## metadata
         ## log file
         skip_parser = True
-        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = helper.skip_parser_init(module)
+        (
+            data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, 
+            idmap_fp, counter, outname) = helper.skip_parser_init(module)
     else:
         #if script called from terminal
         skip_parser = False
@@ -1133,10 +1077,10 @@ if __name__ == "__main__":
                         n_missing_batch_level = (
                             presence_batch_df<batch_presence_th).sum(axis=1).loc[batch_level]
                         log_str_presence += f"\t {batch} {batch_level} :{n_missing_batch_level} \t\t\n"
-                    presence_dfs[batch][batch_level] = list(
-                        data_df.index[(presence_batch_df<batch_presence_th).loc[batch_level]==True]
-                        )
-                    missing_precursors_batch = missing_precursors_batch.union(set(presence_dfs[batch][batch_level]))
+                        presence_dfs[batch][batch_level] = list(
+                            data_df.index[(presence_batch_df<batch_presence_th).loc[batch_level]==True]
+                            )
+                        missing_precursors_batch = missing_precursors_batch.union(set(presence_dfs[batch][batch_level]))
                     
                     flag_presence_batch = True
             missing_precursors_batch = list(missing_precursors_batch)
@@ -1165,10 +1109,10 @@ if __name__ == "__main__":
                 )
                 
                 # manipulate id-mapping by adding missingngess in batch
-                id_mapping_df["include_correction"] = True
-                id_mapping_df = pd.concat([id_mapping_df, presence_doc_df], axis=1)
-                id_mapping_df.loc[
-                    missing_precursors_batch, "include_correction"] = False
+                id_mapping_df["include_correction"] = \
+                    ~id_mapping_df["Precursor.Id"].isin(missing_precursors_batch)
+                id_mapping_df["include_correction_batch"] = \
+                    id_mapping_df["Precursor.Id"].map(presence_doc_df["include_correction_batch"])
 
                 id_mapping_df.to_csv(
                     os.path.join(out_dir_fp, "id_mapping.tsv"), index=False, sep="\t")
@@ -1258,6 +1202,7 @@ if __name__ == "__main__":
                         cov_adjust_list = parameters_dict["combat_cols_adjust_meta"],
                         cov_adjust_list_dtypes = parameters_dict["combat_cols_adjust_dtypes"]
                     )
+
                     if isinstance(out, str) and "ERROR" in out:
                         log_string_combat = out 
                         log_string += log_string_combat
