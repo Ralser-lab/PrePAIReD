@@ -38,7 +38,7 @@ import_dataset <- function(diann_report_file, norm_intensity, fasta_file, organi
 #' @param dataset List object with all DIA-NN data
 #' @param tryptic_file File containing
 tryptic_filt <- function(dataset, tryptic_file, venn_pdf) {
-  tryptic_peps <- read.table(tryptic_file, header = T)
+  tryptic_peps <- read_tsv_pd(tryptic_file, row_names = FALSE, sep = "auto")
   tryptic <- unique(tryptic_peps$peptide[tryptic_peps$tryptic])
 
   # Determine how many proteins are tryptic and/or proteotypic
@@ -151,6 +151,7 @@ cmd.args <- commandArgs()
 m <- regexpr("(?<=^--file=).+", cmd.args, perl = TRUE)
 script.dir <- dirname(regmatches(cmd.args, m))
 source(file.path(script.dir, "utils.R"))
+source(file.path(script.dir, "helper_functions_R.R"))
 cat("Parameters in use:\n")
 cat("DIA-NN file =", file.path(input_dir, diann_file), "\n")
 cat("Intensity used is normalized =", norm_intensity, "\n")

@@ -45,18 +45,11 @@ summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter
     in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
     
     ## read in data
-    quant_df <- as.data.frame(read.table(file = in_data_file,
-                                         sep = "\t",
-                                         header = TRUE,
-                                         row.names = 1,
-                                         check.names = FALSE))
-    
+    quant_df <- read_tsv_pd(in_data_file)
+
     parameter_list <- read_JSON(parampath)
-    
-    mapping_df <- as.data.frame(read.table(file = idmappath,
-                                           sep = "\t",
-                                           header = TRUE,
-                                           check.names = FALSE))
+
+    mapping_df <- read_tsv_pd(idmappath, row_names = FALSE)
     
     ## setting seed
     set.seed(parameter_list[["seed"]] + counter)
@@ -93,9 +86,8 @@ summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter
     protein_df[!is.finite(as.matrix(protein_df))] <- NA
     
     ## load mask + mask_description to save unchanged
-    mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
-    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file), 
-                                                rownames = 1))
+    mask <- read_tsv_pd(in_mask_file)
+    mask_description <- read_tsv_pd(in_mask_desc_file, id_label = "filter")
     
     ## write outputs
     out_data_file <- file.path(outpath,
@@ -112,33 +104,11 @@ summarize <- function(datapath, parampath, outpath, idmappath, log_file, counter
                                     sprintf("data_%02d_mask_description.tsv", 
                                             as.numeric(counter)))
     
-    write.table(protein_df,
-                out_data_file,
-                sep = "\t",
-                quote = FALSE,
-                col.names = NA)
-    
-    write.table(2^quant_df,
-                out_data_file_precursors_unlog,
-                sep = "\t",
-                quote = FALSE,
-                col.names = NA)
-    
-    write.table(2^protein_df,
-                out_data_file_unlog,
-                sep = "\t", 
-                quote = FALSE,
-                col.names = NA)
-    
-    fwrite(mask, 
-           out_mask_file, 
-           row.names = TRUE,
-           sep = "\t")
-    
-    fwrite(mask_description,
-           out_mask_desc_file, 
-           row.names = TRUE,
-           sep = "\t")
+    write_tsv_pd(protein_df, out_data_file)
+    write_tsv_pd(2^quant_df, out_data_file_precursors_unlog)
+    write_tsv_pd(2^protein_df, out_data_file_unlog)
+    write_tsv_pd(mask, out_mask_file)
+    write_tsv_pd(mask_description, out_mask_desc_file)
     
     return(NULL)
 }

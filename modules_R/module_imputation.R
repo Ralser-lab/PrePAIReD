@@ -49,11 +49,7 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
     
     ## read in data
-    quant_df <- as.data.frame(read.table(file = in_data_file,
-                                         sep  = "\t",
-                                         header = TRUE,
-                                         row.names = 1,
-                                         check.names = FALSE))
+    quant_df <- read_tsv_pd(in_data_file)
     
     parameter_list <- read_JSON(parampath)
     
@@ -73,9 +69,8 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
     imputed_df <- run_with_logging(main_impute, log_file)
     
     ## load mask + mask_description
-    mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
-    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file), 
-                                                rownames = 1))
+    mask <- read_tsv_pd(in_mask_file)
+    mask_description <- read_tsv_pd(in_mask_desc_file, id_label = "filter")
     
     ## add 0.99 to the mask for every cell that was imputed
     ### positions that were imputed
@@ -103,14 +98,9 @@ impute <- function(datapath, parampath, outpath, log_file, counter){
                                             as.numeric(counter)))
     
     ## write imputed data.frame into .tsv file
-    write.table(imputed_df,
-                out_data_file,
-                sep = "\t",
-                quote = FALSE,
-                col.names = NA)
-    
-    fwrite(mask, out_mask_file, row.names = TRUE, sep = "\t")
-    fwrite(mask_description, out_mask_desc_file, row.names = TRUE, sep = "\t")
+    write_tsv_pd(imputed_df, out_data_file)
+    write_tsv_pd(mask, out_mask_file)
+    write_tsv_pd(mask_description, out_mask_desc_file)
     
     return(NULL)
 }
@@ -224,7 +214,6 @@ impute_pca <- function(quant_df, parameter_list, outpath){
     if (isTRUE(as.logical(as.numeric(parameter_list[["export_output_pcaMethods"]])))) { # to match the parameter name and treat a missing value as FALSE
       saveRDS(imputed_list, file.path(outpath,
                                       paste0("output_", parameter_list[["imputation_method"]],"_list.RData")))
-    }
     }
     
     ## get the estimated complete observations

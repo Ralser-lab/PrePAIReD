@@ -23,59 +23,6 @@ script_dir <- dirname(script_path)
 source(file.path(script_dir, "helper_functions_R.R"))
 
 
-#' @title Stop with a clear message if IDs (row names) are duplicated
-#' @description
-#' read.table(row.names = 1) aborts with the cryptic
-#' "duplicate 'row.names' are not allowed" and does not tell you WHICH file or
-#' WHICH ids are the problem. This helper is called on the intended row-name
-#' vector BEFORE it is used, so we can raise a message that actually names the
-#' source file, the column, and the offending ids.
-#' @param ids Character vector of intended row names (e.g. feature or sample ids).
-#' @param source_file Path of the file the ids came from (for the message).
-#' @param id_label Human-readable name of the id column (e.g. "Run" or "feature").
-#' @return Invisibly TRUE if all ids are unique; otherwise stops execution.
-check_unique_ids <- function(ids, source_file, id_label) {
-    dup <- unique(ids[duplicated(ids)])
-    if (length(dup) > 0) {
-        preview <- paste(utils::head(dup, 10), collapse = ", ")
-        if (length(dup) > 10) preview <- paste0(preview, ", ...")
-        stop(sprintf(
-            paste0("Duplicate %s ids found in '%s' (%d duplicated value(s)): %s\n",
-                   "  Row/sample ids must be unique. For DIA-NN precursors this",
-                   " usually means the channel was not added to the label at",
-                   " every level (precursor/peptide/protein). Add the channel to",
-                   " the name, apply a filter (e.g. Channel == L), or de-duplicate",
-                   " before this step."),
-            id_label, source_file, length(dup), preview),
-            call. = FALSE)
-    }
-    invisible(TRUE)
-}
-
-
-#' @title Read a quantitative matrix from a TSV
-#' @description
-#' Reads the features x samples matrix. Behaves like the original
-#' read.table(row.names = 1) call, except it checks the feature column for
-#' duplicates first (via check_unique_ids) so a repeated feature id gives a
-#' clear message naming the file instead of the cryptic
-#' "duplicate 'row.names' are not allowed".
-#' @param path Path to the input data file (.tsv).
-#' @return data.frame (features x samples) with feature IDs as row names.
-read_quant_table <- function(path) {
-    df <- read.table(
-        file = path,
-        sep = "\t",
-        header = TRUE,
-        check.names = FALSE
-    )
-    check_unique_ids(as.character(df[[1]]), path, "feature")
-    rownames(df) <- as.character(df[[1]])
-    df[[1]] <- NULL
-    df
-}
-
-
 #' @title Function for batch correction in R
 #' @description
 #' Reads a quantitative data table and metadata, then performs batch correction
@@ -105,11 +52,8 @@ batch_correct <- function(datapath, parampath, outpath,
 
     parameter_list <- read_JSON(parampath)
 
-    ## read data
-    ## --- CHANGED: the original inline read.table(...) call is wrapped in
-    ## --- read_quant_table(), which reads the TSV exactly as before but first
-    ## --- checks the feature column for duplicates and errors clearly if found.
-    quant_df <- read_quant_table(in_data_file)
+    ## read data (read_tsv_pd checks the feature column for duplicates)
+    quant_df <- read_tsv_pd(in_data_file)
 
     ## read metadata
     ## --- CHANGED: the original code used read.table(row.names = 1), which keys
@@ -122,12 +66,7 @@ batch_correct <- function(datapath, parampath, outpath,
     ## --- contrasts". We now key the metadata on the configured sample column
     ## --- so it aligns with the data columns (falling back to column 1 if the
     ## --- parameter is absent, preserving the old behaviour for old inputs).
-    meta_df <- read.table(
-        file = metadata,
-        sep = "\t",
-        header = TRUE,
-        check.names = FALSE
-    )
+    meta_df <- read_tsv_pd(metadata, row_names = FALSE)
 
     sample_col <- parameter_list[["metadata_sample_column"]]
     if (is.null(sample_col) || !(sample_col %in% colnames(meta_df))) {
@@ -190,9 +129,8 @@ batch_correct <- function(datapath, parampath, outpath,
     corrected_df <- run_with_logging(main_batch, log_file)
 
     ## load mask + mask_description to save unchanged
-    mask <- as.data.frame(as.matrix(fread(in_mask_file), rownames = 1))
-    mask_description <- as.data.frame(as.matrix(fread(in_mask_desc_file),
-                                                rownames = 1))
+    mask <- read_tsv_pd(in_mask_file)
+    mask_description <- read_tsv_pd(in_mask_desc_file, id_label = "filter")
 
     ## write outputs
     out_data_file <- file.path(outpath,
@@ -203,21 +141,9 @@ batch_correct <- function(datapath, parampath, outpath,
                                     sprintf("data_%02d_mask_description.tsv",
                                             as.numeric(counter)))
 
-    write.table(corrected_df,
-                out_data_file,
-                sep = "\t",
-                quote = FALSE,
-                col.names = NA)
-
-    fwrite(mask,
-           out_mask_file,
-           row.names = TRUE,
-           sep = "\t")
-
-    fwrite(mask_description,
-           out_mask_desc_file,
-           row.names = TRUE,
-           sep = "\t")
+    write_tsv_pd(corrected_df, out_data_file)
+    write_tsv_pd(mask, out_mask_file)
+    write_tsv_pd(mask_description, out_mask_desc_file)
 
     return(NULL)
 }

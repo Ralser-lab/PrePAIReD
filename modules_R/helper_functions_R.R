@@ -1,4 +1,94 @@
 library(jsonlite)
+library(data.table)
+
+#' @title Stop with a clear message if IDs (row names) are duplicated
+#' @description
+#' read.table(row.names = 1) aborts with the cryptic
+#' "duplicate 'row.names' are not allowed" and does not tell you WHICH file or
+#' WHICH ids are the problem. This helper is called on the intended row-name
+#' vector BEFORE it is used, so we can raise a message that actually names the
+#' source file, the column, and the offending ids.
+#' @param ids Character vector of intended row names (e.g. feature or sample ids).
+#' @param source_file Path of the file the ids came from (for the message).
+#' @param id_label Human-readable name of the id column (e.g. "Run" or "feature").
+#' @return Invisibly TRUE if all ids are unique; otherwise stops execution.
+check_unique_ids <- function(ids, source_file, id_label) {
+  dup <- unique(ids[duplicated(ids)])
+  if (length(dup) > 0) {
+    preview <- paste(utils::head(dup, 10), collapse = ", ")
+    if (length(dup) > 10) preview <- paste0(preview, ", ...")
+    stop(sprintf(
+      paste0("Duplicate %s ids found in '%s' (%d duplicated value(s)): %s\n",
+             "  Row/sample ids must be unique. For DIA-NN precursors this",
+             " usually means the channel was not added to the label at",
+             " every level (precursor/peptide/protein). Add the channel to",
+             " the name, apply a filter (e.g. Channel == L), or de-duplicate",
+             " before this step."),
+      id_label, source_file, length(dup), preview),
+      call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+#' @title Read a TSV file the same way pandas does in the Python modules
+#' @description
+#' Reads a tab-separated file with the quoting rules used by
+#' \code{pandas.read_csv(sep = "\t")}: only \code{"} is a quote character
+#' (\code{""} inside a quoted field is a literal \code{"}), there is no comment
+#' character, so \code{'} and \code{#} are read as plain text. Unlike
+#' \code{read.table}, ids containing these characters are not truncated or
+#' merged across rows.
+#' @param path Path to the file.
+#' @param row_names If TRUE, the first column is used as row names
+#'   (like \code{index_col = 0} in pandas) after checking it for duplicates.
+#' @param id_label Name of the id column used in the duplicate error message.
+#' @param sep Field separator, "\t" by default ("auto" lets fread detect it).
+#' @return data.frame; with row_names = TRUE the first column becomes row names.
+read_tsv_pd <- function(path, row_names = TRUE, id_label = "feature", sep = "\t") {
+  df <- fread(path,
+              sep = sep,
+              quote = "\"",
+              header = TRUE,
+              skip = 0,
+              na.strings = c("", "NA", "NaN"),
+              integer64 = "double",
+              keepLeadingZeros = TRUE,
+              check.names = FALSE,
+              data.table = FALSE)
+  # fread strips the outer quotes of a quoted field but keeps the escaped ""
+  # inside it, so turn them back into " (as pandas does)
+  unescape <- function(x) gsub("\"\"", "\"", x, fixed = TRUE)
+  names(df) <- unescape(names(df))
+  chr_cols <- vapply(df, is.character, logical(1))
+  df[chr_cols] <- lapply(df[chr_cols], unescape)
+  if (row_names) {
+    ids <- as.character(df[[1]])
+    check_unique_ids(ids, path, id_label)
+    df[[1]] <- NULL
+    rownames(df) <- ids
+  }
+  df
+}
+
+#' @title Write a TSV file the same way pandas does in the Python modules
+#' @description
+#' Writes row names as the first column (like \code{DataFrame.to_csv(sep = "\t")})
+#' and quotes only fields containing a tab, \code{"} or a newline, doubling
+#' inner \code{"} (pandas' \code{QUOTE_MINIMAL}). Missing values are written as
+#' empty fields.
+#' @param df data.frame or matrix to write.
+#' @param path Output file path.
+#' @return Invisibly NULL.
+write_tsv_pd <- function(df, path) {
+  fwrite(as.data.frame(df),
+         path,
+         sep = "\t",
+         quote = "auto",
+         qmethod = "double",
+         row.names = TRUE,
+         na = "")
+  invisible(NULL)
+}
 
 #' @title Run R Code with Logging (Append to Existing Log)
 #' @description

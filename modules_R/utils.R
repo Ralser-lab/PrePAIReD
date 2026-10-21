@@ -222,7 +222,7 @@ qc_diann_figures <- function(diann_stats_file, metadata, factors, outDir) {
   require(ggpubr)
 
   metadata$File.Name <- as.factor(basename(metadata$File.Name))
-  diann.stats <- as.data.frame(read_tsv(file.path(diann_stats_file)))
+  diann.stats <- as.data.frame(read_tsv(file.path(diann_stats_file), comment = ""))
   diann.stats$File.Name <- basename(diann.stats$File.Name)
   diann.stats <- merge(diann.stats, metadata)
 

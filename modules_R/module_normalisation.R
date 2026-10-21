@@ -248,11 +248,11 @@ main <- function() {
   }
   
   # Load data
-  DM_df <- as.data.frame(as.matrix(fread(args$data), rownames = 1))
-  
+  DM_df <- read_tsv_pd(args$data)
+
   # Load mask and mask description
-  mask <- as.data.frame(as.matrix(fread(sub("\\.tsv$", "_mask.tsv", args$data)), rownames = 1))
-  mask_description <- as.data.frame(as.matrix(fread(sub("\\.tsv$", "_mask_description.tsv", args$data)), rownames = 1))
+  mask <- read_tsv_pd(sub("\\.tsv$", "_mask.tsv", args$data))
+  mask_description <- read_tsv_pd(sub("\\.tsv$", "_mask_description.tsv", args$data), id_label = "filter")
   
   # Call normalize() with logging
   normalized_df <- run_with_logging(
@@ -270,9 +270,9 @@ main <- function() {
   output_file_mask <- file.path(args$out, sprintf("data_%02d_mask.tsv", as.numeric(args$counter)))
   output_file_mask_description <- file.path(args$out, sprintf("data_%02d_mask_description.tsv", as.numeric(args$counter)))
   
-  fwrite(normalized_df, output_file, row.names = TRUE, sep = "\t")
-  fwrite(mask, output_file_mask, row.names = TRUE, sep = "\t")
-  fwrite(mask_description, output_file_mask_description, row.names = TRUE, sep = "\t")
+  write_tsv_pd(normalized_df, output_file)
+  write_tsv_pd(mask, output_file_mask)
+  write_tsv_pd(mask_description, output_file_mask_description)
 
 }
 
