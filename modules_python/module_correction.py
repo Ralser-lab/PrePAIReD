@@ -218,6 +218,41 @@ def batchcorrect_combat(
     log_string += _timestamp("Finished COMBAT batch correction successfully.")
     return data_processed_df, log_string
         
+def check_loess_covariates(adjust_cols_list, adjust_cols_dtypes_list, metadata_df, min_unique=5):
+    """
+    LOESS needs a continuous covariate with enough distinct values, otherwise the
+    local regression is singular and the fit fails for every feature
+    (e.g. nominal covariates or ordinal covariates with few levels).
+
+    author: CD
+
+    Parameters
+    ----------
+    adjust_cols_list : list of str
+        Covariates used for adjustment.
+    adjust_cols_dtypes_list : list of str
+        Data types of the covariates ('nominal', 'ordinal', 'continuous').
+    metadata_df : pandas.DataFrame
+        Metadata containing the covariates.
+    min_unique : int, optional
+        Minimum number of distinct values. The default is 5.
+
+    Returns
+    -------
+    str
+        Error message for the log, empty string if LOESS can be applied to all covariates.
+    """
+    log_string = ""
+    for var, dt in zip(adjust_cols_list, adjust_cols_dtypes_list):
+        n_unique = metadata_df[var].nunique()
+        if dt != "continuous" or n_unique < min_unique:
+            log_string += \
+                f"###ERROR###: LOESS cannot be applied to covariate '{var}' ({dt}, {n_unique} distinct values)."\
+                + f"\n\t\t\t\tLOESS requires a continuous covariate with at least {min_unique} distinct values."\
+                + "\n\t\t\t\tPlease use a linear model (e.g. 'ols') for this covariate.\n"
+    return log_string
+
+
 def get_min_samples(m):
     """
     define minimum number of samples needed for fitting 
@@ -299,11 +334,14 @@ def get_ids_for_correction(
             " (correlation and ANOVA disagree)" is appended to "adjusted" or
             "no association" if the p-value of the correlation leads to the
             opposite decision (nominal with 2 levels and ordinal covariates).
+            adjust_confounders replaces "adjusted" by "not adjusted: <reason>" if
+            the feature could not be corrected (too few fit samples, LOESS fit failed).
         Coefficient and p-value are NaN if the feature was not tested.
 
     log_string : str
-        One warning per covariate with the number of features that were not
-        corrected. Details per feature are given in the comment columns of corr_df.
+        Empty at the moment. Features that are not corrected are documented in the
+        comment columns of corr_df, a single warning is written by warn_not_corrected
+        at the end of the correction.
 
     Notes:
     ------
@@ -466,22 +504,65 @@ def get_ids_for_correction(
         comment_arr[disagree] = comment_arr[disagree] + " (correlation and ANOVA disagree)"
         corr_dict["comment_" + metadata_var] = comment_arr
 
-        # global warning: how many features are not corrected for this covariate
-        n_not_corrected = int((status_arr != "adjusted").sum())
-        if n_not_corrected > 0:
-            log_string += (
-                f"###WARNING###: {metadata_var:<20} "
-                f"{n_not_corrected:>5}/{n_features:<2} "
-                f"({n_not_corrected / n_features * 100:2.2f}%) precursors were not corrected.\n"
-            )
-
     corr_df = pd.DataFrame(corr_dict, index=features)
     return corr_df, log_string
+
+
+def warn_not_corrected(corr_df, associations_fn="covariate_associations.tsv"):
+    """
+    Returns one warning if at least one feature was not corrected for at least
+    one covariate (status in the comment columns of corr_df other than "adjusted",
+    e.g. no significant association or too few samples).
+    The warning gives the mean number of features that were not corrected over all
+    fits, i.e. over all comment columns (one per covariate, and per batch for
+    adjust_confounders_batchwise).
+    Called once at the end of the adjust_confounders and adjust_confounders_batchwise
+    correction, details per feature are given in the comment columns.
+
+    author: CD
+
+    Parameters
+    ----------
+    corr_df : pandas.DataFrame
+        Association results with comment columns ("comment_<covariate>[_batch<batch>]").
+    associations_fn : str, optional
+        Name of the file corr_df is saved to.
+
+    Returns
+    -------
+    str
+        Warning for the log, empty string if every feature was corrected for every covariate.
+    """
+    comment_df = corr_df.filter(regex="^comment_")
+    if comment_df.empty:
+        return ""
+    not_corrected_df = ~comment_df.apply(lambda col: col.astype(str).str.startswith("adjusted"))
+    if not not_corrected_df.any().any():
+        return ""
+    # mean over all fits (comment columns) of the number of features not corrected
+    n_features = len(corr_df)
+    n_fits = comment_df.shape[1]
+    mean_not_corrected = not_corrected_df.sum(axis=0).mean()
+    log_string = f"###WARNING###: {mean_not_corrected:.1f}/{n_features} ({mean_not_corrected / n_features * 100:.2f}%) "\
+        + f"precursors could not be corrected (mean over {n_fits} fit(s), e.g. no significant association,"\
+        + " too few samples or failed LOESS fit)."\
+        + f"\n\t\t\t\tPlease check the comment columns in {associations_fn}.\n"
+
+    # LOESS: samples outside the covariate range of the fit samples are not corrected
+    outside_range_series = comment_df.apply(
+        lambda col: col.astype(str).str.contains("outside covariate range")).any(axis=1)
+    if outside_range_series.any():
+        log_string += \
+            f"###WARNING###: LOESS: for {int(outside_range_series.sum())}/{n_features} precursors samples outside the covariate range"\
+            + " of the fit samples were not corrected (in at least one fit)."\
+            + f"\n\t\t\t\tPlease check the comment columns in {associations_fn}.\n"
+    return log_string
 
 def adjust_confounders(
                 data_df, metadata_df, model_string, adjust_cols_list,
                 adjust_cols_dtypes_list, random_state, fitsamples_idx_list=None,
-                alpha_significance=0.05, alphas_models=[-3,3,7], corr_df=None
+                alpha_significance=0.05, alphas_models=[-3,3,7], corr_df=None,
+                log_label=None
             ):
         
     """
@@ -518,7 +599,7 @@ def adjust_confounders(
             - Incorporates prior distributions; regularizes automatically
         - 'logistic': Logistic Regression
             - Classification-based model (not recommended for continuous feature adjustment)
-        - 'lowess': Local polynomial regression (non-parametric, robust to non-linearity)
+        - 'loess': Local polynomial regression (non-parametric, robust to non-linearity)
 
     adjust_cols_list : list of str
         List of metadata column names to consider for adjustment.
@@ -545,7 +626,11 @@ def adjust_confounders(
         DataFrame summarizing the association statistics between metadata and features.
         Includes correlation coefficients and p-values for each tested variable.
         If no significant association was found, NaN is reported for r and p-value.
-        
+
+    log_label : str, optional
+        Added to the start/finish messages in the log, e.g. "MS.Batch 'B1'" for the
+        batchwise adjustment.
+
     Returns:
     --------
     data_processed_df : pandas.DataFrame
@@ -580,9 +665,12 @@ def adjust_confounders(
     metadata_df = metadata_df.copy()
     data_processed_df = data_df.copy()
 
+    # what is corrected, e.g. "covariate(s) Age, Sex in MS.Batch 'B1'"
+    adjustment_str = f"covariate(s) {', '.join(adjust_cols_list)}" + (f" in {log_label}" if log_label else "")
+
     log_string = ""
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tStart Adjustment.\n"
-    
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + f"\tStart adjustment for {adjustment_str}.\n"
+
     #calculate the association and p-value for all IDs if not provided as function argument
     if corr_df is None:
         corr_df, log_str = get_ids_for_correction(data_df=data_processed_df,
@@ -592,7 +680,20 @@ def adjust_confounders(
                                                   fitsamples_idx_list=fitsamples_idx_list,
                                                   alpha_significance=alpha_significance)
         log_string += log_str
-    
+
+    def _comment_cols(var):
+        """Comment column(s) of a covariate: "comment_<var>", or "comment_<var>_batch<batch>"
+        if corr_df was computed batchwise before (adjust_covariates_over_same_ids_per_batch)."""
+        return [c for c in corr_df.columns
+                if c == "comment_" + var or c.startswith("comment_" + var + "_batch")]
+
+    def _comment_not_adjusted(idx, metadata_vars, reason):
+        """Associated feature could not be corrected: document it in the comment columns.
+        (summarized in the log by warn_not_corrected, comment no longer starts with "adjusted")"""
+        for var in metadata_vars:
+            for comment_col in _comment_cols(var):
+                corr_df.loc[idx, comment_col] = f"not adjusted: {reason}"
+
     # iterate over features
     for idx in data_df.columns:
         metadata_vars = [] # collect variables that show significant associations with feature
@@ -610,7 +711,7 @@ def adjust_confounders(
             i for i, d in enumerate(
                 adjust_cols_dtypes_list) if d == "nominal"]
         col_cat_list = [adjust_cols_list[i] for i in idx_catgorical_list]
-        col_cat_list =  list(set(col_cat_list) & set(metadata_vars))
+        col_cat_list =  [c for c in col_cat_list if c in metadata_vars]
         if len(col_cat_list)> 0:
 
             C_cat=pd.get_dummies(
@@ -624,27 +725,22 @@ def adjust_confounders(
             C=metadata_df[metadata_vars]
 
         #order profiles and C in the same manner, remove samples with missing values
-        common_samples=list(set(data_processed_df[idx].dropna().index) & set(C.index))
-        '''
-        if len(common_samples)<len(data_processed_df.index):
-            log_string += "###WARNING###: Not all samples in profiles are found/annotated in metadata. Incomplete samples are being dropped.\n"
-        if len(common_samples) < len(C):
-            log_string += "###WARNING###: Not all samples in metadata are found in feature data. Incomplete samples are being dropped.\n"
-        '''
-            
+        common_samples=list(data_processed_df[idx].dropna().index.intersection(C.index, sort=False))
+
         C=C.loc[common_samples]
         #data_df_sel=data_processed_df.loc[common_samples]
 
         # C_f -> independent variables for adjustment fit
         if fitsamples_idx_list is not None:
-            C_f=C.loc[list(set(common_samples) & set(fitsamples_idx_list))]
+            C_f=C.loc[C.index.isin(fitsamples_idx_list)]
         else:
             C_f=C
         #define indices for fit
         sample_index=C_f.index
         
         if len(sample_index) < min_samples:
-            log_string += f"###WARNING###: Less than {min_samples} measured values for model fitting. ID {idx} skipped.\n"
+            _comment_not_adjusted(
+                idx, metadata_vars, f"too few fit samples (n={len(sample_index)} < {min_samples})")
             continue
         
         #create a linear model with significantly associated/correlated metadata variables
@@ -693,14 +789,33 @@ def adjust_confounders(
             estimator=loess.loess(C_fz, data_processed_df.loc[sample_index, idx])
             try:
                 estimator.fit()
-                pred_values=estimator.predict(C_z).values
-                #pred_values_f=estimator.predict(C_fz).values
-                corr_df.loc[idx,"R2_"+";".join(metadata_vars)]= metrics.r2_score(C_fz,data_processed_df.loc[sample_index, idx]) 
-                data_processed_df.loc[common_samples, idx] = data_processed_df.loc[common_samples, idx] - pred_values + median_abundance
+                # LOESS cannot extrapolate: correct only samples within the
+                # covariate range of the fit samples, the others stay unchanged
+                inside_range_arr = (
+                    (C_z >= C_fz.min(axis=0)) & (C_z <= C_fz.max(axis=0))).all(axis=1)
+                samples_inside_list = [
+                    s for s, inside in zip(common_samples, inside_range_arr) if inside]
+                pred_values=estimator.predict(C_z[inside_range_arr]).values
+                pred_values_f=estimator.predict(C_fz).values
+                # R2 on fit samples: measured values vs. LOESS prediction (as estimator.score for linear models)
+                corr_df.loc[idx,"R2_"+";".join(metadata_vars)] = metrics.r2_score(
+                    data_processed_df.loc[sample_index, idx], pred_values_f)
+                data_processed_df.loc[samples_inside_list, idx] = \
+                    data_processed_df.loc[samples_inside_list, idx] - pred_values + median_abundance
+
+                # document samples that were not corrected in the comment column
+                # (summarized in the log by warn_not_corrected)
+                n_outside = int((~inside_range_arr).sum())
+                if n_outside > 0:
+                    for comment_col in _comment_cols(metadata_vars[0]):
+                        corr_df.loc[idx, comment_col] = \
+                            f"{corr_df.loc[idx, comment_col]} ({n_outside} sample(s) outside covariate range of fit samples not corrected)"
             except ValueError:
-                log_string += f"###WARNING###: Fitting did not work (probably too similar outcomes). ID {idx} skipped.\n"
+                # e.g. covariate with too few distinct values in the fit samples
+                _comment_not_adjusted(idx, metadata_vars, "LOESS fit failed")
                 continue
-    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") +"\tAdjustment finished!"
+
+    log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + f"\tAdjustment finished for {adjustment_str}.\n"
     
     return data_processed_df, log_string, corr_df
 
@@ -794,6 +909,8 @@ def adjust_confounders_batchwise(
     #select samples used to fit the model
     if fitsamples_idx_list is None:
         fitsamples_idx_list = list(data_df.index)
+    # set for fast lookup; the sample order is always taken from idx_batch_list (reproducible)
+    fitsamples_set = set(fitsamples_idx_list)
 
     corr_dfs=list()
     processed_df_list=list()
@@ -811,7 +928,7 @@ def adjust_confounders_batchwise(
                 for batch in batch_levels:
                     #subset fitsamples to fitsamples in given batch
                     idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
-                    fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                    fitsamples_idx_batch_list = [s for s in idx_batch_list if s in fitsamples_set]
                     corr_df_batch, log_str = get_ids_for_correction(data_df = data_processed_df,
                                                                     metadata_df = metadata_df,
                                                                     adjust_cols_list = [covariate],
@@ -828,9 +945,10 @@ def adjust_confounders_batchwise(
             #batchwise correction
             for batch in tqdm(batch_levels):
                 idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
-                fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                fitsamples_idx_batch_list = [s for s in idx_batch_list if s in fitsamples_set]
                 if correct_over_same_ids_per_batch:
-                    corr_df_batch = corr_df_covariate[list(filter(lambda x: "_batch"+str(batch) in x, corr_df_covariate.columns)) + ["pval_" + covariate]]
+                    # columns of this batch only: exact suffix (substring match would also select "_batch10" for batch "1")
+                    corr_df_batch = corr_df_covariate[list(filter(lambda x: x.endswith("_batch"+str(batch)), corr_df_covariate.columns)) + ["pval_" + covariate]]
                 else:
                     corr_df_batch = None
                 data_processed_batch_df, log_string_batch, corr_df_batch =  adjust_confounders(data_df = data_processed_df.loc[idx_batch_list],
@@ -842,7 +960,8 @@ def adjust_confounders_batchwise(
                                                                                                fitsamples_idx_list = fitsamples_idx_batch_list,
                                                                                                alpha_significance = alpha_significance,
                                                                                                alphas_models = np.logspace(*alphas_models),
-                                                                                               corr_df = corr_df_batch)
+                                                                                               corr_df = corr_df_batch,
+                                                                                               log_label = f"{batch_level[0]} '{batch}'")
                 log_string += log_string_batch
                 if correct_over_same_ids_per_batch:
                     corr_df_batch.rename(columns={"R2":"R2_batch"+str(batch)},inplace=True)
@@ -869,7 +988,7 @@ def adjust_confounders_batchwise(
             for batch in batch_levels:
                 #subset fitsamples to fitsamples in given batch
                 idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
-                fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+                fitsamples_idx_batch_list = [s for s in idx_batch_list if s in fitsamples_set]
                 corr_df_batch, log_str = get_ids_for_correction(data_df = data_processed_df,
                                                                 metadata_df = metadata_df,
                                                                 adjust_cols_list = covariates,
@@ -888,7 +1007,7 @@ def adjust_confounders_batchwise(
         for batch in tqdm(batch_levels):
             #subset fitsamples to fitsamples in given batch
             idx_batch_list = list(metadata_df[metadata_df[batch_level[0]]==batch].index)
-            fitsamples_idx_batch_list = list(metadata_df.loc[list(set(idx_batch_list)&set(fitsamples_idx_list))].index)
+            fitsamples_idx_batch_list = [s for s in idx_batch_list if s in fitsamples_set]
             if len(fitsamples_idx_batch_list)==0:
                 log_string += \
                     f"###ERROR###: No samples for model fitting in batch '{batch}'."\
@@ -909,8 +1028,9 @@ def adjust_confounders_batchwise(
                 fitsamples_idx_list = fitsamples_idx_batch_list,
                 alpha_significance = alpha_significance,
                 alphas_models = np.logspace(*alphas_models),
-                corr_df = corr_pre_df
-                )  
+                corr_df = corr_pre_df,
+                log_label = f"{batch_level[0]} '{batch}'"
+                )
             
             log_string += log_string_batch
             processed_df_list.append(data_processed_batch_df)
@@ -928,7 +1048,9 @@ def adjust_confounders_batchwise(
         if correct_over_same_ids_per_batch:
             #add r2 values
             corr_df = corr_pre_df.join(corr_df[list(filter(lambda x: "R2" in x, corr_df.columns))]) #CHECK IF THIS IS NECCESSARY AT ALL #TODO
-        
+
+    # one warning if any feature was not corrected for any covariate in any batch
+    log_string += warn_not_corrected(corr_df)
     log_string += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tBatchwise Adjustment finished!\n"
     
     return data_processed_df, log_string, corr_df    
@@ -1018,10 +1140,9 @@ if __name__ == "__main__":
 
     # check if data and meta file consist of same samples
     # only keep intersect on index
-    common_idx_list = list(set(data_df.columns) & set(metadata_df.index))  # copy here
+    common_idx_list = list(
+        data_df.columns[data_df.columns.isin(metadata_df.index)])
     
-    n_samples_data_int = len(data_df.columns)
-    n_samples_meta_int = metadata_df.shape[0]
     data_df = data_df.loc[:, common_idx_list]
     metadata_df = metadata_df.loc[common_idx_list]
     
@@ -1281,7 +1402,13 @@ if __name__ == "__main__":
                 parameters_dict["adjust_covariates_onebyone"] = 1
                 log_string += "###WARNING###: 'adjust_covariates_onebyone' set to 1 for 'adjust_model' LOESS."\
                     + "\n\t\t\t\tLOESS cannot be applied to correct for several variables at once.\n"
-            
+
+            # LOESS needs continuous covariates with enough distinct values
+            # (error is handled by the ERROR check below)
+            if parameters_dict["adjust_model"] == "loess":
+                log_string += check_loess_covariates(
+                    parameters_dict["adjust_cols"], parameters_dict["adjust_cols_dtypes"], metadata_df)
+
             if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
                 
                 fit_col = parameters_dict["adjust_fitsamples_meta_column"]
@@ -1355,7 +1482,10 @@ if __name__ == "__main__":
                         alpha_significance = parameters_dict["adjust_alpha"],
                         alphas_models = np.logspace(*parameters_dict["adjust_alphas_models"]),
                         corr_df = None)
-                
+
+                # one warning (after all covariates) if any feature was not corrected for any covariate
+                log_string += warn_not_corrected(corr_df)
+
                 #save dataframe with correlation coefficients, association pvalues and comments
                 corr_df.to_csv(os.path.join(out_dir_fp,"covariate_associations.tsv"), sep="\t")
     
@@ -1374,8 +1504,18 @@ if __name__ == "__main__":
                 parameters_dict["adjust_covariates_onebyone"] = 1
                 log_string += "###WARNING###: 'adjust_covariates_onebyone' set to 1 for 'adjust_model' LOESS."\
                     + "\n\t\t\t\tLOESS cannot be applied to correct for several variables at once.\n"
-    
-    
+
+            # LOESS needs continuous covariates with enough distinct values
+            if parameters_dict["adjust_model"] == "loess":
+                log_string_loess = check_loess_covariates(
+                    parameters_dict["adjust_cols"], parameters_dict["adjust_cols_dtypes"], metadata_df)
+                if log_string_loess:
+                    log_string += log_string_loess
+                    helper.logger(log_file, log_string)
+                    if exit_module:
+                        sys.exit(1)
+
+
             fitsamples_idx_list = None
             if parameters_dict["adjust_fitsamples_meta_column"] is not None and parameters_dict["adjust_fitsamples_meta_level"] is not None:
                 
@@ -1404,20 +1544,21 @@ if __name__ == "__main__":
                         +f"\n\t\t\t\tLevel {fit_level} in meta column {fit_col} will be used to fit {parameters_dict['adjust_model']} Model for covariate correction."  + "\n"
                 log_string += info_fitsamples_str
             
-            data_processed_df, log_string, corr_df = adjust_confounders_batchwise(
+            data_processed_df, log_string_batchwise, corr_df = adjust_confounders_batchwise(
                 data_df=data_df,
-                metadata_df=metadata_df, 
-                model_string=parameters_dict["adjust_model"], 
-                batch_level=parameters_dict["batch_cols_meta"], 
-                random_state=seed, 
-                covariates=parameters_dict["adjust_cols"], 
+                metadata_df=metadata_df,
+                model_string=parameters_dict["adjust_model"],
+                batch_level=parameters_dict["batch_cols_meta"],
+                random_state=seed,
+                covariates=parameters_dict["adjust_cols"],
                 covariates_dtypes_list=parameters_dict["adjust_cols_dtypes"],
-                alpha_significance=parameters_dict["adjust_alpha"], 
+                alpha_significance=parameters_dict["adjust_alpha"],
                 alphas_models=parameters_dict["adjust_alphas_models"],
-                fitsamples_idx_list=fitsamples_idx_list, 
+                fitsamples_idx_list=fitsamples_idx_list,
                 correct_one_by_one=parameters_dict["adjust_covariates_onebyone"],
                 correct_over_same_ids_per_batch=parameters_dict["adjust_covariates_over_same_ids_per_batch"])
-            
+            log_string += log_string_batchwise
+
              #save dataframe with correlation coefficients, association pvalues and comments
             corr_df.to_csv(os.path.join(out_dir_fp,"covariate_associations.tsv"),sep="\t")
             
