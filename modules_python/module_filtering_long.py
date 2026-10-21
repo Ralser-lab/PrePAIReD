@@ -597,7 +597,7 @@ def long_to_wide_format(keep_arr, precursor_codes, precursor_labels, file_codes,
     
     return wide_df
 
-def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_col=None, separator="-", log="", filter_codes = None):
+def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_col=None, separator="-", exclude="", log="", filter_codes = None):
     """
     Generates mapping for precursors to proteins to additional data.
     
@@ -613,6 +613,8 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
         column_name of precursor suffixes
     separator: str
         separator for suffixes
+    exclude : str
+        label that should ne be added as a suffix.
     log : str, optional
         string containing the log up to this point.
     filter_codes : list of bool, optional
@@ -638,7 +640,7 @@ def generate_id_mapping(filename, ids_list, precursor_codes, precursor_suffix_co
         suffixes, _ = data_read_column(filename,precursor_suffix_col,dtype=str)
         if filter_codes is not None:
             suffixes = suffixes[filter_codes]
-        mask = suffixes[first_entry] != ""
+        mask = (suffixes[first_entry] != "") & (suffixes[first_entry] != exclude)
     else: 
         suffixes = None
     
@@ -1086,7 +1088,7 @@ if __name__ == "__main__":
         if parameters_dict["expand_precursor_name"]:
             precursor_name_column = precursor_name_column.copy()
             precursor_name_suffix, log_ = data_read_column(data_df_fp, parameters_dict["precursor_suffix_col"], dtype=str)
-            mask = precursor_name_suffix != ""
+            mask = (precursor_name_suffix != "") & (precursor_name_suffix != parameters_dict["precursor_suffix_exclude"])
             precursor_name_column[mask] = np.char.add(np.char.add([str(p) for p in precursor_name_column[mask]],str(parameters_dict["precursor_suffix_separator"])),[str(s) for s in precursor_name_suffix[mask]])
             del precursor_name_suffix
         precursor_codes, precursor_labels = pd.factorize(precursor_name_column)
@@ -1204,10 +1206,10 @@ if __name__ == "__main__":
         
         # Generate ID-mapping
         if parameters_dict["expand_precursor_name"]:
-            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, parameters_dict["precursor_suffix_col"], parameters_dict["precursor_suffix_separator"], log, filter_codes = filter_codes) 
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, parameters_dict["precursor_suffix_col"], parameters_dict["precursor_suffix_separator"], parameters_dict["precursor_suffix_exclude"], log = log, filter_codes = filter_codes) 
 
         else:
-            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log, filter_codes = filter_codes) 
+            id_mapping_df, log = generate_id_mapping(data_df_fp, ids_list, precursor_codes, log = log, filter_codes = filter_codes) 
         
         # Clean memory
         del precursor_codes
