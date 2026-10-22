@@ -3383,7 +3383,7 @@ if __name__ == "__main__":
                     if parameters_dict["correct_method"] in ["adjust_confounders_batchwise"]:
                         dict_config_setup[step][key_figure]["use_metadata_coloring"] = True
                         dict_config_setup[step][key_figure]["column_color"] = parameters_dict["batch_cols_meta"][0]
-                        dict_config_setup[step][key_figure]["plot_linreg"] = False
+                        dict_config_setup[step][key_figure]["plot_linreg"] = True
                         dict_config_setup[step][key_figure]["continuous"] = False
                         addition_2 = "Colored according to: "+parameters_dict["batch_cols_meta"][0]+"."
                     else:
