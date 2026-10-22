@@ -422,44 +422,101 @@ def knn_imputation(data_df,k=5,weights="distance",metric="nan_euclidean",transpo
     return(data_df)
    
 
-def minval_imputation(data_df,axis=1,add_noise=True):
+# def minval_imputation(data_df,axis=1,add_noise=True):
+#     """
+#     minimum value imputation on peptide or protein profiles. Each missing value is imputed by the minimum of the row, if add_noise=True divided by the square root of 2 times a random number between 0.75 and 1.25.
+    
+#     author: BZ
+    
+#     Parameters
+#     ----------
+#     data_df : pd.DataFrame
+#         rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+#     axis : int
+#         1 for data_df precursors as rows, 0 for data_df with precursors as columns. The default is 1.
+#     add_noise : bool, optional
+#         divides the minimum value by the square root of 2 (1.41) and multiplies it by a random uniform value between 0.75 and 1.25, thus selecting a value slightly below the minimum. The default is True.
+#     Returns
+#     -------
+#     data_df : pd.DataFrame
+#         rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+#     """
+    
+#     #impute by minimum value per ID divided by sqrt(2) times random number between 0.75 and 1.25
+#     if add_noise:
+#         if axis==1:
+#             for row in data_df.index:
+#                 mn, sd = data_df.loc[row].min(), data_df.loc[row].std()
+#                 data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].min()/np.sqrt(2)*np.random.uniform(0.75,1.25) if pd.isna(x) else x)
+#         elif axis==0:
+#             for col in data_df.columns:
+#                 data_df[col]=data_df[col].apply(lambda x: data_df[col].min()/np.sqrt(2)*np.random.uniform(0.75,1.25) if pd.isna(x) else x)
+#     else:
+#         #simple minimum value imputation
+#         if axis==1:
+#             for row in data_df.index:
+#                 data_df.loc[row] = data_df.loc[row].fillna(data_df.loc[row].min())
+#                 #data_df.fillna(data_df.min(axis=axis),axis=axis,inplace=True) #NotImplementedError for axis=1
+#         else:
+#             data_df.fillna(data_df.min(axis=axis),axis=axis,inplace=True)
+#     return(data_df)
+
+def minval_imputation(data_df, axis = 1, add_noise = True, shift = 0.15, width = 0.3):
     """
-    minimum value imputation on peptide or protein profiles. Each missing value is imputed by the minimum of the row, if add_noise=True divided by the square root of 2 times a random number between 0.75 and 1.25.
-    
-    author: BZ
-    
+    Minimum value imputation on peptide or protein profiles.
+ 
+    Each missing value is imputed from its precursor's minimum. If add_noise=True, the missing entry of precursor i in sample j is drawn from
+ 
+        N(min_i + shift * sd_j, (width * sd_j)^2)
+ 
+    where min_i is the minimum observed value of precursor i and sd_j is the standard deviation (ddof=1) of the observed values of sample j. 
+    With add_noise=False, min_i is used.
+ 
+    author: BZ, OL
+ 
     Parameters
     ----------
     data_df : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+        Intensity matrix (should be log-transformed when add_noise=True). Layout is set by `axis`.
     axis : int
-        1 for data_df precursors as rows, 0 for data_df with precursors as columns. The default is 1.
+        1 for precursors as rows and samples as columns, 0 for precursors as columns and samples as rows. The default is 1.
     add_noise : bool, optional
-        divides the minimum value by the square root of 2 (1.41) and multiplies it by a random uniform value between 0.75 and 1.25, thus selecting a value slightly below the minimum. The default is True.
+        Draw imputed values from a down-shifted Gaussian instead of using the plain precursor minimum. The default is True.
+    shift : float, optional
+        Downshift of the Gaussian mean above the precursor minimum, in units of the sample standard deviation. The default is 0.6.
+    width : float, optional
+        Standard deviation of the Gaussian as a fraction of the sample standard deviation. The default is 0.3.
+ 
     Returns
     -------
     data_df : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+        Imputed dataframe in the same layout as the input (modified in place).
     """
     
-    #impute by minimum value per ID divided by sqrt(2) times random number between 0.75 and 1.25
+    if axis not in (0, 1):
+        raise ValueError(f"axis must be 0 or 1, got {axis}")
+ 
+    mask = data_df.isna().to_numpy()
+    if not mask.any():
+        return data_df
+ 
+    def _broadcast(stat, along_rows):
+        v = stat.to_numpy(dtype=float)
+        return np.broadcast_to(v[:, None] if along_rows else v[None, :], data_df.shape)
+ 
+    mins = data_df.min(axis=axis)                   # per precursor
+    sample_sd = data_df.std(axis=1 - axis, ddof=1)  # per sample
+    values = data_df.to_numpy(dtype=float, copy=True)
+ 
     if add_noise:
-        if axis==1:
-            for row in data_df.index:
-                data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].min()/np.sqrt(2)*np.random.uniform(0.75,1.25) if pd.isna(x) else x)
-        elif axis==0:
-            for col in data_df.columns:
-                data_df[col]=data_df[col].apply(lambda x: data_df[col].min()/np.sqrt(2)*np.random.uniform(0.75,1.25) if pd.isna(x) else x)
+        sd = _broadcast(sample_sd, along_rows = (axis == 0))
+        mu = _broadcast(mins, along_rows=(axis == 1)) + shift * sd
+        values[mask] = np.random.normal(loc = mu[mask], scale = width * sd[mask])
     else:
-        #simple minimum value imputation
-        if axis==1:
-            for row in data_df.index:
-                data_df.loc[row] = data_df.loc[row].fillna(data_df.loc[row].min())
-                #data_df.fillna(data_df.min(axis=axis),axis=axis,inplace=True) #NotImplementedError for axis=1
-        else:
-            data_df.fillna(data_df.min(axis=axis),axis=axis,inplace=True)
-    return(data_df)
-    
+        values[mask] = _broadcast(mins, along_rows = (axis == 1))[mask]
+ 
+    data_df.loc[:, :] = values
+    return data_df
 
 def meanval_imputation(data_df,axis=1,add_noise=True):
     """
@@ -486,7 +543,7 @@ def meanval_imputation(data_df,axis=1,add_noise=True):
     if add_noise:
         if axis==1:
             for row in data_df.index:
-                data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].mean() + np.random.normal(-data_df.loc[row].std(),data_df.loc[row].std()) if pd.isna(x) else x)
+                data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].mean() + np.random.uniform(-data_df.loc[row].std(),data_df.loc[row].std()) if pd.isna(x) else x)
         elif axis==0:
             for col in data_df.columns:
                 data_df[col]=data_df[col].apply(lambda x: data_df[col].mean() + np.random.normal(-data_df[col].std(),data_df[col].std()) if pd.isna(x) else x)
@@ -526,7 +583,7 @@ def medianval_imputation(data_df,axis=1,add_noise=True):
     if add_noise:
         if axis==1:
             for row in data_df.index:
-                data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].median() + np.random.normal(-helper.mad(data_df.loc[row]),helper.mad(data_df.loc[row])) if pd.isna(x) else x)
+                data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].median() + np.random.uniform(-helper.mad(data_df.loc[row]),helper.mad(data_df.loc[row])) if pd.isna(x) else x)
         elif axis==0:
             for col in data_df.columns:
                 data_df[col]=data_df[col].apply(lambda x: data_df[col].median() + np.random.normal(-helper.mad(data_df[col]),helper.mad(data_df[col])) if pd.isna(x) else x)
