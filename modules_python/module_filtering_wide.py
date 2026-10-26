@@ -954,14 +954,14 @@ if __name__ == "__main__":
                 # SAMPLE FILTERS
                 if method == "filter_samples_by_metadata":
                     #for every column specified for filtering by metadata
-                    for k,key_column in enumerate(parameters_dict['sample_filter_cols'].split(";")):
+                    for k,key_column in enumerate(str(parameters_dict['sample_filter_cols']).split(";")):
                         # snapshot BEFORE this method
                         pre_method_columns = data_processed_df.columns
                         pre_method_rows = data_processed_df.index
                         
                         #select corresponding column, operator and value
-                        key_value = parameters_dict['sample_filter_values'].split(";")[k]
-                        key_operator = parameters_dict['sample_filter_operators'].split(";")[k]
+                        key_value = str(parameters_dict['sample_filter_values']).split(";")[k]
+                        key_operator = str(parameters_dict['sample_filter_operators']).split(";")[k]
                         
                         #apply filtering based on metadata
                         data_processed_df, log  = filter_samples_based_on_metadata(data_df=data_processed_df, 
@@ -1147,9 +1147,9 @@ if __name__ == "__main__":
     
                 elif method == "filter_precursors_by_metadata":
                     #extract correct parameter subset
-                    filter_col=parameters_dict["precursor_filter_col"].split(";")[filter_precursors_by_metadata_counter]
-                    filter_value=parameters_dict["precursor_filter_value"].split(";")[filter_precursors_by_metadata_counter]
-                    filter_operator=parameters_dict["precursor_filter_operator"].split(";")[filter_precursors_by_metadata_counter]
+                    filter_col=str(parameters_dict["precursor_filter_col"]).split(";")[filter_precursors_by_metadata_counter]
+                    filter_value=str(parameters_dict["precursor_filter_value"]).split(";")[filter_precursors_by_metadata_counter]
+                    filter_operator=str(parameters_dict["precursor_filter_operator"]).split(";")[filter_precursors_by_metadata_counter]
                     #apply exclusion of selected precursors
                     data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
                                                                            id_mapping_df=id_mapping_df, 
@@ -1250,8 +1250,8 @@ if __name__ == "__main__":
                     log = f"{timestamp()}\tReplacing precursors names in data with defined precursor labels.\n"
                     helper.logger(log_file,log)
                     
-                    target_labels = parameters_dict["target_labels"].split(";")
-                    replace_labels = parameters_dict["replace_labels"].split(";")
+                    target_labels = str(parameters_dict["target_labels"]).split(";")
+                    replace_labels = str(parameters_dict["replace_labels"]).split(";")
                     for i in range(len(target_labels)):
                         data_processed_df, log = replace_labelled_precursors(data_df=data_processed_df, 
                                                                              id_mapping_df=id_mapping_df,
