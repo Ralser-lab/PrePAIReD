@@ -296,7 +296,6 @@ def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",prec
     Creates for every protein group a directed, weighted graph with precursors as nodes and median ratio of any two precursors (nodes) over all samples/fraction as edge weights between nodes.
     These ratios are then multiplied with present precursors over samples, median over them is used as intensity of missing precursor. 
     This approach may not impute all missing precursors, as advantage it uses global information over all samples about precursor ratios, but imputes missing values only from precursor intensities within a sample times global ratios.
-    Imputed values are marked in mask_df as a second number after decimal point in the matrix, preserving the information if the precursor was previously filtered or not measured at all
     
     author: BZ
     
@@ -323,11 +322,12 @@ def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",prec
         rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities with imputed values.
 
     """
-   
+    #unlog-transform data
+    data_df = helper.unlog_transform(data_df)
     #for every protein group
     for pg in id_mapping_df[protein_col].unique():
         #create graph for protein with precursors as nodes and ratios as edges
-        temp_df = data_df[id_mapping_df.loc[protein_col]==pg,precursor_col]
+        temp_df = data_df.loc[list(set(id_mapping_df[id_mapping_df[protein_col]==pg][precursor_col]) & set(data_df.index))]
         #exclude columns without any precursor intensities for given protein group
         temp_df.dropna(how="all",axis=1,inplace=True)
         #exclude precursors with modification sites
@@ -337,7 +337,7 @@ def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",prec
                 modi_precs.remove(np.nan)
             if modi_precs!=set():
                 #include non-modified sequence
-                modi_precs=modi_precs | {re.sub("\(.*\)","",prec) for prec in modi_precs}
+                modi_precs=modi_precs | {re.sub(r"\(.*\)","",prec) for prec in modi_precs}
                 temp_df.drop(temp_df[temp_df.index.isin(modi_precs)].index,inplace=True)
         if temp_df.empty:
             continue
@@ -379,6 +379,8 @@ def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",prec
                 #[g.es.find(name=(x["name"],precursor))["weight"]*temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
                 #[g.es.find(name=(x["name"],precursor))["weight"] for x in g.vs.find(name=precursor).predecessors()]
                 #[temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
+    #log-transform data
+    data_df = helper.log_transform(data_df)
     return(data_df)
 
 
