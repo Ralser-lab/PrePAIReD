@@ -1414,6 +1414,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         data_df = load_data(data_df_fp)
         logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n")
     else:
+		logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tInput file set to " + data_df_fp + ".\n")
         data_df = None
     # Load parameters
     logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading parameter file " + param_fp + ".\n")
