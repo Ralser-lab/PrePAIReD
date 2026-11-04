@@ -223,7 +223,12 @@ summarize_plm <- function(quant_df, parameter_list, mapping_df){
     
     cat("\n\nStarting PLM summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
-    
+
+    if (anyNA(quant_df)) {
+        stop("NAs present in the precursor matrix, PLM does not tolerate NAs. ",
+             "Please choose a different summarization method or impute.")
+    }
+
     quant_list <- split(
         as.data.frame(quant_df),
         mapping_df[match(row.names(quant_df),
@@ -231,16 +236,11 @@ summarize_plm <- function(quant_df, parameter_list, mapping_df){
     )
     quant_list <- lapply(quant_list, as.matrix)
 
-    ## unname before do.call: named-list names become rbind argument tags that R
-    ## installs as symbols (capped at 10000 bytes) and errors on large razor groups
-    quant_df_Nfeat <- do.call(rbind, unname(lapply(quant_list, \(x){
-        colSums(!is.na(x))
-    })))
-    rownames(quant_df_Nfeat) <- names(quant_list)
-
     sample_names <- colnames(quant_df)
     n_samples <- ncol(quant_df)
 
+    ## unname before do.call: named-list names become rbind argument tags that R
+    ## installs as symbols (capped at 10000 bytes) and errors on large razor groups
     quant_prot_df <- do.call(rbind, unname(lapply(quant_list, \(df){
         out <- preprocessCore::rcModelPLM(y = df)
         out$Estimates[seq_len(n_samples)]
@@ -249,11 +249,10 @@ summarize_plm <- function(quant_df, parameter_list, mapping_df){
 
     colnames(quant_prot_df) <- sample_names
 
-    ## remove protein/sample estimates supported by too few features
-    ## (align by name so masking does not rely on row/column order)
-    quant_df_Nfeat <- quant_df_Nfeat[rownames(quant_prot_df),
-                                     colnames(quant_prot_df), drop = FALSE]
-    quant_prot_df[quant_df_Nfeat < parameter_list[["min_feat_per_prot"]]] <- NA
+    ## remove proteins supported by too few features (input is NA-free, so the
+    ## feature count is the same in every sample)
+    n_feat <- vapply(quant_list, nrow, integer(1))
+    quant_prot_df[n_feat < parameter_list[["min_feat_per_prot"]], ] <- NA
 
     cat("\n\nFinished PLM summarization. ",
         format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), "\n")
