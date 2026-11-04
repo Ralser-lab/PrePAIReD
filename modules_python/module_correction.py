@@ -1568,7 +1568,7 @@ if __name__ == "__main__":
     except Exception as e:
                 e_type, e_obj, e_tb = sys.exc_info()
                 script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-                helper.logger(log_file, f"###ERROR###: Module {script_name} ran into an error at line {e_tb.tb_lineno}.\n\t\t\t\t{e}\n")
+                helper.logger(log_file, f"###ERROR###: Module {script_name} ran into an error at line {e_tb.tb_lineno}: {e}\n")
                 if exit_module:
                     sys.exit("Correction exited with an error.")
 

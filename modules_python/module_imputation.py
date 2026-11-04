@@ -1318,7 +1318,7 @@ if __name__ == "__main__":
         except Exception as e:
             e_type, e_obj, e_tb = sys.exc_info()
             script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-            helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
+            helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) + ": " + str(e) + "\n")
             if exit_module:
                 sys.exit("Imputation exited with an error.")
     else:

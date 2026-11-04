@@ -121,7 +121,7 @@ run_with_logging <- function(expr, log_path) {
     withCallingHandlers(
       expr(),
       warning = function(w) {
-        message("###WARNING### : ", conditionMessage(w))
+        message("###WARNING###: ", conditionMessage(w))
         invokeRestart("muffleWarning")
       },
       message = function(m) {
