@@ -548,7 +548,7 @@ def meanval_imputation(data_df,axis=1,add_noise=True):
                 data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].mean() + np.random.uniform(-data_df.loc[row].std(),data_df.loc[row].std()) if pd.isna(x) else x)
         elif axis==0:
             for col in data_df.columns:
-                data_df[col]=data_df[col].apply(lambda x: data_df[col].mean() + np.random.normal(-data_df[col].std(),data_df[col].std()) if pd.isna(x) else x)
+                data_df[col]=data_df[col].apply(lambda x: data_df[col].mean() + np.random.uniform(-data_df[col].std(),data_df[col].std()) if pd.isna(x) else x)
     else:
         #simple mean value imputation
         if axis==1:
@@ -588,7 +588,7 @@ def medianval_imputation(data_df,axis=1,add_noise=True):
                 data_df.loc[row]=data_df.loc[row].apply(lambda x: data_df.loc[row].median() + np.random.uniform(-helper.mad(data_df.loc[row]),helper.mad(data_df.loc[row])) if pd.isna(x) else x)
         elif axis==0:
             for col in data_df.columns:
-                data_df[col]=data_df[col].apply(lambda x: data_df[col].median() + np.random.normal(-helper.mad(data_df[col]),helper.mad(data_df[col])) if pd.isna(x) else x)
+                data_df[col]=data_df[col].apply(lambda x: data_df[col].median() + np.random.uniform(-helper.mad(data_df[col]),helper.mad(data_df[col])) if pd.isna(x) else x)
     else:
         #simple median value imputation
         if axis==1:
