@@ -999,7 +999,7 @@ def plot_qa_box_int_and_number(data_origin, metadata, data_processed=None, sampl
     return
 
 ### For Filtering_long and Filtering_wide
-def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mask_values=False, size=(5,5), fontsize = 15, fontsize_filters=10, outfile="Mask_description_barplot.png"):
+def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mask_values=False, size=(5,5), fontsize = 15, fontsize_filters=10, outfile="Mask_description_barplot.png", title = "Dropouts"):
     """
     Plotting of the filter mask
 
@@ -1021,6 +1021,8 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
         Font size of the x-tick labels. The default is 10.
     outfile : str, optional
         File path for the figure. The default is "Mask_description_barplot.png".
+    title : str, optional
+        Titel of the plot. the default is "Dropouts"
     """    
     
     if use_mask_values:
@@ -1048,7 +1050,7 @@ def plot_filter_mask(mask, mask_description, mask_description_base=None, use_mas
         ax.set_xticklabels(np.vectorize(description_dict.get)(mask_values),fontsize = fontsize_filters, rotation=45, ha="right")
     ax.tick_params(axis="y", labelsize = fontsize)
     ax.set_ylabel("Occurence", fontsize = fontsize)
-    ax.set_title("Dropouts", fontsize = fontsize)
+    ax.set_title(title, fontsize = fontsize)
     ax.set_yscale("log")
     ax.set_axisbelow(True)
     ax.grid(axis="y",which="major")
@@ -1461,8 +1463,8 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
                 else:
                     ax.set_xlabel("PC "+str(j+1)+" ("+"{:.1f}".format(var_processed[j]*100)+"%)", fontsize = fontsize, labelpad = 5)
         
-            ax.set_axisbelow(True)
-            ax.grid()
+                ax.set_axisbelow(True)
+                ax.grid()
     
     if data_processed is not None:
         s = 2.5*(np.log2(n_components)+1)/n_components
