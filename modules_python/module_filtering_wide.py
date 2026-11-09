@@ -839,10 +839,10 @@ def update_mask(data_df, axis, method, mask_df, mask_description_df, pre_method_
     if method not in mask_description_df.index:
         # Get the second largest value in mask_description_df safely
         sorted_values = mask_description_df['value'].sort_values()
-        if len(sorted_values) >= 2:
-            second_max_mapping = sorted_values.iloc[-2]
-        else:
-            second_max_mapping = sorted_values.iloc[-1]
+        #if len(sorted_values) >= 2:
+        #    second_max_mapping = sorted_values.iloc[-2]
+        #else:
+        second_max_mapping = sorted_values.iloc[-1]
         new_value = second_max_mapping + 1
         mask_description_df.loc[method] = {'value': new_value}
     value = mask_description_df.loc[method,"value"]
