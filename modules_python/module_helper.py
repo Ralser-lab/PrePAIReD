@@ -3,42 +3,42 @@ Input: X
 Output: X
 
 functions:
-	- zscore_transformation: calculates z-scores based on mean and sd or median and median absolute deviation (MAD)
-	- log_transform: applies a logarithmic transformation to a DataFrame with the specified base
-	- unlog_transform: transforms intensities of wide-format precursor or protein intensities over samples from log-space to not-log-space for a specified base
-	- mad: calculate median absolute deviation
-	- (calculate_mean_over_refs: calculate a mean sample over reference samples specified via refstring and exclude original samples specified via refstring)
-	- (calculate_log2FC_to_ref: calculates log2 fold changes to a reference sample specified by ref)
-	- (calculate_log2foldchange: calculate the log2 fold change for each protein/precursor relative to the median (or mean) intensity across all samples)
-	- class OverwriteException: class for raising OverwriteException
-	- create_directory: creates (if not existent) a directory
-	- replace_invalid_characters: replaces characters that cannot be decoded in standard encoding, e.g. replace greek letters
-	- create_logfile: creates a logfile following changes during pre-processing => DO WE NEEDED?
-	- create_filtering_matrix: creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
-	- rename_filter_mask_columns: renames diann_sample_column ("File.Name" or "Run") in filter mask columns to shorter sample names
-	- create_filename_annotations_file: automatically create metadata with mappings between diann_sample_column, shorter run names and sample group
-	- (check_filename_annotations_on_unique_indices: control if metadata has unique entries)
-	- load_metadata: load the metadata file (tsv or Excel)
-	- weighted_median: calculate the weighted median for an array with weights W
-	- weighted_nanmedian: calculate weighted median ignoring NaNs and zero weights
-	- (insert_column_level: inserts a new level to MultiIndex columns)
-	- (annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles)
-	- create_imputation_table: create a template for an involved table to define different impuation methods across sample and precursor hierarchies
-	- logger: iteratively callable function to add information to the existing logfile of the current preprocessing run
-	- get_parser: generates the parser to parse arguments from the terminal to the Python Code
-	- get_parser_arguments: extraction of parser arguments
-	- load_data: loads data for processing
-	- load_parameters: read in parameter *.json file
-	- load_id_mapping: reads in ID mapping
-	- get_seed: generate the seed for the module
-	- add_parameters_to_log: writes parameters for the module to the log file
-	- load_mask: loads the filtering/imputation mask
-	- load_mask_description: loads description for the mask identifers
-	- save_mask: saves (updated) mask to disk
-	- save_data: saves data after processing to disk
-	- init_module: initializes the module and reads in all necessary data and arguments
-	- close_module: saves data to disk and exits the module
-	- skip_parser_init: import of neccessary files for module initialization if a module is called within python directly without parser.
+    - zscore_transformation: calculates z-scores based on mean and sd or median and median absolute deviation (MAD)
+    - log_transform: applies a logarithmic transformation to a DataFrame with the specified base
+    - unlog_transform: transforms intensities of wide-format precursor or protein intensities over samples from log-space to not-log-space for a specified base
+    - mad: calculate median absolute deviation
+    - (calculate_mean_over_refs: calculate a mean sample over reference samples specified via refstring and exclude original samples specified via refstring)
+    - (calculate_log2FC_to_ref: calculates log2 fold changes to a reference sample specified by ref)
+    - (calculate_log2foldchange: calculate the log2 fold change for each protein/precursor relative to the median (or mean) intensity across all samples)
+    - class OverwriteException: class for raising OverwriteException
+    - create_directory: creates (if not existent) a directory
+    - replace_invalid_characters: replaces characters that cannot be decoded in standard encoding, e.g. replace greek letters
+    - create_logfile: creates a logfile following changes during pre-processing => DO WE NEEDED?
+    - create_filtering_matrix: creates a pandas.DataFrame keeping track for every precursor in every run why it was filtered, imputed, ...
+    - rename_filter_mask_columns: renames diann_sample_column ("File.Name" or "Run") in filter mask columns to shorter sample names
+    - create_filename_annotations_file: automatically create metadata with mappings between diann_sample_column, shorter run names and sample group
+    - (check_filename_annotations_on_unique_indices: control if metadata has unique entries)
+    - load_metadata: load the metadata file (tsv or Excel)
+    - weighted_median: calculate the weighted median for an array with weights W
+    - weighted_nanmedian: calculate weighted median ignoring NaNs and zero weights
+    - (insert_column_level: inserts a new level to MultiIndex columns)
+    - (annotate_metadata_to_profiles: adds all metadata as multi-layer column names to profiles)
+    - create_imputation_table: create a template for an involved table to define different impuation methods across sample and precursor hierarchies
+    - logger: iteratively callable function to add information to the existing logfile of the current preprocessing run
+    - get_parser: generates the parser to parse arguments from the terminal to the Python Code
+    - get_parser_arguments: extraction of parser arguments
+    - load_data: loads data for processing
+    - load_parameters: read in parameter *.json file
+    - load_id_mapping: reads in ID mapping
+    - get_seed: generate the seed for the module
+    - add_parameters_to_log: writes parameters for the module to the log file
+    - load_mask: loads the filtering/imputation mask
+    - load_mask_description: loads description for the mask identifers
+    - save_mask: saves (updated) mask to disk
+    - save_data: saves data after processing to disk
+    - init_module: initializes the module and reads in all necessary data and arguments
+    - close_module: saves data to disk and exits the module
+    - skip_parser_init: import of neccessary files for module initialization if a module is called within python directly without parser.
 
 """
 
@@ -180,11 +180,11 @@ def unlog_transform(
         specified base.
 
     """
-	# Check for invalid base values
+    # Check for invalid base values
     if base <= 0 or base == 1:
         raise ValueError("Base must be greater than 0 and not equal to 1")
     df = base**df
-	# Replace 1 with 0 to preserve zeros before transformation
+    # Replace 1 with 0 to preserve zeros before transformation
     df = df.replace(1,0)
     return(df)
 
@@ -317,8 +317,8 @@ def calculate_log2foldchange(df, robust=True):
 
 
 class OverwriteException(Exception):
-	def __init__(self,message):
-		super().__init__(message)
+    def __init__(self,message):
+        super().__init__(message)
 
 
 '''
@@ -327,11 +327,11 @@ in inheriting file
 from OverwriteException import OverwriteException
 
 try:
-	if overwrite==True:
-		raise OverwriteException("overwriting of existing file requested")
-	load("try") # not reached if OverwriteException
+    if overwrite==True:
+        raise OverwriteException("overwriting of existing file requested")
+    load("try") # not reached if OverwriteException
 except (FileNotFoundError,OverwriteException):
-	pass
+    pass
 
 '''
 
@@ -1257,7 +1257,7 @@ def load_mask_description(data_df_fp):
     """
     
     return pd.read_csv(data_df_fp[:-4] + "_mask_description.tsv",sep="\t",index_col=0)
-	
+    
 ### Save mask
 def save_mask(masked_df, out_dir_fp, outname):
     """
@@ -1356,7 +1356,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         If skip_parser==True required. Counter for the step, used to modfiy the seed and output file naming.
     outname : str, optional
         If skip_parser==True required. Name of the output file: data_${counter}.tsv using a two digit counter.
-	
+    
     Returns
     -------
     data_df : pd.DataFrame()
@@ -1408,13 +1408,13 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
     else:
        parser = get_parser() 
        data_df_fp, param_fp, out_dir_fp, meta_df_fp, log_file, idmap_fp, counter, outname = get_parser_arguments(parser)
-	# Load data
+    # Load data
     if not return_data_fp_only:
         logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading input file " + data_df_fp + ".\n")
         data_df = load_data(data_df_fp)
         logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tFile loaded successfully.\n")
     else:
-		logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tInput file set to " + data_df_fp + ".\n")
+        logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tInput file set to " + data_df_fp + ".\n")
         data_df = None
     # Load parameters
     logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tLoading parameter file " + param_fp + ".\n")
@@ -1430,7 +1430,7 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         id_mapping_df = []
     # Get seed
     seed = get_seed(parameters_dict, counter)
-	# Update seed
+    # Update seed
     parameters_dict["seed"] = seed
     logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tSeed was fixed to "+str(seed)+".\n")
     # Write Parameters to log-file
@@ -1457,8 +1457,8 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         return data_df_fp, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
     else:
         return data_df, parameters_dict, id_mapping_df, seed, module_output, metadata_df, masked_df, mask_description_df, out_dir_fp, outname, log_file, counter
-	    
-	    
+        
+        
 def close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp, outname, mask=False, exit_module=True):
     """
     Saves data to disk and exits the module.
@@ -1481,8 +1481,8 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
         Name of the output file: data_${counter}.tsv using a two digit counter.
     mask : bool, optional
         Save the mask to disk. The default is False.
-	exit_module : bool
-		call sys.exit, switch to False if run within Python. The default is True.
+    exit_module : bool
+        call sys.exit, switch to False if run within Python. The default is True.
 
     Returns
     -------
@@ -1491,7 +1491,7 @@ def close_module(data_processed_df, masked_df, mask_description_df, log_file, mo
     # Update log file
     logger(log_file, module_output=module_output)
     module_output = ""
-	# Check for empty DataFrame
+    # Check for empty DataFrame
     if data_processed_df.empty:
         logger(log_file, "###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
         sys.exit("###ERROR###: Processed data are empty. Please check your setup (method(s) + parameters).")
@@ -1518,7 +1518,7 @@ def skip_parser_init(module, report_folder="report_folder"):
     ----------
     module : str
         name of calling module, e.g. "NORMALISATION".
-	report_folder : str, optional
+    report_folder : str, optional
         Name of the folder (just the folder, not the directory to it) for quality assesment per module. The directory will be defined as out_dir_fp / report_folder /. The default is "report_folder".
 
     Returns
@@ -1552,7 +1552,7 @@ def skip_parser_init(module, report_folder="report_folder"):
     out_dir_fp = os.path.join(workdir_fp, "{:02d}".format(int(counter))+"_"+module)
     log_file = askopenfilename(title="Please select your log_file",initialdir=workdir_fp)
     idmap_fp = os.path.join(workdir_fp, "01_FILTERING_LONG/id_mapping.tsv")
-	# Check if out_dir_fp is existent, else create
+    # Check if out_dir_fp is existent, else create
     if not os.path.exists(out_dir_fp):
         os.mkdir(out_dir_fp)
     # Check if report_folder exists, if not create
