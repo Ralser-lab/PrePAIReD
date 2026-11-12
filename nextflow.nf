@@ -201,6 +201,142 @@ String dockerMountOpts(List folders, String mountRoot) {
 }
 
 /*
+ * RUN HISTORY (traceability of every successful run)
+ *
+ * At the START of every run the settings files are read into memory
+ * (captureSettings). They are NOT moved: the latest Config.txt,
+ * Config_data.txt, Config_evaluation.txt and Parameters.txt always stay in
+ * their normal place (working folder) and the GUI keeps working with them.
+ *
+ * Only if the run COMPLETES SUCCESSFULLY, writeRunHistory() saves them to
+ *
+ *   WORKING_PATH/run_history/<yyyyMMdd_HHmmss>_<newrun | rerun_from_<step>>/
+ *       Config.txt, Config_data.txt, Config_evaluation.txt, Parameters.txt
+ *       (+ imputation_procedures.tsv if one is used)
+ *       run_info.txt   when, which run, code version, image, SHA-256 of the data
+ *       env_log.txt / env_log.pdf
+ *       Parameter_Files/, logfile_setup.txt   parameters the modules used
+ *       pipeline_log.txt     only the part written by this run
+ *       nextflow_trace.txt   resources, retries and exit code per task
+ *       report.pdf           final report of this run
+ *
+ * All of these are COPIES: the latest version always stays in the working
+ * folder as well.
+ *
+ * The timestamp is the START time of the run, and the files are the
+ * versions read at the start, so later changes in the GUI during the run do
+ * not end up in the history. A failed or interrupted run writes nothing.
+ *
+ * Nothing in run_history/ is ever moved, overwritten or deleted by the
+ * pipeline. A problem here never stops the pipeline; it prints a warning.
+ */
+/*
+ * SHA-256 checksum of a file (hex), or a short reason if it cannot be read.
+ * Proves later which exact data a run used, without copying the data.
+ */
+String sha256(File f) {
+    if( f == null || !f.isFile() ) return 'not available (file not found)'
+    try {
+        def md = java.security.MessageDigest.getInstance('SHA-256')
+        f.eachByte(1048576) { buf, len -> md.update(buf, 0, len) }
+        return md.digest().encodeHex().toString()
+    }
+    catch( Exception e ) {
+        return "not available (${e.message})"
+    }
+}
+
+/* Copy a file or a whole folder (recursively) to dst. */
+def copyTree(File src, File dst) {
+    if( src.isDirectory() ) {
+        dst.mkdirs()
+        src.listFiles()?.each { child -> copyTree(child, new File(dst, child.name)) }
+    }
+    else if( src.isFile() ) {
+        dst.parentFile?.mkdirs()
+        dst.bytes = src.bytes
+        dst.setLastModified(src.lastModified())
+    }
+}
+
+List captureSettings(Map files) {
+    def captured = []
+    files.each { label, src ->
+        def f = src == null ? null : (src instanceof File ? src : new File(src.toString()))
+        if( f == null ) return
+        def entry = [label: label.toString(), name: f.name, path: f.absolutePath, bytes: null, mtime: 0L]
+        try {
+            if( f.isFile() ) {
+                entry.bytes = f.bytes
+                entry.mtime = f.lastModified()
+            }
+        }
+        catch( Exception e ) {
+            println "[RUN HISTORY WARNING] Could not read ${f.absolutePath}: ${e.message}"
+        }
+        captured << entry
+    }
+    return captured
+}
+
+String writeRunHistory(String workdir, String folderName, List captured, List infoLines, List extraFiles) {
+    try {
+        def root = new File(workdir, 'run_history')
+        def base = folderName.replaceAll(/[^A-Za-z0-9._-]+/, '_')
+        // Two runs started within the same second get _1, _2, ... (never overwrite).
+        def k = (0..999).find { n -> !new File(root, n == 0 ? base : "${base}_${n}").exists() }
+        if( k == null ) {
+            println "[RUN HISTORY WARNING] No free folder name for ${base}; run history not saved."
+            return ''
+        }
+        def dir = new File(root, k == 0 ? base : "${base}_${k}")
+        dir.mkdirs()
+        if( !dir.isDirectory() ) {
+            println "[RUN HISTORY WARNING] Could not create ${dir}; run history not saved."
+            return ''
+        }
+
+        def fileLines = []
+        captured.each { c ->
+            if( c.bytes != null ) {
+                def dst = new File(dir, c.name.toString())
+                dst.bytes = c.bytes
+                if( c.mtime ) dst.setLastModified(c.mtime as long)
+                fileLines << envLine(c.label.toString(), c.path)
+            }
+            else {
+                fileLines << envLine(c.label.toString(), "not found at the start of the run (${c.path})")
+            }
+        }
+        // Extra files/folders of this run (copies; the originals stay).
+        extraFiles.findAll { it != null && it.exists() }.each { f ->
+            try {
+                copyTree(f, new File(dir, f.name))
+            }
+            catch( Exception e ) {
+                println "[RUN HISTORY WARNING] Could not copy ${f}: ${e.message}"
+            }
+        }
+
+        def info = ['=' * 79, 'SETTINGS OF ONE SUCCESSFUL PIPELINE RUN', '=' * 79, ''] +
+                   infoLines +
+                   ['', 'Saved files (as read at the start of the run; original location):'] + fileLines +
+                   ['',
+                    'To repeat this run, or restart from the same step with the same settings:',
+                    'copy Config.txt and Parameters.txt (and, if they differ, Config_data.txt,',
+                    'Config_evaluation.txt) from this folder back to their original location',
+                    '(or load them in the GUI), then start the pipeline again.',
+                    '']
+        new File(dir, 'run_info.txt').text = info.join('\n') + '\n'
+        return dir.absolutePath
+    }
+    catch( Exception e ) {
+        println "[RUN HISTORY WARNING] Run history could not be saved: ${e.message}"
+        return ''
+    }
+}
+
+/*
  * ENV_LOG
  *
  * Runs first, inside the same Docker image as all other steps, and writes
@@ -214,8 +350,8 @@ String dockerMountOpts(List folders, String mountRoot) {
  *   image and also uses to write image_versions.txt at build time, so both
  *   files have the same layout and can be compared directly.
  *
- * A previous env_log.txt is moved to previous_env_logs/ by the workflow,
- * so the history of reruns in the same working directory is kept.
+ * env_log.txt / env_log.pdf in WORKING_PATH always belong to the latest run.
+ * A successful run also saves both in its run_history/ folder.
  */
 process ENV_LOG {
 
@@ -522,8 +658,20 @@ EOF_STEPS
             "\$publish_step/" || true
         cp -f qa_status.tsv "\$publish_step/" || true
 
-        if [ -f Normalization_factors.tsv ]; then
+        # Normalization factors: only published by the step that created
+        # them (normalization). The file is removed from the task folder at
+        # the end of that step, so later steps do not carry a copy.
+        # An empty file (no factors provided/created) is not published.
+        if [ -s Normalization_factors.tsv ]; then
             cp -f Normalization_factors.tsv "\$publish_step/" || true
+        fi
+
+        # Covariate associations: written occasionally by the correction
+        # module (when adjust_confounders is used). Same rules as the
+        # normalization factors: published only in the step that created
+        # it, not if empty, and removed afterwards (see end of the step).
+        if [ -s covariate_associations.tsv ]; then
+            cp -f covariate_associations.tsv "\$publish_step/" || true
         fi
 
         case "\$publish_step" in
@@ -986,7 +1134,6 @@ EOF_STEPS
         current_data="\$BASE/data_\${counter}.tsv"
         current_id="\$BASE/id_mapping.tsv"
         current_report="\$BASE/report.pdf"
-        current_norm=""
 
         if [ -f "\$BASE/data_\${counter}_mask.tsv" ]; then
             current_mask="\$BASE/data_\${counter}_mask.tsv"
@@ -996,9 +1143,12 @@ EOF_STEPS
             current_mask_dp="\$BASE/data_\${counter}_mask_description.tsv"
         fi
 
-        if [ -f "\$BASE/Normalization_factors.tsv" ]; then
-            current_norm="\$BASE/Normalization_factors.tsv"
-        fi
+        # Normalization_factors.tsv is needed only by the step that created it
+        # and its QA (normalization evaluation). It is already published in
+        # that step's folder, so remove it here: no copy in later steps.
+        rm -f "\$BASE/Normalization_factors.tsv"
+        # Same for covariate_associations.tsv (correction step only).
+        rm -f "\$BASE/covariate_associations.tsv"
 
         # Safety synchronization at the end of every module iteration.
         cd "\$BASE"
@@ -1395,6 +1545,48 @@ workflow {
     def dockerVersion = captureCommand(['docker', 'version', '--format', '{{.Server.Version}}'])
     def dockerSystem = captureCommand(['docker', 'info', '--format', '{{.OperatingSystem}} | {{.NCPU}} CPUs | {{.MemTotal}} bytes memory'])
 
+    // ------------------------------------------------------------------
+    // Run history: read the settings of THIS run now (start); they are saved
+    // to run_history/<start time>_<newrun|rerun_from_step>/ only if the run
+    // completes successfully (see workflow.onComplete). Nothing is moved.
+    // ------------------------------------------------------------------
+    def historyLabel = run_value.equalsIgnoreCase('new') ? 'newrun' : "rerun_from_${new File(start_dir.toString()).name}"
+    def historyFolderName = new Date().format('yyyyMMdd_HHmmss') + '_' + historyLabel
+    def capturedSettings = captureSettings([
+        'Config.txt'            : cfgFile,
+        'Config_data.txt'       : new File(cfgDataPath),
+        'Config_evaluation.txt' : evalConfig,
+        'Parameters.txt'        : new File(WORKDIR_ABS, 'Parameters.txt'),
+        'Imputation procedures' : imputationProceduresFile
+    ])
+    // Checksums of the data this run starts from (as read at the start).
+    def isNewRun = run_value.equalsIgnoreCase('new')
+    def dataChecksums = [
+        envLine('SHA-256 ORIGINALDATA', sha256(original_data)),
+        envLine('SHA-256 METADATA', sha256(metaFile))
+    ]
+    if( !isNewRun ) {
+        dataChecksums << envLine('SHA-256 seed data', "${sha256(seed_data)} (${seed_data.name})")
+    }
+    // pipeline_log.txt grows over all runs: remember where this run begins.
+    def pipelineLogStart = new File(PIPELINE_LOG_ABS).length()
+
+    def historyInfo = [
+        envLine('Run started', workflow.start),
+        envLine('Run name', workflow.runName),
+        envLine('Run mode', run_value),
+        envLine('Start folder', start_dir),
+        envLine('Steps', ordered.join(', ')),
+        envLine('Working path', WORKDIR_ABS),
+        envLine('Command line', workflow.commandLine),
+        envLine('Git commit', gitCommit ?: 'unknown (not a git checkout)'),
+        envLine('Uncommitted changes', gitChanges ? 'YES (the diff is in env_log.txt)' : 'NONE'),
+        envLine('Image', imageName),
+        envLine('Image ID', imageId ?: 'unknown (image not found locally)'),
+        envLine('Original data', ORIGINALDATA_ABS),
+        envLine('Metadata', METADATA_ABS)
+    ] + dataChecksums
+
     def headerLines = [
         envSection('RUN'),
         envLine('Run name', workflow.runName),
@@ -1408,6 +1600,7 @@ workflow {
         envLine('Working path', WORKDIR_ABS),
         envLine('Original data', ORIGINALDATA_ABS),
         envLine('Metadata', METADATA_ABS),
+        envLine('Run history', "run_history/${historyFolderName} (saved only if the run completes successfully)"),
 
         envSection('PIPELINE'),
         envLine('Git commit', gitCommit ?: 'unknown (not a git checkout)'),
@@ -1437,24 +1630,11 @@ workflow {
     ]
     def runHeader = headerLines.join('\n')
 
-    // Keep earlier env logs of this working directory (reruns) instead of overwriting them.
-    def envLogFile = new File(WORKDIR_ABS, 'env_log.txt')
-    if( envLogFile.exists() && envLogFile.length() > 0 ) {
-        def envArchiveDir = new File(WORKDIR_ABS, 'previous_env_logs')
-        envArchiveDir.mkdirs()
-        def envStamp = new Date(envLogFile.lastModified()).format('yyyyMMdd_HHmmss')
-        def envTarget = new File(envArchiveDir, "env_log_${envStamp}.txt")
-        if( envLogFile.renameTo(envTarget) ) {
-            println "Previous env log  : moved to ${envTarget}"
-            def envPdf = new File(WORKDIR_ABS, 'env_log.pdf')
-            if( envPdf.exists() ) {
-                envPdf.renameTo(new File(envArchiveDir, "env_log_${envStamp}.pdf"))
-            }
-        }
-        else {
-            println "[WARN] Could not move previous env_log.txt to ${envTarget}; it will be overwritten."
-        }
-    }
+    // env_log.txt / env_log.pdf in the working folder always describe the
+    // LATEST run. The old ones are removed first, so a stale env_log.pdf can
+    // never be mistaken for (or copied into run_history/ as) this run's.
+    // Successful runs keep their own copy in run_history/.
+    ['env_log.txt', 'env_log.pdf'].each { n -> new File(WORKDIR_ABS, n).delete() }
 
     println "Docker image      : ${imageName} (${imageId ?: 'ID unknown'})"
 
@@ -1521,6 +1701,46 @@ workflow {
             println '[CLEANUP] Starting post-run cleanup.'
         }
 
+        // Run history: only for a successful run. A failed or interrupted run
+        // writes nothing; the settings stay in the working folder as they are.
+        if( workflow.success ) {
+            def historyDir = writeRunHistory(
+                WORKDIR_ABS,
+                historyFolderName,
+                capturedSettings,
+                historyInfo + [
+                    envLine('Run finished', workflow.complete),
+                    envLine('Duration', workflow.duration),
+                    envLine('Status', 'COMPLETED')
+                ],
+                [
+                    new File(WORKDIR_ABS, 'env_log.txt'),
+                    new File(WORKDIR_ABS, 'env_log.pdf'),
+                    new File(WORKDIR_ABS, 'Parameter_Files'),
+                    new File(WORKDIR_ABS, 'logfile_setup.txt'),
+                    new File(WORKDIR_ABS, 'report.pdf'),
+                    new File(params.outdir.toString(), 'nextflow_trace.txt')
+                ]
+            )
+            if( historyDir ) {
+                // Only the part of pipeline_log.txt that this run wrote.
+                try {
+                    // (No Java array syntax here: not allowed in strict Nextflow syntax.)
+                    def logBytes = new File(PIPELINE_LOG_ABS).bytes
+                    def startAt = (pipelineLogStart as long) <= logBytes.length ? (pipelineLogStart as int) : 0
+                    new File(historyDir, 'pipeline_log.txt').bytes =
+                        java.util.Arrays.copyOfRange(logBytes, startAt, logBytes.length)
+                }
+                catch( Exception e ) {
+                    println "[RUN HISTORY WARNING] Could not save this run's pipeline log: ${e.message}"
+                }
+                println "[RUN HISTORY] Settings of this run saved to: ${historyDir}"
+            }
+        }
+        else {
+            println '[RUN HISTORY] Run failed: nothing saved to run_history/ (settings stay in the working folder).'
+        }
+
         def cfgDataPath2 = resolveLaunch(config_data as String)
         def cfgData2 = parseKeyValueFile(cfgDataPath2)
         def workingPath2 = cfgData2.get('WORKING_PATH') ?: '.'
@@ -1536,6 +1756,8 @@ workflow {
             '-type', 'f', '-size', '0',
             '-not', '-path', "${nfWorkDir}/*",
             '-not', '-path', "${nfMetaDir}/*",
+            // Keep the run history complete, even an empty settings file.
+            '-not', '-path', "${new File(workdirAbs2, 'run_history').absolutePath}/*",
             '-print', '-delete'
         ])
 
@@ -1600,4 +1822,3 @@ workflow {
     }
 
 }
-
