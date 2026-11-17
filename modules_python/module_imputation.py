@@ -483,9 +483,9 @@ def minval_imputation(data_df, axis = 1, add_noise = True, shift = 0.15, width =
     axis : int
         1 for precursors as rows and samples as columns, 0 for precursors as columns and samples as rows. The default is 1.
     add_noise : bool, optional
-        Draw imputed values from a down-shifted Gaussian instead of using the plain precursor minimum. The default is True.
+        Draw imputed values from a shifted Gaussian instead of using the plain precursor minimum. The default is True.
     shift : float, optional
-        Downshift of the Gaussian mean above the precursor minimum, in units of the sample standard deviation. The default is 0.6.
+        Shift of the Gaussian mean with respect to the precursor minimum, in units of the sample standard deviation. Sign denotes the direction i.e. a value < 0 causes a downshift. The default is 0.15.
     width : float, optional
         Standard deviation of the Gaussian as a fraction of the sample standard deviation. The default is 0.3.
  
