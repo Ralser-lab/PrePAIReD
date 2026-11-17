@@ -232,12 +232,11 @@ def init_parser(): # build parser outside of the pipeline to read current data
         raise ValueError("###ERROR###: Output path not existing")  
         sys.exit(1)
     
-    module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
     parameters_txt_file = os.path.join(path_to_project_directory, "Parameters.txt")
     metadata_file = args.metadata.replace("\\","/")
     data_file = args.data.replace("\\","/")
     
-    return parameters_txt_file, path_to_project_directory, module_order_filename, data_file, metadata_file
+    return parameters_txt_file, path_to_project_directory, data_file, metadata_file
 #%%
 if __name__ == "__main__":
    
@@ -248,13 +247,12 @@ if __name__ == "__main__":
         path_to_project_directory =  askdirectory(title="Please select your working directory (where you would like to create all module subdirectories)", initialdir=os.path.abspath(os.getcwd()))
         mass_spec_data_filename = askopenfilename(title="Please select your DIA-NN output report", initialdir=path_to_project_directory)
         metadata_filename = askopenfilename(title="Please select your metadata", initialdir=path_to_project_directory)
-        module_order_filename = os.path.join(path_to_project_directory, "Config.txt")
         parameters_txt_file = os.path.join(path_to_project_directory, "Parameters.txt")
         #print(sys.argv)
     else:
         #print(sys.argv)
         #if script called from terminal
-        parameters_txt_file, path_to_project_directory, module_order_filename, mass_spec_data_filename, metadata_filename = init_parser()
+        parameters_txt_file, path_to_project_directory, mass_spec_data_filename, metadata_filename = init_parser()
     try:
         username = getpass.getuser()
     except:
