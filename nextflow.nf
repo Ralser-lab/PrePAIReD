@@ -645,6 +645,13 @@ EOF_STEPS
         local publish_step="\$1"
         local counter_value="\$2"
 
+        # The old status of this step folder could not be reset (see the
+        # step start): publish nothing, so an old COMPLETED marker can never
+        # describe new or partial files.
+        if [ "\${publish_blocked:-0}" = "1" ]; then
+            return 0
+        fi
+
         mkdir -p "\$publish_step"
 
         cp -f step_log.txt "\$publish_step/" || true
@@ -683,8 +690,91 @@ EOF_STEPS
         esac
     }
 
+    # STEP STATUS (rerun safety)
+    #
+    # Every published step folder holds step_status.txt:
+    #   status   RUNNING | COMPLETED | INCOMPLETE
+    #   module   <counter>_<step name>
+    #   updated  <UTC time>
+    # RUNNING is written when the step starts, COMPLETED only after the
+    # step's files were published and checked. A rerun accepts a seed
+    # folder only when its status is COMPLETED. Writing the status is
+    # never fatal: a problem only prints a warning.
+    write_step_status() {
+        local status_dir="\$1"
+        local status_value="\$2"
+        local status_module="\$3"
+
+        mkdir -p "\$status_dir" || return 1
+        {
+            printf 'status\\t%s\\n' "\$status_value"
+            printf 'module\\t%s\\n' "\$status_module"
+            printf 'run\\t%s\\n' "${workflow.runName}"
+            printf 'updated\\t%s\\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        } > "\$status_dir/step_status.txt.tmp" &&
+            mv -f "\$status_dir/step_status.txt.tmp" "\$status_dir/step_status.txt"
+    }
+
+    # Best-effort warning: never stops the task, even if a log is not writable.
+    status_warn() {
+        printf '%s\\n' "\$*" >> step_log.txt 2>/dev/null || true
+        printf '%s\\n' "\$*" >> "\$persistent_log" 2>/dev/null || true
+    }
+
+    # True only if both files exist and have the same content:
+    # byte comparison with cmp, or the same CRC checksum if cmp is missing.
+    same_file() {
+        [ -f "\$1" ] && [ -f "\$2" ] || return 1
+        if command -v cmp >/dev/null 2>&1; then
+            cmp -s "\$1" "\$2"
+        elif command -v cksum >/dev/null 2>&1; then
+            local sum_a sum_b
+            sum_a="\$(cksum < "\$1")" || return 1
+            sum_b="\$(cksum < "\$2")" || return 1
+            [ -n "\$sum_a" ] && [ "\$sum_a" = "\$sum_b" ]
+        else
+            return 1
+        fi
+    }
+
+    # Check that the files a rerun needs arrived in the published folder:
+    # the data table, id_mapping.tsv, step_log.txt and the cumulative
+    # report.pdf always; the two mask files when this step has them, and
+    # no leftover masks when it has none.
+    verify_published_step() {
+        local dst="\$1"
+        local c="\$2"
+        local f
+
+        for f in "data_\${c}.tsv" id_mapping.tsv step_log.txt report.pdf; do
+            if ! same_file "\$f" "\$dst/\$f"; then
+                status_warn "[STEP STATUS WARNING] \$f is missing or was not copied completely to \$dst"
+                return 1
+            fi
+        done
+
+        for f in "data_\${c}_mask.tsv" "data_\${c}_mask_description.tsv"; do
+            if [ -f "\$f" ]; then
+                if ! same_file "\$f" "\$dst/\$f"; then
+                    status_warn "[STEP STATUS WARNING] \$f was not copied completely to \$dst"
+                    return 1
+                fi
+            elif [ -e "\$dst/\$f" ]; then
+                # This step made no such mask, so one in the folder is left
+                # over from an older run and would be paired with new data.
+                status_warn "[STEP STATUS WARNING] \$dst/\$f is left over from an older run and could not be removed"
+                return 1
+            fi
+        done
+
+        return 0
+    }
+
     # Pipeline-level QA status table.
     printf 'module\\tqa_status\\texit_code\\n' > qa_status.tsv
+
+    # Set to 1 for a step whose old status could not be reset (see below).
+    publish_blocked=0
 
     data_two_back=""
     mask_two_back=""
@@ -749,6 +839,29 @@ EOF_STEPS
         : > step_log.txt
 
         publish_step="${publish_root}/\${module_name}"
+
+        # Mark the published step folder as "in progress" BEFORE anything
+        # else happens. Only a fully published step is later set to
+        # COMPLETED (see the end of this loop). If this attempt stops early
+        # (error, kill, out of memory), the folder keeps status RUNNING, so
+        # older files left in a reused folder can never pass as a finished
+        # step when it is used as a rerun seed. Never fatal.
+        #
+        # The status is replaced in one step (temporary file + mv), never
+        # deleted first. If RUNNING cannot be written, this step publishes
+        # nothing into that folder, so whatever is there (an older result
+        # with its own status, or nothing) stays exactly as it was. The run
+        # itself continues.
+        publish_blocked=0
+        if ! write_step_status "\$publish_step" RUNNING "\$module_name"; then
+            publish_blocked=1
+            status_warn "[STEP STATUS WARNING] Could not write step_status.txt in \$publish_step. This step's files will NOT be published there; the folder keeps its previous contents."
+        fi
+
+        # Marks this step log as written by a workflow version that keeps
+        # step_status.txt. A rerun refuses such a folder if its status file
+        # is missing (it is not an older folder, so it cannot be trusted).
+        log_both "[STEP FORMAT] step_status v1"
 
         log_both ""
         log_both "============================================================"
@@ -1128,6 +1241,29 @@ EOF_STEPS
         cp -f step_log.txt log.txt
         publish_current_step "\$publish_step" "\$counter"
 
+        # Mark the step as COMPLETED only if its files really arrived in the
+        # published folder. A failed check never stops the pipeline: the
+        # step only cannot be used as a rerun seed.
+        # Masks this step did not produce must not survive from an older
+        # run in a reused folder: a rerun would stage them with new data.
+        if [ "\$publish_blocked" != "1" ]; then
+            for stale_mask in "data_\${counter}_mask.tsv" "data_\${counter}_mask_description.tsv"; do
+                if [ ! -f "\$stale_mask" ]; then
+                    rm -f "\$publish_step/\$stale_mask" 2>/dev/null || true
+                fi
+            done
+        fi
+
+        if [ "\$publish_blocked" = "1" ]; then
+            status_warn "[STEP STATUS WARNING] \${module_name} was not published (old status could not be reset)."
+        elif verify_published_step "\$publish_step" "\$counter"; then
+            write_step_status "\$publish_step" COMPLETED "\$module_name" ||
+                status_warn "[STEP STATUS WARNING] Could not write step_status.txt for \${module_name}"
+        else
+            write_step_status "\$publish_step" INCOMPLETE "\$module_name" || true
+            status_warn "[STEP STATUS WARNING] \${module_name} finished, but its published files could not be verified. It cannot be used as a rerun seed."
+        fi
+
         # Promote this module's outputs to become inputs for
 
         # the next module.
@@ -1345,15 +1481,79 @@ workflow {
             die("Rerun folder '${rerun_name}' not found: ${rerun_folder}")
         }
 
+        // Seed check. Step folders written by this version of the workflow
+        // hold step_status.txt: RUNNING when the step starts, COMPLETED only
+        // after its files were published and checked (see RUN_ALL_MODULES).
+        // Anything other than COMPLETED means the last attempt in this folder
+        // did not finish, so its files may be partial or left over from an
+        // older run.
+        stepStatusFile = new File(rerun_folder, 'step_status.txt')
         stepLog = new File(rerun_folder, 'step_log.txt')
-        if( stepLog.exists() ) {
-            bad = stepLog.readLines().any { it.contains('###ERROR###') }
-            if( bad ) {
-                die("Cannot rerun from '${rerun_name}' because step_log.txt contains ###ERROR###")
+
+        if( stepStatusFile.isFile() ) {
+            def statusInfo = [:]
+            stepStatusFile.readLines().each { line ->
+                def parts = line.trim().split(/\s+/, 2)
+                if( parts.size() == 2 ) {
+                    statusInfo[parts[0]] = parts[1].trim()
+                }
             }
+            def stepStatus = statusInfo.get('status', '')
+            if( stepStatus != 'COMPLETED' ) {
+                die("Cannot rerun from '${rerun_name}': step_status.txt says '${stepStatus ?: 'unknown'}'. " +
+                    "The last attempt of this step did not finish, so its files may be incomplete or from an older run. " +
+                    "Run this step again first, or choose another seed step.")
+            }
+            println "Seed status       : COMPLETED (run ${statusInfo.get('run', 'unknown')}, ${statusInfo.get('updated', 'time unknown')})"
+        }
+        else if( !stepLog.isFile() ) {
+            // Nothing to check (a folder from an older version, or made by
+            // hand). Same behaviour as before: warn and continue.
+            println "[WARN] ${rerun_name} has neither step_status.txt nor step_log.txt, so the step cannot be verified. " +
+                    "Make sure its data_${rerun_name.split('_', 2)[0]}.tsv and id_mapping.tsv come from a run that finished."
         }
         else {
-            println "[WARN] step_log.txt not found in ${rerun_folder}"
+            def logLines = stepLog.readLines()
+
+            // A log written by this workflow version always comes with a
+            // status file. Without it the folder cannot be trusted.
+            if( logLines.any { line -> line.contains('[STEP FORMAT] step_status') } ) {
+                die("Cannot rerun from '${rerun_name}': step_status.txt is missing, although this step was written by a " +
+                    "pipeline version that creates it. Run this step again first, or choose another seed step.")
+            }
+
+            // Older folder: only the log can be checked. Error markers count
+            // in the module and report sections only, because QA problems are
+            // non-fatal. (State kept in a map: closures should not reassign
+            // outer local variables.)
+            def scan = [section: '', fatal: false]
+            logLines.each { line ->
+                if( line.contains('----- MODULE START') ) {
+                    scan.section = 'module'
+                }
+                else if( line.contains('----- QA START') ) {
+                    scan.section = 'qa'
+                }
+                else if( line.contains('----- REPORT START') ) {
+                    scan.section = 'report'
+                }
+                def marker = line.contains('###ERROR###') || line.contains('###MOD_ERROR###') || line.contains('###REP_ERROR###')
+                def failedStatus = line.contains('[MODULE STATUS] FAILED') || line.contains('[REPORT STATUS] FAILED')
+                if( failedStatus || (marker && scan.section != 'qa') ) {
+                    scan.fatal = true
+                }
+            }
+            if( scan.fatal ) {
+                die("Cannot rerun from '${rerun_name}': step_log.txt shows a failed module or report for this step")
+            }
+            if( logLines.any { line -> line.contains('[REPORT STATUS] PASSED') } ) {
+                println "[WARN] ${rerun_name} has no step_status.txt (folder from an older pipeline version). " +
+                        "Checked step_log.txt only: make sure these files come from the run you want to reuse."
+            }
+            else {
+                println "[WARN] ${rerun_name}: step_log.txt has no '[REPORT STATUS] PASSED' line (folder from an older pipeline version?). " +
+                        "Make sure these files come from a run that finished."
+            }
         }
 
         start_dir = rerun_folder.absolutePath

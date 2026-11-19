@@ -31,10 +31,10 @@ For a more detailed description and other use cases please check out the [Manual
 -   [Configuration Files](#configuration-files)
 -   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
--   [Alternative: Run with Reduced Terminal Output](#alternative-run-with-reduced-terminal-output)
--   [Resuming a Pipeline](#resuming-a-pipeline)
+-   [Rerunning from a Step](#rerunning-from-a-step)
 -   [Example Commands](#example-commands)
 -   [Folder Structure Example](#folder-structure-example)
+-   [Run History and Reproducibility](#run-history-and-reproducibility)
 -   [Troubleshooting](#troubleshooting)
 -   [Minimal Requirements Summary](#minimal-requirements-summary)
 -   [Support](#support)
@@ -45,7 +45,7 @@ For a more detailed description and other use cases please check out the [Manual
 
 For a fully automated run you need:
 
--   Java (JDK 11 or newer recommended)
+-   Java (JDK 17 or later)
 -   Docker
 -   Nextflow
 -   Git (optional but recommended)
@@ -217,7 +217,7 @@ java -version
 Official documentation:  
 https://www.nextflow.io/docs/latest/getstarted.html
 
-Nextflow requires **Java (JDK 11 or newer)**.
+Nextflow requires **Java (JDK 17 or later)**.
 
 ---
 
@@ -378,9 +378,7 @@ docker info
 
 ### Docker Images
 
-You **do not need to manually download images**.\
-Nextflow automatically pulls the required Docker image when the pipeline
-starts.
+Nextflow pulls the registry image if it is missing locally. For the local option, build the image before launching the pipeline.
 
 [⬆ Back to top](#top)
 
@@ -394,7 +392,7 @@ stored.
 Example:
 
 ``` bash
-mkdir -p "/Users/**username**/Desktop/test pipeline"
+mkdir -p "$HOME/Desktop/test pipeline"
 ```
 
 ⚠️ If your path contains spaces, always use quotes.
@@ -408,8 +406,8 @@ mkdir -p "/Users/**username**/Desktop/test pipeline"
 Your working directory must contain the following files:
 
     test pipeline/
-    ├── parameters.txt
-    ├── config_evaluation.txt
+    ├── Parameters.txt
+    ├── Config_evaluation.txt
     ├── Config_data.txt
     └── Config.txt
 
@@ -417,8 +415,8 @@ These files define:
 
 | File                  | Purpose                  |
 |-----------------------|--------------------------|
-| parameters.txt        | Pipeline parameters      |
-| config_evaluation.txt | Evaluation settings      |
+| Parameters.txt        | Pipeline parameters      |
+| Config_evaluation.txt | Evaluation settings      |
 | Config_data.txt       | Input/output paths       |
 | Config.txt            | Preprocessing step order |
 
@@ -435,14 +433,16 @@ as well as the parameter file except Config_data.txt. If NextFlow is used, you n
 Edit `Config_data.txt`:
 
 ``` txt
-WORKING_PATH = "/Users/**username**/Desktop/test pipeline"
-ORIGINALDATA = "/Users/**username**/Desktop/Data/diann.tsv"
-METADATA     = "/Users/**username**/Desktop/Data/Metadata.tsv"
+WORKING_PATH = "/Users/yourname/Desktop/test pipeline"
+ORIGINALDATA = "/Users/yourname/Desktop/Data/diann.tsv"
+METADATA     = "/Users/yourname/Desktop/Data/Metadata.tsv"
+# Optional. Uncomment to reuse procedures from an earlier run.
+# IMPUTATION_PROCEDURES = "imputation_procedures.tsv"
 ```
 
 Make sure:
 
--   Paths exist on your system
+-   Replace the example paths with your own. Use literal absolute paths here because the config reader does not expand shell variables such as `$HOME`.
 -   Use quotes if paths contain spaces
 
 [⬆ Back to top](#top)
@@ -453,16 +453,16 @@ Make sure:
 
 For an automatic setup of the remaining files run Initialization/parameter_generation.py (Only requirement: Python 3.9+).
 
-An example `config.txt` output will look like:
+Keep the full comma-separated `Order = ...` list on one physical line. An example `Config.txt` follows.
 
 ``` txt
 Run = new
-order = 01_FILTERING_LONG_py, 02_FILTERING_WIDE_py, 03_NORMALISATION_py, 04_IMPUTATION_py, 05_CORRECTION_py, 06_SUMMARISATION_py
+Order = 01_FILTERING_LONG_py, 02_FILTERING_WIDE_py, 03_NORMALISATION_py, 04_IMPUTATION_py, 05_CORRECTION_py, 06_SUMMARISATION_py
 ```
 or in case of rerun
 ``` txt
 Run = 02_FILTERING_WIDE_py
-order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATION_py
+Order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATION_py
 ```
 
 [⬆ Back to top](#top)
@@ -471,7 +471,7 @@ order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATIO
 
 # Docker Environment Setup
 
-Before running the pipeline, the Docker image must be built locally from the `Dockerfile` in the repository.
+Before running the pipeline, choose the prebuilt registry image or build a local image from the repository’s `Dockerfile`.
 
 First ensure that **Docker is installed and running**.
 
@@ -577,21 +577,31 @@ unified_env_all     1.0       <image_id>
 
 ## Container Configuration in Nextflow
 
-Local Docker image in **Dockerfile**:
+Local image setting in `nextflow.config`:
 
 ``` groovy
-process.container = 'unified_env_all:1.0'
+params.container_image = 'unified_env_all:1.0'
 docker.enabled = true
 ```
 
 Remote container example:
 
 ``` groovy
-process.container = 'ghcr.io/ralser-lab/preprocessing:1.0'
+params.container_image = 'ghcr.io/ralser-lab/preprocessing:1.0'
 docker.enabled = true
 ```
 
-Nextflow will automatically download the container if needed.
+Nextflow can pull the registry image if it is missing locally. On that first run, the startup log may show an unknown image ID because the workflow checks the local image before the pull.
+
+### Updating the environment
+
+Update the build inputs that changed, such as `environment.yml` or `Dockerfile`, then build from the repository root under a new tag.
+
+```bash
+docker build -t unified_env_all:1.1 .
+```
+
+Update `params.container_image`, or pass `--container_image unified_env_all:1.1` for one run. If distributing the image through a registry, tag and push it there and use the registry reference. Keep the exact image or its registry digest for reproducibility.
 
 [⬆ Back to top](#top)
 
@@ -599,98 +609,61 @@ Nextflow will automatically download the container if needed.
 
 # Running the Pipeline
 
-Navigate to the working directory:
+Launch from the analysis folder and point Nextflow to the workflow in the repository.
 
-``` bash
-cd "/Users/username/Desktop/test_pipeline"
+```bash
+cd "$HOME/Desktop/test pipeline"
+nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
 ```
 
-Run the pipeline by specifying the path to the nextflow.nf file:
+To launch elsewhere, pass `--config_data /absolute/path/to/Config_data.txt` and set an absolute `WORKING_PATH` in that file. A relative `WORKING_PATH` resolves from the launch directory. Relative data, metadata, and optional imputation procedures paths resolve from `WORKING_PATH`.
 
-``` bash
-nextflow run /path/to/Preprocessing/nextflow.nf 
+Docker is enabled in the supplied configuration. The optional `-profile linux_docker_user` runs the container under your host user and group IDs.
+
+### Optional resource settings
+
+```bash
+nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf" \
+  --memory '8 GB' --cpus 4 --max_memory '24 GB'
 ```
 
-Example:
+- `--memory` is the initial memory request and defaults to 4 GB. `--cpus` is the common CPU request and defaults to 4.
+- `--module_memory` and `--module_cpus` override the requests for the main processing task. `--init_memory` and `--init_cpus` apply to initialisation, which defaults to one CPU. The environment-log task uses 1 GB and one CPU.
+- `--max_memory` sets the retry ceiling. By default, the ceiling is detected Docker memory minus `--memory_margin` (2 GB by default), subject to availability and the minimum in the config. If Docker memory cannot be detected and no ceiling is given, the initial request is used as the ceiling, subject to that minimum.
 
-``` bash
-nextflow run ~/Desktop/Preprocessing/nextflow.nf \
-  -profile linux_docker_user \
-```
+### Freeing disk space
 
-By default, the pipeline uses predefined memory and CPU settings, so no resource parameters are required.
+`--cleanup_aggressive true` frees disk space by removing Nextflow’s `work/` directory, the launch directory’s `.nextflow/` and `.nextflow.log` when the run ends, including after a failure. The numbered step folders remain, so reruns from a step still work. Leave it off if you want to inspect the Nextflow files of a failed task.
 
-### Optional: Adjust Memory and CPUs
+### Retries
 
-Users with different system resources can override the defaults:
+With the supplied `nextflow.config`, a task that exits with 137, 139 or 143 gets up to three retries with more memory, within the memory ceiling. These exit codes can have causes other than memory exhaustion. A retry of the main processing task starts again at the first entry in `Order`, not at the step that failed.
 
-```bash id="29v2pm"
-nextflow run ~/Desktop/Preprocessing/nextflow.nf \
-  -profile linux_docker_user \
-  --max_memory '24 GB' \
-  --module_memory '8 GB' \
-  --module_cpus 4
-```
-
-The main options are:
-
-- `--max_memory` — maximum memory available to the pipeline's retry logic.
-- `--module_memory` — initial memory for the main processing step.
-- `--module_cpus` — CPU cores used by the main processing step.
-
-Advanced users can also adjust `--init_memory`, `--init_cpus`, and `--memory_margin`. If not specified, the predefined values are used.
-
-> **Important:** Do not set `--max_memory` to your computer's total RAM. Leave sufficient resources for the operating system, Docker, and other applications. As a general guideline, use no more than **~80% of the system's RAM and CPU cores**.
-
-For example, on a computer with **32 GB RAM and 8 CPU cores**:
-
-```bash id="f0m22n"
---max_memory '24 GB' --module_memory '8 GB' --module_cpus 6
-```
-
-If a process fails because it requires more memory, the pipeline automatically retries maximum three times with increased memory, up to the configured safe limit.
+> **Developer note:** the `RUN_ALL_MODULES` selector in `nextflow.config` overrides the inline 137/143 rule in `nextflow.nf`. The initialisation task uses the same retry codes, but a nonzero exit from `Initialize.py` is converted to task exit 100, so it is not retried.
 
 [⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
 
-# Alternative: Run with Reduced Terminal Output
+# Rerunning from a Step
 
-If you want to run the pipeline with **minimal terminal output** and avoid displaying unnecessary error messages in the terminal, use:
+To try other settings without repeating earlier steps, start a new branch from a saved step folder with `Run = <seed step>`.
 
-From any directory, run:
+List the new steps in `Order` and use distinct step numbers to keep both sets of step outputs.
 
-``` bash
-~/path to Preprocessing folder/Preprocessing/run_pipeline.sh \
-  -profile linux_docker_user \
-  --memory '1 GB' \
-  --cpus 1
-```
+The workflow writes a `step_status.txt` into each step folder when it can. It is set to `RUNNING` when a step starts and changes to `COMPLETED` only after the workflow has checked the seed files it published: the numbered table, `id_mapping.tsv`, `step_log.txt`, the cumulative `report.pdf`, the masks the step produced, and that no leftover masks from an older run remain. It also records the Nextflow run name and the time. When a seed folder has a status file, it must say `COMPLETED`; the rerun prints the seed's run name and time when it starts. It also requires the seed folder, its numbered data table and `id_mapping.tsv`.
 
-### Options
+- If the start marker was written, a step that failed or was interrupted stays `RUNNING` and is refused, even if older files from a previous run remain in the folder.
+- If a step finished but its published files could not be verified, its status is set to `INCOMPLETE` (if the status update succeeds) and `pipeline_log.txt` shows a `[STEP STATUS WARNING]`. The run itself continues.
+- If `RUNNING` cannot be written at the start of a step, that step publishes nothing into its folder and a warning appears in `pipeline_log.txt`. The overall run continues, but that step folder still holds a previous run’s outputs (with their own status and run name), or nothing.
+- A folder whose log was written by this version but whose `step_status.txt` is missing is refused.
 
-- `-profile linux_docker_user` — runs the pipeline using the Linux Docker user profile with reduced terminal output.
-- `--memory '1 GB'` — sets the memory available to the pipeline to 1 GB.
-- `--cpus 1` — sets the number of CPUs to 1.
+**Folders from older pipeline versions** have no `step_status.txt`. For those, the workflow checks `step_log.txt` if it exists. It refuses the seed if the log shows a failed module or report (QA problems do not count, because they are non-fatal). Otherwise, or if there is no log at all, it continues with a warning, so such a folder may be accepted without proof that it is complete.
 
-> **Tip:** Use this command if you prefer a cleaner terminal with minimal error/output messages while the pipeline is running.
+Before branching, confirm that the seed is from the run you intend to reuse. `COMPLETED` shows the step finished, but in a reused working folder it can come from an earlier run if a later run stopped before reaching that step. Check the run name and time against the run you want, then review `qa_status.tsv` for warnings. If you can’t establish which run produced the files, use a seed from a separate run folder.
 
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-# Resuming a Pipeline
-
-Resume previous run:
-
-``` bash
-nextflow run nextflow.nf -resume
-```
-
-Resume with aggressive cleanup:
-
-``` bash
-nextflow run nextflow.nf -resume --cleanup_aggressive true
+```bash
+cat "02_FILTERING_WIDE/step_status.txt"
 ```
 
 [⬆ Back to top](#top)
@@ -711,31 +684,31 @@ cd Preprocessing
 Check that `nextflow.config` contains:
 
 ```groovy
-process.container = 'ghcr.io/ralser-lab/preprocessing:1.0'
+params.container_image = 'ghcr.io/ralser-lab/preprocessing:1.0'
 ```
 
 Move to your working data directory:
 
 ```bash
-cd /Users/username/Desktop/test_data
+cd "$HOME/Desktop/test pipeline"
 ```
 
 Prepare the required input files in this directory:
 
-- `config_data.txt`  
+- `Config_data.txt`  
   Include:
   - path to your input data
   - path to your metadata
   - working directory path
 
-- `config.txt`
-- `config_evaluation.txt`
+- `Config.txt`
+- `Config_evaluation.txt`
 - `Parameters.txt`
 
 Run the pipeline using the absolute path to the workflow:
 
 ```bash
-nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" 
+nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
 ```
 
 ---
@@ -760,31 +733,31 @@ docker build -t unified_env_all:1.0 .
 Check that `nextflow.config` contains:
 
 ```groovy
-process.container = 'unified_env_all:1.0'
+params.container_image = 'unified_env_all:1.0'
 ```
 
 Move to your working data directory:
 
 ```bash
-cd /Users/username/Desktop/test_data
+cd "$HOME/Desktop/test pipeline"
 ```
 
 Prepare the required input files in this directory:
 
-- `config_data.txt`  
+- `Config_data.txt`  
   Include:
   - path to your input data
   - path to your metadata
   - working directory path
 
-- `config.txt`
-- `config_evaluation.txt`
+- `Config.txt`
+- `Config_evaluation.txt`
 - `Parameters.txt`
 
 Run the pipeline using the absolute path to the workflow:
 
 ```bash
-nextflow run "/Users/username/Desktop/Preprocessing/nextflow.nf" 
+nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
 ```
 
 ---
@@ -817,31 +790,70 @@ nextflow -version
 
 # Folder Structure Example
 
-    project/
-    │
-    ├── Preprocessing/        		# cloned repository
-    │   └── nextflow.nf
-    │
-    └── test pipeline/        		# working directory
-        ├── 01_FILTERING_LONG		# result folder for each module
-		│   ├── data_01.tsv			# intermediate data
-		│   ├── report.pdf			# report file include all report till this step
-		│   ├── report_folder		# folder includes evaluation fiigure and the corresponding figure captions (all reported in report.pdf)
-		│   └── step_log.txt		# log file for the module to trace errors
-		├── 02_FILTERING_WIDE
-		├── 03_IMPUTATION
-		├── 04_SUMMARISATION
-		├── Parameter_Files   		# parameter direcory
-		├── parameters.txt
-        ├── config_evaluation.txt
-        ├── Config_data.txt
-        └── Config.txt
+This example launches from `WORKING_PATH`, uses the default `--outdir`, and runs the six steps shown above.
+
+```text
+test pipeline/
+├── Config_data.txt, Config.txt, Config_evaluation.txt, Parameters.txt
+├── 01_FILTERING_LONG/
+│   ├── data_01.tsv
+│   ├── data_01_mask.tsv, data_01_mask_description.tsv
+│   ├── id_mapping.tsv
+│   ├── report.pdf, report_folder/
+│   ├── step_log.txt, log.txt, qa_status.tsv
+│   └── step_status.txt
+├── 02_FILTERING_WIDE/
+├── 03_NORMALISATION/
+├── 04_IMPUTATION/
+├── 05_CORRECTION/
+├── 06_SUMMARISATION/
+├── Parameter_Files/, logfile_setup.txt
+├── report.pdf, pipeline_log.txt
+├── env_log.txt, env_log.pdf
+├── pipeline.done
+├── run_history/, previous_reports/
+├── nextflow_report.html, nextflow_timeline.html, nextflow_trace.txt
+└── work/, .nextflow/
+```
+
+Some step folders hold one extra file: `Normalization_factors.tsv` (normalisation), `imputation_procedures.tsv` (imputation) and `covariate_associations.tsv` (correction, when confounders are adjusted).
+
+Step folders contain the files produced and copied for that step. `qa_status.tsv` is cumulative through that step. The figures folder is per step, and the PDF is carried forward. The environment PDF is best effort. `work/` and the three Nextflow reports go under `--outdir`, which defaults to the launch directory. `.nextflow/` is in the launch directory.
+
+**Before starting another run in the same folder:** a new run can replace files in matching step folders and leave older files behind. The workflow moves the existing nonempty top-level `report.pdf` into `previous_reports/`. Use a fresh analysis folder or save the prior outputs separately to preserve the complete result.
+
+[⬆ Back to top](#top)
+
+------------------------------------------------------------------------
+
+# Run History and Reproducibility
+
+After a successful run, look for its record in `run_history/<timestamp>_newrun/` or `run_history/<timestamp>_rerun_from_<seed-folder>/`. A run can complete with QA warnings.
+
+The record can contain startup copies of the four settings files and any supplied imputation procedures file, plus `run_info.txt`, environment logs, generated parameters, setup and pipeline logs, and the available final PDF and trace. If you see `[RUN HISTORY WARNING]`, the record may be missing or incomplete.
+
+The history records SHA-256 checksums of the original data and metadata, and of the seed table for a rerun. Keep the input data, output tables, figures, and complete rerun seed bundle separately. To repeat a run, restore the applicable settings and inputs, confirm the available checksums, and use the recorded command, code, and image. Avoid editing inputs and settings while the run is active.
 
 [⬆ Back to top](#top)
 
 ------------------------------------------------------------------------
 
 # Troubleshooting
+
+| Message | Fix |
+|---------|-----|
+| `Missing config_data file` | Launch from the working folder, or pass `--config_data` with the file's path |
+| `Config file missing 'Run =' entry` / `'Order =' entry` | Regenerate `Config.txt` or add the line. Keep `Order = ...` on one line |
+| `Missing step script for 03_...` | Check the spelling. Each entry must match `module_<name>.py` or `.R` |
+| `Rerun folder '...' not found` | `Run =` must name an existing step folder |
+| `Cannot rerun from '...': step_status.txt says 'RUNNING'` or `'INCOMPLETE'` | Run the seed step again, or choose another seed. For `INCOMPLETE`, look for `[STEP STATUS WARNING]` in `pipeline_log.txt`; see [Rerunning from a Step](#rerunning-from-a-step) |
+| `Cannot rerun from '...': step_status.txt is missing` | The step was written by this version but lost its status file. Run the seed step again, or choose another seed |
+| `Cannot read input file` / `Incomplete read` | Read the reason printed and check permissions and host access. For an online-only file, make it available offline or move it to a local folder |
+| Initialisation failure | Start with `pipeline_log.txt`, then open `logfile_setup.txt` if present |
+| `[MEMORY ERROR] ... exit 137` | Check Docker's memory, then raise `--memory` and `--max_memory` |
+| Docker permission denied (Linux) | `sudo usermod -aG docker $USER`, then log out and in |
+
+- **Module, QA or report errors.** Search `step_log.txt` for `###MOD_ERROR###`, `###QA_ERROR###` or `###REP_ERROR###`. A module or report failure stops processing. A QA failure is recorded and processing continues. Check the current run status and QA summary before using the results.
 
 ## Paths with Spaces
 
@@ -881,7 +893,7 @@ You only need:
 -   Java
 -   Nextflow
 
-Nothing else is required.
+If you generate settings with the repository’s Python generator, you also need Python on the host.
 
 [⬆ Back to top](#top)
 
