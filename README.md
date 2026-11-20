@@ -454,6 +454,7 @@ Make sure:
 
 -   Replace the example paths with your own. Use literal absolute paths here because the config reader does not expand shell variables such as `$HOME`.
 -   Use quotes if paths contain spaces
+-   `METADATA` is optional. Leave the line out or set `METADATA = ""` if you have no sample table: the pipeline then generates `Metadata_generated.tsv` in the working folder from the sample names in the data and uses it for all steps.
 
 [⬆ Back to top](#top)
 
@@ -819,6 +820,7 @@ test pipeline/
 ├── 06_SUMMARISATION/
 ├── Parameter_Files/, logfile_setup.txt
 ├── report.pdf, pipeline_log.txt
+├── Metadata_generated.tsv            (only if no METADATA was given)
 ├── env_log.txt, env_log.pdf
 ├── pipeline.done
 ├── run_history/, previous_reports/
