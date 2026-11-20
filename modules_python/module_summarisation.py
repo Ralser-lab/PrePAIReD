@@ -2,18 +2,12 @@
 Input: wide-format data
 Output: Summarised wide-format data
 
-    - print_args: decorator that prints arguments of a function (sanity checks)
-    - calc_ref_intensity: calculates reference intensities
-    - apply_protein_filter: filter proteins by their number of runs that they are detected in.
-    - remove_rows_cols: remove rows and columns from a matrix.
-    - get_peptide_ratios: calculate peptide ratios between runs
-    - get_reference_intensities: calculate reference intensities for each protein in each run
-    - estimate_protein_profile: estimate protein quantities in each run
     - weighted_harmonic_mean: calculates weighted harmonic mean
     - geometric_mean: calculates the geometric mean of an array x
-    - summarize_peptides: summarizes peptide intensities to protein intensities with own approach using a pythagorean mean on representative precursors for a protein
-    - transform_profiles_to_longformat_table: reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns
-    - MaxLFQ_summarization: summarize precursors to protein intensities using MaxLFQ
+    - topN_summarisation: summarizes peptide intensities to protein intensities with modified topN using pythagorean mean or aligned median on representative precursors for a protein
+    - _pairwise_complete_corr: helper for topN_summarisation, calculates Pearson correlation between all rows of X over the columns in which both rows are observed
+    - aligned_pooling: aligned median for topNsummarisation, pools log2 intensities of precursors of one protein to a protein profile after aligning the precursors
+    - (transform_profiles_to_longformat_table: reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns)
     - precursor_sum: sums precursor intensities to obtain protein quantities
 
 """
@@ -28,6 +22,7 @@ import numpy as np
 import time
 #from pathlib import Path
 import os
+import warnings
 
 #own scripts
 import module_helper as helper 
@@ -78,11 +73,15 @@ def geometric_mean(x):
     float
 
     """
-    return(np.prod(x)**(1/len(x)))
+    x=np.asarray(x,dtype=float)
+    # in log space to avoid overflow of the product; 0 if any value is 0
+    if np.any(x<=0):
+        return(0.0)
+    return(float(np.exp(np.mean(np.log(x)))))
     
 
 
-def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n_peptides=3,weights=None,pooling="mean",min_peptides=1, seq_col="Precursor.ID", protein_col = "Protein.Group"):
+def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n_peptides=3,weights=None,pooling="aligned",min_peptides=1, seq_col="Precursor.ID", protein_col = "Protein.Group"):
     """
     summarize peptide intensities to protein intensities
     top_n_peptides most abundant, highly correlated and least imputed precursors over samples are summarized to a protein intensity
@@ -90,18 +89,36 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     #ranks precursors on abundance
     #ranks precursors on correlation
     all three ranks are normalized, their harmonic mean is calculated and the average as defined by pooling over top_n_peptides precursors is calculated to retrieve the protein intensity.
-    pooling is how to summarize selected precursors to protein group profiles, one of pythagorean means:  {"mean","hmean","gmean"}
-    
-    author: BZ
-    
+    The selection of the top_n_peptides precursors is global, i.e. the same precursors are used in all samples.
+    All three scores use measured values only (present in data_df and not marked as imputed in filter_mask), so the selection does not depend on the imputation:
+        abundance: sum of the linear intensities of measured values over samples, normalized to the maximum within the protein group.
+        correlation: Pearson correlation of measured log2 intensities with every other precursor of the protein group (pairwise complete, at least 3 shared samples),
+            correlations below 0.01 set to 0.01, combined by the harmonic mean and normalized to the maximum within the protein group.
+        measured values: number of measured values, normalized to the maximum within the protein group.
+    pooling is how to summarize selected precursors to protein group profiles:
+        "mean", "hmean", "gmean": arithmetic, harmonic or geometric mean of the linear intensities of the selected precursors per sample.
+            Precursors of a protein differ in intensity by orders of magnitude, so "mean" is dominated by the most and "hmean" by the least intense selected precursor.
+        "aligned": the selected precursors are aligned before pooling (log space): every precursor is shifted by its offset, the median over the other
+            selected precursors of the median log-ratio over samples in which both were observed (as in graphbased_imputation). The protein value per sample
+            is the median of the aligned precursors observed in that sample plus the mean offset of the precursors used, i.e. the absolute level corresponds to
+            the geometric mean of the selected precursors. If all selected precursors are complete and parallel, "aligned" equals "gmean".
+            Fold changes between samples do not depend on which precursors are selected (for parallel precursors); the absolute level does, but only
+            through the mean of the selected precursors, not dominated by the least ("hmean") or most ("mean") intense one. The median makes the profile
+            robust against single interfered precursor values. Missing precursor values are skipped (no imputation required), and a protein value is
+            missing only if none of the selected precursors was observed in that sample.
+
+    author: BZ, Claude Opus 5.5
+
     Parameters
     ----------
     data_df : pd.DataFrame (old: peptide_profiles)
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities.
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to log2-transformed intensities (missing values as NaN).
+        data_df is not changed.
     id_mapping_df: pd.DataFrame
         information on mapping from precursor to protein (group) level. rows denote individual precursors
     filter_mask : pd.DataFrame.
-        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered.
+        dataframe with precursors as rows and runs as columns, with values explaining why precursors were filtered. The integer part encodes detection
+        or filtering (0 not detected, 1 detected, 2+ filter), a non-zero fractional part marks an imputed value (optionally encoding the imputation method).
     module_output: str
         log string to be filled.
     top_n_peptides : int, optional
@@ -109,9 +126,12 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     weights : iterable, optional
         Weights for calculation of harmonic mean over the scores. The default is None, assigning equal weights.
     pooling : str, optional
-        one of {"mean","hmean","gmean"} to summarize selected precursors to proteins. "hmean" equals harmonic mean, "gmean" equals geometric mean and "mean" the arithmetic mean. The default is "mean".
+        one of {"mean","hmean","gmean","aligned"} to summarize selected precursors to proteins (see above). The default is "aligned".
+        "mean", "hmean" and "gmean" pool missing values as 0 and therefore require complete (imputed) data; on data with missing values a ###WARNING### is
+        written to module_output. "aligned" handles missing values.
     min_peptides : int, optional
-        require at least min_peptides precursors to calculate a protein intensity, else the protein intensity is set to 0. The default is 1.
+        require at least min_peptides precursors of the protein group in data_df to calculate a protein intensity, else the protein group is not
+        included in pg_profiles (precursors marked with Summarisation = -1 in id_mapping_df_c). The default is 1.
     seq_col : str
         name of index level containing precursor Ids. The default is 'Precursor.Id'.
     protein_col : str
@@ -120,143 +140,285 @@ def topN_summarization(data_df, id_mapping_df, filter_mask, module_output, top_n
     Returns
     -------
     pg_profiles : pd.DataFrame
-        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+        rows equal protein groups, columns correspond to samples and values in the dataframe to log2-transformed intensities (missing values as NaN).
     id_mapping_df_c: pd.DataFrame
-        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
+        copy of id_mapping_df with index set to seq_col and column "Summarisation" (1 precursor used, 0 not used, -1 protein group below min_peptides).
+        id_mapping_df itself is not changed.
     module_output: str
         log string to be filled.
 
     """
     
-    pg_profiles_df=pd.DataFrame(columns=data_df.columns)
-    
+    if pooling not in ["mean","hmean","gmean","aligned"]:
+        raise ValueError("pooling must be one of 'mean', 'hmean', 'gmean', 'aligned'")
+
+    n_values_partially_missing, n_values_pooled = 0, 0 # for the warning on missing values with pooling mean/hmean/gmean
+
     if weights is None:
         weights=[1,1,1]
 
-    # unlog data
-    data_df.replace(np.nan,0,inplace=True)
-        
+    # log2 data for pooling="aligned"; pooling="mean","hmean","gmean" on linear intensities with missing values as 0
+    log_df = data_df.astype(float)
+    data_df = helper.unlog_transform(log_df).replace(np.nan,0)
+    id_mapping_df_c = id_mapping_df.copy()
+
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tSummarizing precursor quantities to Protein.Group intensities using own method...\n"
     module_output += "\t\t\t\t- summarize top "+str(top_n_peptides)+" precursors by their "+pooling+"\n"
     module_output += "\t\t\t\t- for the summarization precursors were selected by high abundance, correlation and low number of imputed values with following weights: "+", ".join([str(x) for x in weights])+"\n"
 
-    indices=data_df.index
-        
-    filter_mask_z = filter_mask.copy().replace(np.nan,0)
+    # measured values: present in data_df and not imputed (non-zero fractional part in filter_mask), used for the precursor selection
+    mask_values = filter_mask.reindex(index=log_df.index, columns=log_df.columns).astype(float).fillna(0).to_numpy()
+    imputed = ~np.isclose(np.mod(mask_values,1), 0)
+    measured_log_df = log_df.where(log_df.notna().to_numpy() & ~imputed)
     
-    # Check if columns are in id_mapping_df
-    if protein_col not in id_mapping_df:
+    # Check if columns are in id_mapping_df_c
+    if protein_col not in id_mapping_df_c:
         module_output += "###ERROR### Group column for summariaztion not found"
-        return data_df, id_mapping_df, module_output
+        return log_df, id_mapping_df_c, module_output
     
-    if seq_col not in id_mapping_df:
+    if seq_col not in id_mapping_df_c:
         module_output += "###ERROR### Sequence column for summariaztion not found"
-        return data_df, id_mapping_df, module_output
+        return log_df, id_mapping_df_c, module_output
     
-    # add new column to id_mapping_df
-    id_mapping_df["Summarisation"] = 0
-        
-    pgs_list = id_mapping_df[protein_col].unique() 
-    id_mapping_dict = {pg:list(id_mapping_df[id_mapping_df[protein_col]==pg][seq_col]) for pg in pgs_list}
+    # numpy arrays (precursors x samples) for the per protein group calculations
+    L_all = log_df.to_numpy(dtype=float)                       # log2 intensities, missing as NaN (pooling="aligned")
+    lin_all = data_df.to_numpy(dtype=float)                    # linear intensities, missing as 0 (pooling="mean","hmean","gmean")
+    M_all = measured_log_df.to_numpy(dtype=float)              # measured log2 intensities, missing or imputed as NaN (selection)
+    Mlin_all = helper.unlog_transform(measured_log_df).to_numpy(dtype=float)
+    prec_ids = log_df.index.astype(str).to_numpy()
     
-    id_mapping_df.set_index(seq_col,inplace=True)
+    # rows of data_df per protein group, in the order of id_mapping_df_c, restricted to precursors in data_df
+    if not log_df.index.is_unique:
+        raise ValueError("Precursor ids (index of data_df) must be unique")
+    rows_all = log_df.index.get_indexer(id_mapping_df_c[seq_col])
+    in_data = rows_all >= 0
+    pg_rows = pd.Series(rows_all[in_data]).groupby(id_mapping_df_c[protein_col].to_numpy()[in_data], sort=False).apply(np.array).to_dict()
+    pgs_list = id_mapping_df_c[protein_col].unique() 
+    
+    id_mapping_df_c.set_index(seq_col,inplace=True)
+    w = np.asarray(weights, dtype=float)
+    summarisation_flags = {} # precursor id -> 1 (used) or -1 (protein group below min_peptides), applied after the loop
+    pg_names, pg_profiles = [], []
     
     #for every protein group
     for pg in pgs_list:
         
-        precursors_list = [precursor for precursor in id_mapping_dict[pg] if precursor in indices]
+        if pg not in pg_rows:
+            continue
+        r = pg_rows[pg]
+        n_precs = len(r)
         
-        if precursors_list:
-            temp_df = data_df.loc[precursors_list]
-            
-            ##on weighted harmonic mean between normalized abundance, correlation and amount of measured samples
-            hmean_df=pd.DataFrame(index=temp_df.index,columns=["norm. Abundance","norm. Correlation","norm. Imputation"])
-            sums=temp_df.sum(axis=1)
-            corrs=temp_df.T.corr()
-            corrs_hmean=[weighted_harmonic_mean(corrs.loc[x]) for x in corrs.index]
-            temp_mask=filter_mask_z.loc[temp_df.index].map(lambda x: int(str(float(x)).split(".")[-1]))
-            measured_precs=(temp_mask==0).sum(axis=1)
-            
-            hmean_df["norm. Abundance"]=sums/sums.max() #division by zero if peptide not abundant over all fractions => should be excluded in remove_peptides_with_excessing_nans
-            hmean_df["norm. Correlation"]=corrs_hmean/np.max(corrs_hmean) #division by zero if all precursors correlate zero
-            hmean_df["norm. Imputation"]=measured_precs/measured_precs.max() #division by zero if all values are imputed for precursor => should be excluded in remove_peptides_with_excessing_nans
-            hmean_df["hmean"]=[weighted_harmonic_mean(hmean_df.loc[x],weights) for x in hmean_df.index]
+        ##on weighted harmonic mean between normalized abundance, correlation and amount of measured samples, all on measured values only
+        M = M_all[r]
+        observed = ~np.isnan(M)
+        # abundance: sum of the linear intensities of measured values
+        sums = np.nansum(Mlin_all[r], axis=1)
+        # correlation: pairwise complete Pearson correlation (at least 3 shared samples) with every other precursor, clipped at 0.01, harmonic mean
+        corrs = _pairwise_complete_corr(M, observed, min_periods=3)
+        np.fill_diagonal(corrs, np.nan)
+        has_corr = ~np.isnan(corrs)
+        n_corr = has_corr.sum(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            corrs_hmean = np.where(n_corr > 0, n_corr / np.where(has_corr, 1.0/np.clip(np.where(has_corr, corrs, 1.0), 0.01, None), 0.0).sum(axis=1), 0.01)
+        # number of measured values
+        measured_precs = observed.sum(axis=1)
         
-            #set indices for filter_mask
+        scores = np.column_stack([(sums/sums.max()) if sums.max()>0 else np.zeros(n_precs),
+                                  corrs_hmean/np.max(corrs_hmean),
+                                  (measured_precs/measured_precs.max()) if measured_precs.max()>0 else np.zeros(n_precs)])
+        with np.errstate(divide="ignore"):
+            hmean = np.sum(w)/np.sum(w/scores, axis=1)
+        
+        # ranking for the selection: score, then measured abundance, then precursor ID (reproducible regardless of input order)
+        order = np.lexsort((prec_ids[r], -sums, -np.round(hmean, 12)))
+        selected = r[order[:top_n_peptides]]
+        
+        if n_precs>=min_peptides:
+            for prec in prec_ids[selected]:
+                summarisation_flags[prec] = 1
+            if pooling!="aligned":
+                # protein x sample values in which some, but not all, selected precursors are missing (pooled as 0)
+                sel_missing = np.isnan(L_all[selected])
+                n_values_partially_missing += int((sel_missing.any(axis=0) & ~sel_missing.all(axis=0)).sum())
+                n_values_pooled += sel_missing.shape[1]
+            P = lin_all[selected]
             if pooling=="mean":
-                mask_indices=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].index
-            else: 
-                prec_df=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]]
-                mask_indices=prec_df.index
-                           
-            if len(temp_df)>=min_peptides:
-                id_mapping_df.loc[mask_indices,"Summarisation"] = 1
-                if pooling=="mean":
-                    pg_profiles_df.loc[pg]=temp_df.loc[hmean_df.sort_values(by="hmean",ascending=False).index[:top_n_peptides]].mean()
-                elif pooling=="hmean":
-                    pg_profiles_df.loc[pg]=[weighted_harmonic_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
-                elif pooling=="gmean":
-                    pg_profiles_df.loc[pg]=[geometric_mean(prec_df[c].values.reshape(len(prec_df))) for c in prec_df.columns]
-                #filter_mask.loc[mask_indices,data_df.columns]="s"
-            else:
-                id_mapping_df.loc[mask_indices,"Summarisation"] = -1
+                profile = P.mean(axis=0)
+            elif pooling=="hmean":
+                with np.errstate(divide="ignore"):
+                    profile = P.shape[0]/np.sum(1.0/P, axis=0)
+            elif pooling=="gmean":
+                with np.errstate(divide="ignore"):
+                    profile = np.where(np.any(P<=0, axis=0), 0.0, np.exp(np.mean(np.log(np.where(P>0, P, 1.0)), axis=0)))
+            elif pooling=="aligned":
+                profile = aligned_pooling(L_all[selected])
+            pg_names.append(pg)
+            pg_profiles.append(profile)
+        else:
+            for prec in prec_ids[selected]:
+                summarisation_flags[prec] = -1
+    
+    # Summarisation column: 1 precursor used, 0 not used, -1 protein group below min_peptides
+    id_mapping_df_c["Summarisation"] = pd.Series(id_mapping_df_c.index.astype(str), index=id_mapping_df_c.index).map(summarisation_flags).fillna(0).astype(int)
+    pg_profiles_df = pd.DataFrame(np.vstack(pg_profiles) if pg_profiles else np.empty((0, log_df.shape[1])), index=pg_names, columns=log_df.columns)
 
+    if n_values_partially_missing > 0:
+        module_output += ("###WARNING### Summarisation with pooling='"+pooling+"' on data with missing values: in "+str(n_values_partially_missing)+
+                          " of "+str(n_values_pooled)+" protein x sample values ("+str(round(100*n_values_partially_missing/n_values_pooled,1))+
+                          "%) at least one selected precursor is missing and pooled as 0, which biases the protein value"+
+                          (" (hmean/gmean: value lost)" if pooling in ["hmean","gmean"] else " (mean: value too low)")+
+                          ". Use pooling='aligned' for data with missing values or impute before summarisation.\n")
+    pg_profiles_df = pg_profiles_df.astype(float)
+    if pooling!="aligned":
+        # linear protein intensities to log2, 0 (no intensity) as missing value
+        pg_profiles_df = np.log2(pg_profiles_df.where(pg_profiles_df>0))
     pg_profiles_df.index.name="Protein.Group"
 
-    return(pg_profiles_df,id_mapping_df,module_output)
+    return(pg_profiles_df,id_mapping_df_c,module_output)
 
-def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
+def _pairwise_complete_corr(X, observed=None, min_periods=3):
     """
-    Reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns.
-    
-    author: BZ
-    
+    Pearson correlation between all rows of X over the columns in which both rows are observed (as pd.DataFrame.T.corr(min_periods)),
+    computed with matrix products instead of a loop over pairs.
+
+    author: BZ, Claude Opus 5.5
+
     Parameters
     ----------
-    profiles : pd.DataFrame
-        rows: precursors, columns: samples
-    id_mapping_df: pd.DataFrame
-        information on mapping from precursor to protein (group) level. rows denote individual precursors
-    seq_col : str
-        name of index level containing precursor Ids. The default is 'Precursor.Id'.
-    protein_col : str
-        name of index level containing protein Ids. The default is 'Protein.Group'.
+    X : np.array
+        rows (e.g. precursors) x columns (e.g. samples), missing values as NaN.
+    observed : np.array of bool, optional
+        ~np.isnan(X), passed if already computed.
+    min_periods : int, optional
+        minimum number of shared observed columns, else NaN. The default is 3.
 
     Returns
     -------
-    lf_df : pd.DataFrame
-        columns: [ID, sample, value]
-    id_mapping_df_c: pd.DataFrame
-        information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
-
+    np.array
+        rows x rows correlation matrix, NaN if fewer than min_periods shared columns or zero variance in the shared columns.
     """
-    '''
-    ap_df=pd.DataFrame(columns=["precursor","protein_group","filename","prec_intensity"])
-    ap_df["precursor"]=profiles.index.get_level_values("Precursor.Id").tolist()*len(profiles.columns)
-    ap_df["protein_group"]=profiles.index.get_level_values("Protein.Group").tolist()*len(profiles.columns)
-    ap_df["filename"]=np.repeat(profiles.columns.get_level_values("sample").tolist(),len(profiles))
-    ap_df["prec_intensity"]=profiles.melt()["value"]
-    '''
+    if observed is None:
+        observed = ~np.isnan(X)
+    V = observed.astype(float)
+    # center every row by its mean for numerical stability (Pearson correlation is invariant to shifts)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning) #all-NaN rows
+        Xc = np.where(observed, X - np.nanmean(X, axis=1, keepdims=True), 0.0)
+    n = V @ V.T
+    sx, sy = Xc @ V.T, V @ Xc.T
+    sxx, syy = (Xc*Xc) @ V.T, V @ (Xc*Xc).T
+    sxy = Xc @ Xc.T
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cov = sxy - sx*sy/n
+        var_x = sxx - sx*sx/n
+        var_y = syy - sy*sy/n
+        denom = np.sqrt(var_x*var_y)
+        corr = np.where(denom > 0, cov/denom, np.nan)
+    corr[n < min_periods] = np.nan
+    return np.clip(corr, -1.0, 1.0)
+
+
+def aligned_pooling(log_prec_df, max_chunk_elements=5*10**6):
+    """
+    Pools log2 intensities of precursors of one protein to a protein profile after aligning the precursors (see topN_summarization, pooling="aligned").
+    The offset of precursor p is the median over all precursors q (including p itself, ratio 0) of the median of (log p - log q) over samples in which
+    both were observed. Including p itself makes the offsets consistent: for log I[p,s] = a[p] + b[s] the offset is a[p] - median(a) for every p.
+    The protein value per sample is the median of (log p - offset p) over precursors observed in that sample plus the mean offset of the precursors used.
+    Precursors that were never observed together with another precursor have no offset and are not used, unless they are the only precursor.
+
+    author: BZ, Claude Opus 5.5
+
+    Parameters
+    ----------
+    log_prec_df : pd.DataFrame or np.array
+        rows equal precursors of one protein, columns samples, values log2 intensities (missing values as NaN).
+    max_chunk_elements : int, optional
+        Maximum number of elements of the intermediate array of pairwise log-ratios (precursors x precursors x samples) per chunk of precursors,
+        limits memory use for proteins with many precursors and samples. The default is 5*10**6.
+
+    Returns
+    -------
+    np.array
+        log2 protein intensity per sample, NaN if no precursor with an offset was observed in that sample.
+    """
+    L = np.asarray(log_prec_df, dtype=float)
+    if L.shape[0] == 1:
+        return L[0]
+    n_precs, n_samples = L.shape
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning) #all-NaN slices
+        # pairwise median log-ratios over co-observed samples, R[p,q] = median_s(L[p,s] - L[q,s]), in chunks of precursors p
+        R = np.empty((n_precs, n_precs))
+        chunk_size = max(1, int(max_chunk_elements//(n_precs*n_samples)))
+        for start in range(0, n_precs, chunk_size):
+            R[start:start+chunk_size] = np.nanmedian(L[start:start+chunk_size, None, :] - L[None, :, :], axis=2)
+        # precursors co-observed with at least one other precursor
+        co_observed = ~np.isnan(R)
+        np.fill_diagonal(co_observed, False)
+        usable = co_observed.any(axis=1)
+        offsets = np.nanmedian(R, axis=1)
+        if not usable.any():
+            return np.full(L.shape[1], np.nan)
+        # offsets relative to their mean, so that the absolute level is the mean of the precursors used
+        offsets = offsets[usable] - np.mean(offsets[usable])
+        aligned = L[usable] - offsets[:, None]
+        return np.nanmedian(aligned, axis=0)
+
+
+# def transform_profiles_to_longformat_table(profiles, id_mapping_df, protein_col, seq_col):
+#     """
+#     Reshapes wide format profiles with IDs as rows, samples as columns and abundances as values to long-format with ID, sample and values as columns.
     
-    #profiles.reset_index(inplace=True)
-    lf_df=profiles.melt(ignore_index=False)
-    lf_df.reset_index(inplace=True)
-    lf_df.columns = [seq_col,"sample","value"]
-    id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
-    ### Add protein_col
-    lf_df[protein_col] = [id_mapping_df_c.loc[lf_df.loc[index,seq_col],protein_col] for index in lf_df.index]
-    return(lf_df, id_mapping_df_c)
+#     author: BZ
+    
+#     Parameters
+#     ----------
+#     profiles : pd.DataFrame
+#         rows: precursors, columns: samples
+#     id_mapping_df: pd.DataFrame
+#         information on mapping from precursor to protein (group) level. rows denote individual precursors
+#     seq_col : str
+#         name of index level containing precursor Ids. The default is 'Precursor.Id'.
+#     protein_col : str
+#         name of index level containing protein Ids. The default is 'Protein.Group'.
+
+#     Returns
+#     -------
+#     lf_df : pd.DataFrame
+#         columns: [ID, sample, value]
+#     id_mapping_df_c: pd.DataFrame
+#         information on mapping from precursor to protein (group) level. rows denote individual precursors. Index set to seq_col.
+
+#     """
+#     '''
+#     ap_df=pd.DataFrame(columns=["precursor","protein_group","filename","prec_intensity"])
+#     ap_df["precursor"]=profiles.index.get_level_values("Precursor.Id").tolist()*len(profiles.columns)
+#     ap_df["protein_group"]=profiles.index.get_level_values("Protein.Group").tolist()*len(profiles.columns)
+#     ap_df["filename"]=np.repeat(profiles.columns.get_level_values("sample").tolist(),len(profiles))
+#     ap_df["prec_intensity"]=profiles.melt()["value"]
+#     '''
+    
+#     #profiles.reset_index(inplace=True)
+#     lf_df=profiles.melt(ignore_index=False)
+#     lf_df.reset_index(inplace=True)
+#     lf_df.columns = [seq_col,"sample","value"]
+#     id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
+#     ### Add protein_col
+#     lf_df[protein_col] = [id_mapping_df_c.loc[lf_df.loc[index,seq_col],protein_col] for index in lf_df.index]
+#     return(lf_df, id_mapping_df_c)
 
 def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id", protein_col="Protein.Group"):
     """
     sums precursor intensities to obtain protein quantities.
+    The sum is calculated on linear intensities (input and output are log2-transformed); missing values are skipped,
+    proteins without any observed precursor in a sample are missing (NaN).
 
     author: BZ/OL
     
     Parameters
     ----------
     data_df : pandas.DataFrame
-        rows: precursors, columns: samples
+        rows: precursors, columns: samples, values: log2-transformed intensities (missing values as NaN). data_df is not changed.
     id_mapping_df: pd.DataFrame
         information on mapping from precursor to protein (group) level. rows denote individual precursors
     module_output: str
@@ -269,21 +431,22 @@ def precursor_sum(data_df, id_mapping_df, module_output, seq_col="Precursor.Id",
     Returns
     -------
     data_prot_df : pd.DataFrame
-        rows equal protein groups, columns correspond to samples and values in the dataframe to intensities.
+        rows equal protein groups, columns correspond to samples and values in the dataframe to log2-transformed intensities.
     module_output: str
         log string to be filled.
 
     """
     id_mapping_df_c = id_mapping_df.copy().set_index(seq_col)
-    data_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_df.index]
-    
-    #data_df = 2**data_df
-    data_df = data_df.groupby(by="index",level=0).sum()
-    #data_df = np.log2(data_df).replace([np.inf, -np.inf], np.nan)
-    
+    data_prot_df = helper.unlog_transform(data_df.astype(float))
+    data_prot_df.index = [id_mapping_df_c.loc[index,protein_col] for index in data_prot_df.index]
+
+    data_prot_df = data_prot_df.groupby(by="index",level=0).sum()
+    # back to log2, 0 (no observed precursor) as missing value
+    data_prot_df = np.log2(data_prot_df.where(data_prot_df>0))
+
     module_output += "\n"+time.strftime("%Y-%m-%d%t%H:%M:%S")+"\tProteins summarized to Precursors as sum of Precursor intensities.\n"
-    
-    return(data_df, module_output)
+
+    return(data_prot_df, module_output)
 
 if __name__ == "__main__":
 
@@ -351,13 +514,12 @@ if __name__ == "__main__":
     #    helper.logger(log_file,"###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
     #    sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
 
-    # unlog data
-    data_df=helper.unlog_transform(data_df)
-    helper.save_data(data_df, out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")
+    # all summarisation methods work on log2 data; save unlogged precursor data as additional output
+    helper.save_data(helper.unlog_transform(data_df), out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")
     helper.logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tUnlogged precursor data saved to " + os.path.join(out_dir_fp, outname[:-4]+"_precursors_unlog.tsv")+".\n")
 
     try:
-        if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+        if parameters_dict["summarization_method"] in ["mean","gmean","hmean","aligned"]:
             data_processed_df, id_mapping_df, module_output = topN_summarization(data_df, id_mapping_df, masked_df, module_output, 
                                                                                  top_n_peptides=parameters_dict["top_n_peptides"],
                                                                                  weights=parameters_dict["weights"],
@@ -375,19 +537,18 @@ if __name__ == "__main__":
     except Exception as e:
         e_type, e_obj, e_tb = sys.exc_info()
         script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) + ": " + str(e) + "\n")
+        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
         if exit_module:
             sys.exit("Summarisation exited with an error.\n")
     #except ValueError:
     #    raise(ValueError)
 
-    if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
+    if parameters_dict["summarization_method"] in ["mean","gmean","hmean","aligned"]:
         id_mapping_df.to_csv(os.path.join(out_dir_fp,"id_mapping.tsv"),sep="\t")
     
-    # Save without log transformation
-    helper.save_data(data_processed_df, out_dir_fp, outname[:-4]+"_unlog.tsv")
+    # summarisation methods return log2 data; save unlogged protein data as additional output
+    helper.save_data(helper.unlog_transform(data_processed_df), out_dir_fp, outname[:-4]+"_unlog.tsv")
     module_output += time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tUnlogged protein data saved to " + os.path.join(out_dir_fp, outname[:-4]+"_unlog.tsv")+".\n"
-    data_processed_df = helper.log_transform(data_processed_df)
 
     #if parameters_dict["summarization_method"] in ["mean","gmean","hmean"]:
     helper.close_module(data_processed_df, masked_df, mask_description_df, log_file, module_output, out_dir_fp,outname, mask=True)

@@ -12,8 +12,11 @@ Imputation functions
     - minval_imputation: minimum value imputation on peptide or protein matrix.
     - meanval_imputation: mean value imputation on peptide or protein matrix.
     - medianval_imputation: median value imputation on peptide or protein matrix.
-    - bpca_fill: Bayesian PCA imputation on peptide or protein matrix.
+    - bpca_fill: Bayesian PCA imputation on peptide or protein matrix, errors are ommited by skipping IDs with less than 2 values.
+    - _bpca_fill_core: Bayesian PCA imputation by unifey
 Additional helper and logging functions
+    - _nanmedian_lastaxis: vectorised median along the last axis ignoring NaNs
+    - _weighted_nanmedian_lastaxis: vectorised weighted median along the last axis, ignoring NaNs and zero weights
     - getIndexes: returns a list of positions where element exists in the dataframe
     - check_imputation_table_on_completeness: controls imputation_table on completeness for defined levels and values.
     - obtain_missingness_for_log: obtains list of tuples with positions of missing values and numbers of total and missing values in the given data_df.
@@ -30,10 +33,10 @@ import sys
 import time
 import os
 import itertools
+import warnings
 from collections import Counter
 
 #statistics and modelling
-import igraph
 from sklearn.impute import KNNImputer
 import statsmodels.api as sm
 from scipy.optimize import curve_fit
@@ -290,14 +293,15 @@ def intensity_dependent_missingness_estimation(data_df, axis=1, boundary=0.5, de
 # Imputation functions
 ########################################################################
 
-def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",precursor_col="Precursor.Id",impute_modifications=True,estimate_threshold=1,weighting=False):
+def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",precursor_col="Precursor.Id",impute_modifications=True,fixed_modifications=("UniMod:4",),min_precursor_estimates=3,min_ratio_observations=1,weighting=False,consistency_weighting=False,mad_floor=0.1,max_chunk_elements=5*10**6):
     """
     Graph-based approach to impute missing precursors. This approach assumes that the ratio of any two precursors from a given protein solely relies on physico-chemical properties and digestion and therefore is equal in all samples/runs.
-    Creates for every protein group a directed, weighted graph with precursors as nodes and median ratio of any two precursors (nodes) over all samples/fraction as edge weights between nodes.
-    These ratios are then multiplied with present precursors over samples, median over them is used as intensity of missing precursor. 
+    Conceptually creates for every protein group a complete directed, weighted graph with precursors as nodes and the median log-ratio of any two precursors (nodes) over all samples/fractions as edge weights between nodes.
+    These log-ratios are then added to the log-intensities of present precursors in a sample, the median over these estimates is used as log-intensity of the missing precursor.
+    Implemented with vectorised numpy operations in log-space (no explicit graph); data_df is expected to be log-transformed.
     This approach may not impute all missing precursors, as advantage it uses global information over all samples about precursor ratios, but imputes missing values only from precursor intensities within a sample times global ratios.
     
-    author: BZ
+    author: BZ, Claude Opus 5.5
     
     Parameters
     ----------
@@ -310,79 +314,108 @@ def graphbased_imputation(data_df,id_mapping_df,protein_col="Protein.Group",prec
     precursor_col : string, optional
         name of the column in id_mapping_df containing precursor ids mapping to data_df and mask_df. The default is "Precursor.Id".
     impute_modifications : bool, optional
-        Switch to True to also impute precursors with modifications. In fractionation experiments the ratio between modified precursors is not necessarily equal over fractions(=samples). The default is True.
-    estimate_threshold : int, optional
-        Minimum number of annotated edges (known ratios between two precursors) to impute a missing precursor value. The default is 1.
+        switch to True to also impute precursors with modifications. In fractionation experiments the ratio between modified precursors is not necessarily equal over fractions(=samples).
+        If False, all precursors of peptides carrying a variable modification are excluded, i.e. all modification forms and charge states of that peptide including the unmodified ones.
+        Peptides are identified by the bare sequence derived from the precursor id (modifications in round or square brackets and the charge removed, see _bare_sequence). The default is True.
+    fixed_modifications : tuple of strings, optional
+        modifications (as "UniMod:<id>" in precursor ids) treated as fixed, i.e. not considered as modifications when impute_modifications is False. The default is ("UniMod:4",) (carbamidomethylation).
+    min_precursor_estimates : int, optional
+        minimum number of estimates required to impute a missing precursor value in a sample, i.e. the number of other precursors of the same protein group that are present in that sample and have a known ratio (co-observed in at least one sample) to the missing precursor. The default is 3.
+    min_ratio_observations : int, optional
+        minimum number of samples/fractions in which two precursors have to be observed together to use their ratio (edge) for imputation.
+        ratios with less support are ignored, i.e. do not give an estimate and do not count towards min_precursor_estimates. The default is 1.
     weighting : bool, optional
         If True calculates the weighted median between estimated imputed values for a precursor weighted on how often the ratio between two precursors was used to calculate edge weights. The default is False.
-        
+    consistency_weighting : bool, optional
+        If True calculates the weighted median between estimated imputed values for a precursor (independent of weighting) with weights reflecting the precision of the ratio:
+        number of observations of the ratio / max(MAD of the log-ratios over samples, mad_floor)^2. Inconsistent ratios (e.g. interferences, proteoforms) get less weight. The default is False.
+    mad_floor : float, optional
+        Lower bound for the MAD of log-ratios in consistency_weighting, prevents infinite weights for ratios with MAD of 0 (e.g. observed in a single sample). Must be > 0. The default is 0.1.
+    max_chunk_elements : int, optional
+        maximum number of elements of the intermediate arrays (target precursors x precursors x samples) per protein group chunk, limits memory use for protein groups with many precursors. The default is 5*10**6.
+
     Returns
     -------
     data_df : pd.DataFrame
-        rows equal precursor ids, columns correspond to samples and values in the dataframe to intensities with imputed values.
+        rows equal precursor ids, columns correspond to samples and values in the dataframe to log-intensities with imputed values.
 
     """
-    #unlog-transform data
-    data_df = helper.unlog_transform(data_df)
+    if consistency_weighting and not mad_floor>0:
+        raise ValueError("mad_floor must be > 0 if consistency_weighting is True")
+    #all calculations in log-space: ratios become differences, so the edge weight from q to p is the negative of the edge weight from p to q
+    #intensities are read from the original data only, imputed values do not feed into other imputations
+    data_arr=data_df.to_numpy(dtype=float)
+    imputed_arr=data_arr.copy()
+    #precursor-protein mapping restricted to precursors in data_df
+    mapping_df=id_mapping_df[id_mapping_df[precursor_col].isin(data_df.index)].reset_index(drop=True)
+    #exclude precursors with modification sites
+    if impute_modifications==False:
+        #precursors carrying at least one variable (non-fixed) modification
+        var_mod_mask=mapping_df[precursor_col].apply(lambda prec: any(mod not in fixed_modifications for mod in re.findall(r"UniMod:\d+",prec)))
+        #exclude all precursors of peptides with variable modifications within a protein group (all modification forms and charge states, incl. unmodified)
+        bare_sequences=mapping_df[precursor_col].map(_bare_sequence)
+        var_mod_peptide_mask=var_mod_mask.groupby([mapping_df[protein_col],bare_sequences],dropna=False).transform("any").astype(bool)
+        mapping_df=mapping_df[~var_mod_peptide_mask]
     #for every protein group
-    for pg in id_mapping_df[protein_col].unique():
-        #create graph for protein with precursors as nodes and ratios as edges
-        temp_df = data_df.loc[list(set(id_mapping_df[id_mapping_df[protein_col]==pg][precursor_col]) & set(data_df.index))]
-        #exclude columns without any precursor intensities for given protein group
-        temp_df.dropna(how="all",axis=1,inplace=True)
-        #exclude precursors with modification sites
-        if impute_modifications==False:
-            modi_precs={x if "UniMod:" in x else np.nan for x in temp_df.index}
-            if np.nan in modi_precs:
-                modi_precs.remove(np.nan)
-            if modi_precs!=set():
-                #include non-modified sequence
-                modi_precs=modi_precs | {re.sub(r"\(.*\)","",prec) for prec in modi_precs}
-                temp_df.drop(temp_df[temp_df.index.isin(modi_precs)].index,inplace=True)
-        if temp_df.empty:
+    for pg,precs in mapping_df.groupby(protein_col)[precursor_col]:
+        rows=data_df.index.get_indexer(pd.unique(precs))
+        if len(rows)<2:
             continue
-        #edges=permutations(range(len(temp_df.index)),2)
-        #edge_weights=list(map(lambda x: np.nanmedian(temp_df.loc[x[0]]/temp_df.loc[x[1]]),permutations(temp_df.index,2)))
-        #ratio_weights tell how often the ratio between two given precursors was used to calculate edge weight. Edges with higher ratio_weight have higher impact in calculation of median for the missing value
-        g=igraph.Graph(directed=True)
-        g.add_vertices(range(len(temp_df.index)))
-        g.vs["name"]=temp_df.index
-        g.add_edges(itertools.permutations(range(len(temp_df.index)),2))
-        #g.es["weight"]=list(map(lambda x: np.nanmedian(temp_df.loc[x[1]].astype(float)/temp_df.loc[x[0]].astype(float)),permutations(temp_df.index,2)))
-        g.es["weight"]=list(map(lambda x: np.nanmedian(temp_df.loc[x[1]]/temp_df.loc[x[0]]),itertools.permutations(temp_df.index,2)))
-        if weighting:
-            g.es["ratio_weight"]=list(map(lambda x: len((temp_df.loc[x[1]]/temp_df.loc[x[0]]).dropna()),itertools.permutations(temp_df.index,2)))
-        g.es["name"]=list(itertools.permutations(temp_df.index,2))
-        '''
-        #plot
-        g.es["label"]=g.es["weight"]
-        fig, ax = plt.subplots()
-        plt.axis("off")
-        igraph.plot(g,target=ax,bbox=(300,300),vertex_color=["#4E79A7"]*g.vcount(),vertex_size=15,autocurve=False,vertex_label=[x[0] for x in g.vs["name"]])
-        '''
-        #if no edges in graph, skip
-        #...
-        #impute to every sample/fraction missing precursors with graph edge weights
-        for col in temp_df.columns[temp_df.isna().any()]: #sample/fraction to impute precursors in
-            #df[nan-precursor,sample]=mean(rel_abundance)*present_precursors #mean(rel_abundance) is list of lists, for every precursor over all samples
-            for precursor in temp_df[temp_df[col].isna()].index:
-                #estimates of missing value from its neighbour (predecessor) nodes
-                estimates=[g.es.find(name=(x["name"],precursor))["weight"]*temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
-                if weighting:
-                    ratio_weights=[g.es.find(name=(x["name"],precursor))["ratio_weight"]*temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
-                #calculate weighted median to estimate missing value, if at least estimate_threshold estimates for missing value are given
-                if np.sum(~np.isnan(estimates))>=estimate_threshold:
-                    if weighting:
-                        data_df.loc[precursor,col]=helper.weighted_nanmedian(estimates,ratio_weights)
+        #log-intensities of the protein group's precursors (rows) over samples/fractions with at least one precursor intensity (columns)
+        cols=np.flatnonzero(~np.all(np.isnan(data_arr[rows]),axis=0))
+        L=data_arr[np.ix_(rows,cols)]
+        missing=np.isnan(L)
+        #a missing value can only be imputed if at least min_precursor_estimates other precursors are present in that sample (upper bound of the number of estimates)
+        candidates=missing & ((~missing).sum(axis=0)>=min_precursor_estimates)[None,:]
+        #precursors and samples with candidate missing values to impute, skip protein group if there are none
+        targets=np.flatnonzero(candidates.any(axis=1))
+        if len(targets)==0:
+            continue
+        eval_cols=np.flatnonzero(candidates.any(axis=0))
+        n_precs,n_samples=L.shape
+        #process target precursors in chunks to limit memory for protein groups with many precursors
+        chunk_size=max(1,int(max_chunk_elements//(n_precs*n_samples)))
+        for start in range(0,len(targets),chunk_size):
+            t=targets[start:start+chunk_size]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore",category=RuntimeWarning) #all-NaN slices
+                #log-ratios of target precursors p to every precursor q in every sample: diff[i,q,s]=L[p_i,s]-L[q,s]
+                diff=L[t][:,None,:]-L[None,:,:]
+                #number of samples/fractions in which both precursors were observed (support of the ratio)
+                ratio_counts=np.sum(~np.isnan(diff),axis=2)
+                #edge weights: median log-ratio over all samples/fractions, R[i,q], only for ratios with sufficient support
+                R=_nanmedian_lastaxis(diff)
+                R[ratio_counts<min_ratio_observations]=np.nan
+                #estimates of target precursor p_i in sample s from precursor q, only in samples with candidates: est[i,s,q]=L[q,s]+R[i,q]
+                est=L[:,eval_cols].T[None,:,:]+R[:,None,:]
+                n_estimates=np.sum(~np.isnan(est),axis=2)
+                if weighting or consistency_weighting:
+                    if consistency_weighting:
+                        #consistency of the ratio over samples: median absolute deviation of the log-ratios (as helper.mad), floored at mad_floor
+                        ratio_mads=_nanmedian_lastaxis(np.abs(diff-R[:,:,None]))
+                        ratio_weights=ratio_counts/np.maximum(ratio_mads,mad_floor)**2
                     else:
-                        data_df.loc[precursor,col]=np.nanmedian(estimates)
-                #[g.es.find(name=(x["name"],precursor))["weight"]*temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
-                #[g.es.find(name=(x["name"],precursor))["weight"] for x in g.vs.find(name=precursor).predecessors()]
-                #[temp_df.loc[x["name"],col] for x in g.vs.find(name=precursor).predecessors()]
-    #log-transform data
-    data_df = helper.log_transform(data_df)
-    return(data_df)
+                        #ratio_weights tell how often the ratio between two given precursors was used to calculate the edge weight
+                        ratio_weights=ratio_counts
+                    estimate=_weighted_nanmedian_lastaxis(est,np.broadcast_to(ratio_weights[:,None,:],est.shape))
+                else:
+                    estimate=_nanmedian_lastaxis(est)
+            #impute only missing values with at least min_precursor_estimates estimates
+            fill=candidates[np.ix_(t,eval_cols)] & (n_estimates>=min_precursor_estimates)
+            block=imputed_arr[np.ix_(rows[t],cols[eval_cols])]
+            block[fill]=estimate[fill]
+            imputed_arr[np.ix_(rows[t],cols[eval_cols])]=block
+    return(pd.DataFrame(imputed_arr,index=data_df.index,columns=data_df.columns))
 
+
+
+def _bare_sequence(precursor_id):
+    """
+    Peptide sequence of a precursor id without modifications and charge, e.g. "(UniMod:1)SDKPDM(UniMod:35)AEIEK3" -> "SDKPDMAEIEK".
+    Removes modifications in round or square brackets (e.g. "(UniMod:35)", "[+15.9949]"), then every character that is not an upper-case letter
+    (charge state, terminal markers like "_" or ".").
+    """
+    return re.sub(r"[^A-Z]","",re.sub(r"\([^)]*\)|\[[^\]]*\]","",str(precursor_id)))
 
 
 def knn_imputation(data_df,k=5,weights="distance",metric="nan_euclidean",transposed=True):
@@ -524,7 +557,7 @@ def meanval_imputation(data_df,axis=1,add_noise=True):
     """
     mean value imputation on peptide or protein profiles. Each missing value is imputed by the mean of the row, if add_noise=True with a value between mean - standard deviation and mean + standard deviation.
     
-    author: BZ
+    author: BZ, OL
     
     Parameters
     ----------
@@ -564,7 +597,7 @@ def medianval_imputation(data_df,axis=1,add_noise=True):
     """
     median value imputation on peptide or protein profiles. Each missing value is imputed by the median of the row, if add_noise=True with a value between median - MAD and median + MAD.
     
-    author: BZ
+    author: BZ, OL
     
     Parameters
     ----------
@@ -604,7 +637,12 @@ def bpca_fill(dX, max_iter = 200):
     """
     Bayesian PCA imputation on peptide or protein profiles as described by Oba et al. https://doi.org/10.1093/bioinformatics/btg287
     downloaded from https://github.com/unifey/bPCAfill, 18.03.2024 17:08, credit to unifey
-
+    Only ids (columns) with at least 2 distinct observed values are imputed. The algorithm standardises every column by its standard deviation;
+    a column with fewer than 2 distinct observed values has a standard deviation of NaN or 0, stays unimputed and spreads NaN to the
+    imputations of all other columns. Such columns are therefore excluded and returned unchanged (missing values stay NaN).
+    
+    author: BZ, Claude Opus 5.5
+    
     Parameters
     ----------
     dX : pd.DataFrame
@@ -616,6 +654,23 @@ def bpca_fill(dX, max_iter = 200):
     -------
     dX_filled : pd.DataFrame
         rows equal samples, columns ids (precursors or proteins).
+    """
+    #exclude columns with fewer than 2 distinct observed values (standard deviation NaN or 0)
+    eligible = dX.nunique(axis=0) >= 2
+    if (~eligible).any():
+        warnings.warn(str(int((~eligible).sum())) + " of " + str(dX.shape[1]) + " ids with fewer than 2 distinct observed values are excluded from bpca_fill and stay unimputed.")
+    #at least 2 eligible columns needed (q = number of columns - 1 components)
+    if eligible.sum() < 2:
+        return dX.copy()
+    dX_filled = dX.copy()
+    dX_filled.loc[:,eligible] = _bpca_fill_core(dX.loc[:,eligible], max_iter=max_iter).to_numpy()
+    return dX_filled
+
+
+def _bpca_fill_core(dX, max_iter = 200):
+    """
+    Bayesian PCA imputation as downloaded from https://github.com/unifey/bPCAfill (see bpca_fill), without checks of the input.
+    dX: rows equal samples, columns ids; every column needs at least 2 distinct observed values.
     """
     y = dX.copy() # Just following the conventions used in the original paper by Oba et al. (2003)
     cols = y.columns #.tolist()
@@ -727,6 +782,77 @@ def bpca_fill(dX, max_iter = 200):
 ########################################################################
 # Additional helper and logging functions
 ########################################################################
+
+def _nanmedian_lastaxis(values):
+    """
+    Vectorised median along the last axis ignoring NaNs, same result as np.nanmedian(values,axis=-1) but faster.
+    Sorts values (NaNs are sorted to the end) and averages the two middle valid values. Returns NaN if no valid values are given.
+
+    author: BZ, Claude Opus 5.5
+
+    Parameters
+    ----------
+    values : np.array
+        values for which the median should be calculated along the last axis.
+
+    Returns
+    -------
+    np.array with the medians, shape of values without the last axis.
+
+    """
+    sorted_values=np.sort(values,axis=-1)
+    n_valid=np.sum(~np.isnan(values),axis=-1)
+    lower_idx=np.maximum((n_valid-1)//2,0)[...,None]
+    upper_idx=(n_valid//2)[...,None]
+    upper_idx=np.minimum(upper_idx,values.shape[-1]-1)
+    result=(np.take_along_axis(sorted_values,lower_idx,axis=-1)[...,0]+np.take_along_axis(sorted_values,upper_idx,axis=-1)[...,0])/2
+    return(np.where(n_valid>0,result,np.nan))
+
+
+def _weighted_nanmedian_lastaxis(values,weights):
+    """
+    Vectorised weighted median along the last axis, ignoring NaNs and zero weights.
+    Same definition as helper.weighted_nanmedian: for an odd number of values the first sorted value with cumulative weight > 0.5,
+    for an even number the mean of the lower (first cumulative weight >= 0.5 from the left) and upper (from the right) weighted median.
+    Returns NaN if no valid values are given.
+
+    author: BZ, Claude Opus 5.5
+
+    Parameters
+    ----------
+    values : np.array
+        values for which the weighted median should be calculated along the last axis.
+    weights : np.array
+        weights for values, same shape as values.
+
+    Returns
+    -------
+    np.array with the weighted medians, shape of values without the last axis.
+
+    """
+    valid=~np.isnan(values) & (weights>0)
+    n_valid=valid.sum(axis=-1)
+    #sort valid values, invalid values are moved to the end with zero weight
+    sort_values=np.where(valid,values,np.inf)
+    sort_weights=np.where(valid,weights,0).astype(float)
+    order=np.argsort(sort_values,axis=-1,kind="stable")
+    sort_values=np.take_along_axis(sort_values,order,axis=-1)
+    sort_weights=np.take_along_axis(sort_weights,order,axis=-1)
+    with np.errstate(invalid="ignore",divide="ignore"):
+        sort_weights=sort_weights/sort_weights.sum(axis=-1,keepdims=True)
+    cum_left=np.cumsum(sort_weights,axis=-1)
+    cum_right=np.cumsum(sort_weights[...,::-1],axis=-1)[...,::-1]
+    last=np.maximum(n_valid-1,0)
+    #tolerance for cumulative weights of exactly 0.5 (ties), which are otherwise decided by floating point rounding
+    tol=1e-9
+    odd_idx=np.minimum(np.sum(cum_left<=0.5+tol,axis=-1),last)
+    lower_idx=np.minimum(np.sum(cum_left<0.5-tol,axis=-1),last)
+    upper_idx=np.minimum(np.maximum(np.sum(cum_right>=0.5-tol,axis=-1)-1,0),last)
+    take=lambda idx: np.take_along_axis(sort_values,idx[...,None],axis=-1)[...,0]
+    result=np.where(n_valid%2==1,take(odd_idx),(take(lower_idx)+take(upper_idx))/2)
+    return(np.where(n_valid>0,result,np.nan))
+
+
 
 def getIndexes(dfObj, value):
     """
@@ -940,6 +1066,8 @@ if __name__ == "__main__":
             else:
                 # if none existent, create table with imputation methods
                 sample_hierarchies = parameters_dict["imputation_sample_hierarchies"].split(";")
+                if "knn_k" not in parameters_dict.keys():
+                    parameters_dict["knn_k"]=np.nan
                 #precursor_hierarchy_values = [float(x) for x in parameters_dict["missingness_imputation_thresholds"].split(";")]
                 impu_table_df = helper.create_imputation_table(metadata_df=metadata_df,
                                                         sample_hierarchies=sample_hierarchies,
@@ -1122,7 +1250,7 @@ if __name__ == "__main__":
                         missingness = data_df[samples].isnull().mean(axis=parameters_dict["axis"]) #if one missingness_type is in imputed in inner loop, it shall not affect missingness calculation. However the precursor could already be imputed.
                         for precursor_hierarchy in precursor_hierarchies:
                             # select precursors matching hierarchy (with prior calculated missingness)
-                            precursors = missingness[missingness<precursor_hierarchy].index
+                            precursors = missingness[missingness<=precursor_hierarchy].index
                             #Logging number of precursors
                             log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputing " + str(len(precursors)) + " precursors with missingness up to " + str(precursor_hierarchy*100) + "%.\n"
                             helper.logger(log_file, module_output=log)
@@ -1158,7 +1286,7 @@ if __name__ == "__main__":
                                 elif imputation_method == "knn-ML":
                                     data_part_df = knn_imputation(data_df=data_part_df,k=k,weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                                 elif imputation_method == "minval-noise":
-                                    data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
+                                    data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True,shift=parameters_dict["minval_noise_shift"],width=parameters_dict["minval_noise_width"])
                                 elif imputation_method == "minval":
                                     data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=False)
                                 elif imputation_method == "meanval-noise":
@@ -1177,8 +1305,11 @@ if __name__ == "__main__":
                                                                          protein_col=parameters_dict["protein_col"],
                                                                          precursor_col=parameters_dict["precursor_col"],
                                                                          impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
-                                                                         estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
-                                                                         weighting=parameters_dict["graphbased_imputation_weighting"])
+                                                                         fixed_modifications=parameters_dict["graphbased_imputation_fixed_modifications"].split(";"),
+                                                                         min_precursor_estimates=parameters_dict["graphbased_imputation_threshold"],
+                                                                         min_ratio_observations=parameters_dict["graphbased_imputation_min_ratio_observations"],
+                                                                         weighting=parameters_dict["graphbased_imputation_weighting"],
+                                                                         consistency_weighting=parameters_dict["graphbased_imputation_consistency_weighting"])
     
                                 #only allow imputed values for selected missingness type
                                 #missingness_mask_df = imputation_mask_df.loc[precursors,samples]
@@ -1205,7 +1336,7 @@ if __name__ == "__main__":
                                 else:
                                     frac_missingness_type_from_missing = 0
                                 frac_missingness_type_from_all = num_missing_values_m/total_num_values
-                                log = "\t\t\t\t" + str(np.round(frac_missingness_type_from_all*100,2)) + "% of values were missing, of these " + str(np.round(frac_missingness_type_from_missing*100,2)) +"% with missingness type " + missingness_type + "\n"
+                                log = "\t\t\t\t" + str(np.round(frac_missingness_type_from_all*100,2)) + "% of values of precursors with missingness up to " + str(precursor_hierarchy*100) + "% were missing, of these " + str(np.round(frac_missingness_type_from_missing*100,2)) +"% with missingness type " + missingness_type + "\n"
                                 log += "\t\t\t\t" + str(np.round(frac_imputed_missingness_type*100,2)) + "% of values with missingness type " + str(missingness_type) + " were imputed using imputation method " + imputation_method + ".\n" 
                                 helper.logger(log_file, module_output=log)
 
@@ -1220,6 +1351,7 @@ if __name__ == "__main__":
                         helper.logger(log_file, module_output=log)
                 else: 
                     missingness_types = ["simple"]
+
                 for missingness_type in missingness_types:
                     if missingness_type == "simple": #no distinguishment of missingness types
                         imputation_method = parameters_dict["imputation_method"]
@@ -1245,7 +1377,17 @@ if __name__ == "__main__":
                     missing_val_locs_m = list(set(missing_val_locs_m) & set(missing_val_locs))
                     num_missing_values_m = len(missing_val_locs_m)
                     
-                    data_part_df = data_df.copy()
+                    # select precursors matching missingness
+                    precursors = data_df[data_df.isna().mean(axis=1)<=parameters_dict["missingness_threshold_over_whole_dataset"]].index
+                    #Logging number of precursors
+                    log = time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tImputing " + str(len(precursors)) + " precursors with missingness up to " + str(parameters_dict["missingness_threshold_over_whole_dataset"]*100) + "% on " + str(data_df.shape[1]) + " samples.\n"
+                    log += "\t\t\t\t" + str(data_df.shape[0]-len(precursors)) + " precursors with missingness above " + str(parameters_dict["missingness_threshold_over_whole_dataset"]*100) + "% are not imputed in this step.\n"
+                    helper.logger(log_file, module_output=log)
+                    # missing values of the given missingness type within the selected precursors
+                    selected_precursors = set(precursors)
+                    num_missing_values_m_selected = len([loc for loc in missing_val_locs_m if loc[0] in selected_precursors])
+                    
+                    data_part_df = data_df.loc[precursors].dropna(axis=1,how="all").dropna(axis=0,how="all")
 
                     #IMPUTATION FUNCTION CALLS
                     if imputation_method == "knn":
@@ -1253,7 +1395,7 @@ if __name__ == "__main__":
                     elif imputation_method == "knn-ML":
                         data_part_df = knn_imputation(data_df=data_part_df,k=parameters_dict["knn_k"],weights=parameters_dict["knn_weights"],metric=parameters_dict["knn_metric"],transposed=False)
                     elif imputation_method == "minval-noise":
-                        data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True)
+                        data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=True,shift=parameters_dict["minval_noise_shift"],width=parameters_dict["minval_noise_width"])
                     elif imputation_method == "minval":
                         data_part_df = minval_imputation(data_df=data_part_df,axis=parameters_dict["axis"],add_noise=False)
                     elif imputation_method == "meanval-noise":
@@ -1272,14 +1414,18 @@ if __name__ == "__main__":
                                                         protein_col=parameters_dict["protein_col"],
                                                         precursor_col=parameters_dict["precursor_col"],
                                                         impute_modifications=parameters_dict["graphbased_imputation_impute_modifications"],
-                                                        estimate_threshold=parameters_dict["graphbased_imputation_threshold"],
-                                                        weighting=parameters_dict["graphbased_imputation_weighting"])
+                                                        fixed_modifications=parameters_dict["graphbased_imputation_fixed_modifications"].split(";"),
+                                                        min_precursor_estimates=parameters_dict["graphbased_imputation_threshold"],
+                                                        min_ratio_observations=parameters_dict["graphbased_imputation_min_ratio_observations"],
+                                                        weighting=parameters_dict["graphbased_imputation_weighting"],
+                                                        consistency_weighting=parameters_dict["graphbased_imputation_consistency_weighting"])
                     
                     if parameters_dict["eval_missingness_on_protein_presence"] + parameters_dict["eval_missingness_by_detection_threshold"] > 0:
                         data_part_df =  data_part_df[(imputation_mask_df.loc[data_part_df.index,data_part_df.columns] == missingness_type) & (data_df.loc[data_part_df.index,data_part_df.columns].isna())]
                         data_df.loc[data_part_df.index,data_part_df.columns] = data_df.loc[data_part_df.index,data_part_df.columns].add(data_part_df,fill_value=0).replace(0,np.nan)
                     else:
-                        data_df = data_part_df
+                        # write imputed values back; precursors above the missingness threshold stay in data_df unimputed
+                        data_df.loc[data_part_df.index,data_part_df.columns] = data_part_df
                     
                     # remember which and how many values are missing after imputation
                     still_total_num_values,num_still_missing_values,still_missing_val_locs = obtain_missingness_for_log(data_df=data_df)
@@ -1302,7 +1448,12 @@ if __name__ == "__main__":
   
                     frac_missingness_type_from_all = num_missing_values/total_num_values
                     log = "\t\t\t\t" + str(np.round(frac_missingness_type_from_all*100,2)) + "% of values were missing, of these " + str(np.round(frac_missingness_type_from_missing*100,2)) +"% with missingness type " + missingness_type + "\n"
-                    log += "\t\t\t\t" + str(np.round(frac_imputed_missingness_type*100,2)) + "% of values with missingness type " + str(missingness_type) + " were imputed using imputation method " + imputation_method + ".\n" 
+                    log += "\t\t\t\t" + str(np.round(frac_imputed_missingness_type*100,2)) + "% of values with missingness type " + str(missingness_type) + " were imputed using imputation method " + imputation_method + ".\n"
+                    if num_missing_values_m_selected != 0:
+                        frac_imputed_missingness_type_selected = len(impu_val_locs)/num_missing_values_m_selected
+                    else:
+                        frac_imputed_missingness_type_selected = 0
+                    log += "\t\t\t\t" + str(np.round(frac_imputed_missingness_type_selected*100,2)) + "% of values with missingness type " + str(missingness_type) + " in precursors with missingness up to " + str(parameters_dict["missingness_threshold_over_whole_dataset"]*100) + "% were imputed.\n"
 
                     helper.logger(log_file, log)
             #Count final number of imputed and missing values
