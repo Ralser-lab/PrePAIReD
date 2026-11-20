@@ -14,8 +14,8 @@ import json
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = False ####
-write_to_disc = True
+load_dictionaries = True ####
+write_to_disc = False
 
 if not load_dictionaries:
     import pandas as pd
