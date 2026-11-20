@@ -478,9 +478,18 @@ process INIT_PARAMS {
     # Staged input file names are inserted by Nextflow already shell-escaped
     # (e.g. my\\ metadata.xlsx), so they must NOT be wrapped in double quotes,
     # otherwise the backslash becomes part of the file name.
+    # No METADATA in Config_data.txt: the workflow passes an EMPTY placeholder
+    # file. Initialize.py then gets -m "" and generates Metadata_generated.tsv
+    # from the sample names in the data (see Initialize.py).
+    if [ -s ${meta_file} ]; then
+        metadata_arg=${meta_file}
+    else
+        metadata_arg=""
+    fi
+
     python ${init_script} \
         -w "." \
-        -m ${meta_file} \
+        -m "\$metadata_arg" \
         -d ${original_data} 2>&1 |
         tee -a "${pipeline_log_path}"
 
@@ -538,6 +547,20 @@ process INIT_PARAMS {
             "[FATAL] Parameter_Files was not created by Initialize.py" >&2
 
         exit 100
+    fi
+
+    # Generated metadata (no METADATA given): put it in the working folder,
+    # where RUN_ALL_MODULES picks it up and the user can inspect it.
+    if [ ! -s ${meta_file} ]; then
+        if [ ! -s Metadata_generated.tsv ]; then
+            printf '%s\n' \
+                "[FATAL] No METADATA given and Initialize.py did not generate Metadata_generated.tsv" |
+                tee -a "${pipeline_log_path}" >&2
+            exit 100
+        fi
+        cp -f Metadata_generated.tsv "${publish_root}/Metadata_generated.tsv"
+        printf '%s\n' "[METADATA] None given: generated ${publish_root}/Metadata_generated.tsv from the data" |
+            tee -a "${pipeline_log_path}"
     fi
 
     printf '%s\n' "[INITIALIZATION STATUS] PASSED" |
@@ -1626,7 +1649,13 @@ workflow {
         'report seed'
     )
 
-    metaFile = mustExist(METADATA_ABS, 'Metadata.tsv')
+    // METADATA is optional. Without it, an empty placeholder file is passed to
+    // INIT_PARAMS, which generates Metadata_generated.tsv from the data; the
+    // modules then use that file (see run_input_ch below).
+    HAS_METADATA = METADATA_ABS ? true : false
+    metaFile = HAS_METADATA
+        ? mustExist(METADATA_ABS, 'Metadata.tsv')
+        : ensureExistsOrCreateEmpty(new File(WORKDIR_ABS, '.no_metadata').absolutePath, 'metadata placeholder')
 
     methodDoc = mustExist(resolveCode(method_doc as String), 'method doc TSV')
 
@@ -1644,7 +1673,7 @@ workflow {
     [
         'ORIGINALDATA'          : original_data,
         'seed data'             : seed_data,
-        'METADATA'              : metaFile,
+        'METADATA'              : (HAS_METADATA ? metaFile : null),
         'seed idmap'            : seed_idmap,
         'seed mask'             : seed_mask,
         'seed mask description' : seed_maskdp,
@@ -1710,7 +1739,7 @@ workflow {
 
     println "Working path      : ${WORKDIR_ABS}"
     println "Original data     : ${ORIGINALDATA_ABS}"
-    println "Metadata          : ${METADATA_ABS}"
+    println "Metadata          : ${HAS_METADATA ? METADATA_ABS : 'none given (generated from the data as Metadata_generated.tsv)'}"
     println "Steps             : ${stepsResolved.size()}"
 
     // ------------------------------------------------------------------
@@ -1763,7 +1792,7 @@ workflow {
     def isNewRun = run_value.equalsIgnoreCase('new')
     def dataChecksums = [
         envLine('SHA-256 ORIGINALDATA', sha256(original_data)),
-        envLine('SHA-256 METADATA', sha256(metaFile))
+        envLine('SHA-256 METADATA', HAS_METADATA ? sha256(metaFile) : 'not used (no METADATA given)')
     ]
     if( !isNewRun ) {
         dataChecksums << envLine('SHA-256 seed data', "${sha256(seed_data)} (${seed_data.name})")
@@ -1784,7 +1813,7 @@ workflow {
         envLine('Image', imageName),
         envLine('Image ID', imageId ?: 'unknown (image not found locally)'),
         envLine('Original data', ORIGINALDATA_ABS),
-        envLine('Metadata', METADATA_ABS)
+        envLine('Metadata', HAS_METADATA ? METADATA_ABS : 'none given (generated from the data)')
     ] + dataChecksums
 
     def headerLines = [
@@ -1799,7 +1828,7 @@ workflow {
         envLine('Steps', ordered.join(', ')),
         envLine('Working path', WORKDIR_ABS),
         envLine('Original data', ORIGINALDATA_ABS),
-        envLine('Metadata', METADATA_ABS),
+        envLine('Metadata', HAS_METADATA ? METADATA_ABS : 'none given (generated from the data)'),
         envLine('Run history', "run_history/${historyFolderName} (saved only if the run completes successfully)"),
 
         envSection('PIPELINE'),
@@ -1876,7 +1905,7 @@ workflow {
             file(evalConfig.absolutePath),
             file(figscptn.absolutePath),
             file(seed_data.absolutePath),
-            file(metaFile.absolutePath),
+            file(HAS_METADATA ? metaFile.absolutePath : "${WORKDIR_ABS}/Metadata_generated.tsv"),
             file(seed_idmap.absolutePath),
             file(seed_mask.absolutePath),
             file(seed_maskdp.absolutePath),
