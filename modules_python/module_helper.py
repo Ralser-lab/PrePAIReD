@@ -1430,6 +1430,8 @@ def init_module(module, get_metadata=False, get_id_mapping=False, get_mask=False
         id_mapping_df = []
     # Get seed
     seed = get_seed(parameters_dict, counter)
+    # Set seed
+    np.random.seed(seed)
     # Update seed
     parameters_dict["seed"] = seed
     logger(log_file,time.strftime("%Y-%m-%d%t%H:%M:%S") + "\tSeed was fixed to "+str(seed)+".\n")
