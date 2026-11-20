@@ -14,8 +14,8 @@ import json
 from tkinter.filedialog import askopenfilename, askdirectory
 
 # For internal use or updates in parameter file change to False
-load_dictionaries = True ####
-write_to_disc = False
+load_dictionaries = False ####
+write_to_disc = True
 
 if not load_dictionaries:
     import pandas as pd
@@ -105,6 +105,7 @@ def get_dictionary_flags(data_flag):
                                          "Type":data_flag.loc[index,"Type"],
                                          "Check Operation":data_flag.loc[index,"Operations"],
                                          "GUI":data_flag.loc[index,"GUI"],
+                                         "GUI comment":data_flag.loc[index,"Comment in GUI"],
                                          "Child":data_flag.loc[index,"Child"].split(";") if not data_flag.loc[index,"Child"] is np.nan else None,
                                          "M_column":data_flag.loc[index,"M_column"] if not data_flag.loc[index,"M_column"] is np.nan else None,
                                          "NoneValid":1 if "None" in data_flag.loc[index,"Type"].split(";") else 0
@@ -132,6 +133,7 @@ def get_dictionary_parameters(data_parameters, data_flag):
                                                     "Type":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"],
                                                     "Check Operation":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Operations"],
                                                     "GUI":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"GUI"],
+                                                    "GUI comment":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Comment in GUI"],
                                                     "Child":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Child"].split(";") if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Child"] is np.nan else None,
                                                     "M_column":data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"M_column"] if not data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"M_column"] is np.nan else None,
                                                     "NoneValid":1 if "None" in data_parameters.loc[data_parameters[(data_parameters["Flag_variable"]==flag)&(data_parameters["Flag_value"]==flag_value)&(data_parameters["Variable"]==parameter)].index[0],"Type"].split(";") else 0

@@ -362,7 +362,7 @@ class DynamicParameterConfig(QWidget):
             
         self.save_param_value(name, widget)
 
-        info_btn, desc = self.create_info(meta.get("Comment", ""))
+        info_btn, desc = self.create_info(meta.get("GUI comment", ""))
         desc.setIndent(24)
 
         layout.addWidget(label)
@@ -503,7 +503,7 @@ class DynamicParameterConfig(QWidget):
         
         # Info button
         info_btn, desc = self.create_info(
-            parent_meta.get("Comment", "")
+            parent_meta.get("GUI comment", "")
         )
         desc.setIndent(24)
     
@@ -2535,7 +2535,9 @@ class FilteringWideParameterConfig(QWidget):
         super().__init__()
 
         layout = QVBoxLayout(self)
-
+        
+        params_dict["filtering_wide_methods"]["filter_precursors_by_detection_proportion"]["proteinwise_precursor_missingness_min_precursors"]["VisibleIf"] = {"proteinwise_precursor_missingness":True}
+        
         widget = DynamicParameterConfig(
             step,
             flags_dict,
