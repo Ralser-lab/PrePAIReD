@@ -1,0 +1,13 @@
+{
+    "metadata_sheet": "Sheet1",
+    "metadata_filename_column": "File.Name",
+    "metadata_encoding": "utf-8",
+    "metadata_sample_column": "Sample.Name",
+    "seed": 42,
+    "sample_type_column": "Sample.Type",
+    "sample_type": "QC-Pool",
+    "protein_col": "Protein.Group",
+    "precursor_col": "Precursor.Id",
+    "peptide_col": "Peptide.Id",
+    "input_ids_columns": null
+}

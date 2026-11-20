@@ -1,0 +1,38 @@
+2026-11-20	17:55:51	Loading input file data_02__test__.tsv.
+2026-11-20	17:55:51	File loaded successfully.
+2026-11-20	17:55:51	Loading parameter file 03_NORMALISATION_Parameters.json.
+2026-11-20	17:55:51	Parameters loaded successfully.
+2026-11-20	17:55:51	Loading ID mapping file id_mapping.tsv.
+2026-11-20	17:55:51	Seed was fixed to 45.
+2026-11-20	17:55:51	NORMALISATION started.
+2026-11-20	17:55:51	Counter of the run: 03.
+
+Parameters
+------------
+	                          Parameter          Value
+	                     metadata_sheet         Sheet1
+	           metadata_filename_column      File.Name
+	                  metadata_encoding          utf-8
+	             metadata_sample_column    Sample.Name
+	                               seed             45
+	                 sample_type_column    Sample.Type
+	                        sample_type        QC-Pool
+	                        protein_col  Protein.Group
+	                      precursor_col   Precursor.Id
+	                        peptide_col     Peptide.Id
+	                  input_ids_columns           None
+	               normalization_method median_scaling
+	normalization_on_intersecting_precs              1
+	               nan_intersect_thresh            0.5
+	                exclude_outlier_nfs              0
+	                             on_mad              0
+	                      rel_threshold              1
+	                             min_nf             -1
+	                             max_nf              1
+	                    on_peptide_list              0
+------------
+
+2026-11-20	17:55:51	Loading metadata Metadata.tsv.
+2026-11-20	17:55:51	Metadata loaded successfully.
+2026-11-20	17:55:51	Performing median scaling normalization.
+2026-11-20	17:55:51	1988 precursors that are present in 50.0% of all samples are used for normalization across samples
