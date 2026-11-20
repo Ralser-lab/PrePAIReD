@@ -1,1 +1,1 @@
-Collection of all R modules + Evaluation
+Collection of all R modules
