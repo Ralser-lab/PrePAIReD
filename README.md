@@ -420,9 +420,19 @@ These files define:
 | Config_data.txt       | Input/output paths       |
 | Config.txt            | Preprocessing step order |
 
-IMPORTANT: Run Initialization/parameter_generation.py to generate all configuration files 
-as well as the parameter file except Config_data.txt. If NextFlow is used, you need to use
---docker to get proper configuration paths.
+IMPORTANT: Run `Initialization/parameter_generation.py` to generate `Config.txt`, `Config_evaluation.txt` and `Parameters.txt` (it does not create `Config_data.txt`; you write that one yourself). For Nextflow, always pass `--docker` so the paths it writes work inside the container. Run it from your working folder, which is where it writes the files:
+
+```bash
+mkdir -p "$HOME/Desktop/test pipeline"
+cd "$HOME/Desktop/test pipeline"
+echo "FILTERING_LONG, FILTERING_WIDE, NORMALISATION, IMPUTATION, CORRECTION, SUMMARISATION" > order.txt
+python "$HOME/Desktop/Preprocessing/Initialization/parameter_generation.py" -f order.txt --docker
+```
+
+- `-f order.txt` (required) lists the steps in the order to run them, separated by commas, spaces or new lines.
+- `--docker` writes container-ready paths. Started without any arguments, the script asks for its inputs in dialog windows instead, but then always writes paths for a run without Docker.
+- For a rerun, add `-s 02_FILTERING_WIDE -c 7`: the step to start from, and the number of the first new step.
+- The script pauses twice. First set the method for each step in `Parameters.txt` and press Enter; then set the imputation options (or just press Enter if there is no imputation step).
 
 [⬆ Back to top](#top)
 
@@ -451,7 +461,7 @@ Make sure:
 
 ## Configure Preprocessing Steps
 
-For an automatic setup of the remaining files run Initialization/parameter_generation.py (Only requirement: Python 3.9+).
+For an automatic setup of the remaining files, run `Initialization/parameter_generation.py` as shown in [Configuration Files](#configuration-files) (requires Python 3.9+ on the host).
 
 Keep the full comma-separated `Order = ...` list on one physical line. An example `Config.txt` follows.
 
