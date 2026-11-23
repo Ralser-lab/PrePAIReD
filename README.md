@@ -2,7 +2,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12-green.svg)
 ![R](https://img.shields.io/badge/R-4.4-276DC3.svg?logo=r&logoColor=white&v=2)
 ![Nextflow](https://img.shields.io/badge/Nextflow-26.0-3ac486.svg?logo=nextflow&logoColor=white)
-![Version](https://img.shields.io/badge/Version-0.1.1-orange.svg)
+![Version](https://img.shields.io/badge/Version-0.1.3-orange.svg)
 [![Docs](https://img.shields.io/badge/Docs-PDF-blue.svg)](docs/Manual_PrePAIReD.pdf)
 ![Last Commit](https://img.shields.io/github/last-commit/Ralser-lab/Preprocessing)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
