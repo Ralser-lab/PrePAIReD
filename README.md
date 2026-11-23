@@ -7,7 +7,7 @@
 ![Last Commit](https://img.shields.io/github/last-commit/Ralser-lab/Preprocessing)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
-# Preprocessing Pipeline
+# PrePAIReD
 
 This repository contains a **Nextflow-based preprocessing workflow** for MS-based bottom-up proteomics data. It is designed to run reproducibly using **Docker containers** and requires only a small number of dependencies (see [Requirements](#requirements)). 
 
