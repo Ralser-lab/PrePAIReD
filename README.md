@@ -26,9 +26,6 @@ For a more detailed description and other use cases please check out the [Manual
     -   [Java Installation](#java-installation)
     -   [Nextflow Installation](#nextflow-installation)
     -   [Git Installation](#git-installation)
--   [Starting Docker](#starting-docker)
--   [Working Directory Setup](#working-directory-setup)
--   [Configuration Files](#configuration-files)
 -   [Docker Environment Setup](#docker-environment-setup)
 -   [Running the Pipeline](#running-the-pipeline)
 -   [Rerunning from a Step](#rerunning-from-a-step)
@@ -356,52 +353,7 @@ sudo apt-get install -y git
 
 ------------------------------------------------------------------------
 
-# Starting Docker
-
-Docker must be running before starting the pipeline.
-
-### macOS / Windows
-
-Start Docker Desktop.
-
-### Linux
-
-``` bash
-sudo systemctl start docker
-```
-
-Verify:
-
-``` bash
-docker info
-```
-
-### Docker Images
-
-Nextflow pulls the registry image if it is missing locally. For the local option, build the image before launching the pipeline.
-
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-# Working Directory Setup
-
-Create a working directory where configuration files and results will be
-stored.
-
-Example:
-
-``` bash
-mkdir -p "$HOME/Desktop/test pipeline"
-```
-
-⚠️ If your path contains spaces, always use quotes.
-
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-# Configuration Files
+# Configuration and Parameter Files
 
 Your working directory must contain the following files:
 
@@ -411,80 +363,13 @@ Your working directory must contain the following files:
     ├── Config_data.txt
     └── Config.txt
 
-These files define:
-
-| File                  | Purpose                  |
-|-----------------------|--------------------------|
-| Parameters.txt        | Pipeline parameters      |
-| Config_evaluation.txt | Evaluation settings      |
-| Config_data.txt       | Input/output paths       |
-| Config.txt            | Preprocessing step order |
-
-IMPORTANT: Run `Initialization/parameter_generation.py` to generate `Config.txt`, `Config_evaluation.txt` and `Parameters.txt` (it does not create `Config_data.txt`; you write that one yourself). For Nextflow, always pass `--docker` so the paths it writes work inside the container. Run it from your working folder, which is where it writes the files:
-
-```bash
-mkdir -p "$HOME/Desktop/test pipeline"
-cd "$HOME/Desktop/test pipeline"
-echo "FILTERING_LONG, FILTERING_WIDE, NORMALISATION, IMPUTATION, CORRECTION, SUMMARISATION" > order.txt
-python "$HOME/Desktop/Preprocessing/Initialization/parameter_generation.py" -f order.txt --docker
-```
-
-- `-f order.txt` (required) lists the steps in the order to run them, separated by commas, spaces or new lines.
-- `--docker` writes container-ready paths. Started without any arguments, the script asks for its inputs in dialog windows instead, but then always writes paths for a run without Docker.
-- For a rerun, add `-s 02_FILTERING_WIDE -c 7`: the step to start from, and the number of the first new step.
-- The script pauses twice. First set the method for each step in `Parameters.txt` and press Enter; then set the imputation options (or just press Enter if there is no imputation step).
-
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-## Configure Data Paths
-
-Edit `Config_data.txt`:
-
-``` txt
-WORKING_PATH = "/Users/yourname/Desktop/test pipeline"
-ORIGINALDATA = "/Users/yourname/Desktop/Data/diann.tsv"
-METADATA     = "/Users/yourname/Desktop/Data/Metadata.tsv"
-# Optional. Uncomment to reuse procedures from an earlier run.
-# IMPUTATION_PROCEDURES = "imputation_procedures.tsv"
-```
-
-Make sure:
-
--   Replace the example paths with your own. Use literal absolute paths here because the config reader does not expand shell variables such as `$HOME`.
--   Use quotes if paths contain spaces
--   `METADATA` is optional. Leave the line out or set `METADATA = ""` if you have no sample table: the pipeline then generates `Metadata_generated.tsv` in the working folder from the sample names in the data and uses it for all steps.
-
-[⬆ Back to top](#top)
-
-------------------------------------------------------------------------
-
-## Configure Preprocessing Steps
-
-For an automatic setup of the remaining files, run `Initialization/parameter_generation.py` as shown in [Configuration Files](#configuration-files) (requires Python 3.9+ on the host).
-
-Keep the full comma-separated `Order = ...` list on one physical line. An example `Config.txt` follows.
-
-``` txt
-Run = new
-Order = 01_FILTERING_LONG_py, 02_FILTERING_WIDE_py, 03_NORMALISATION_py, 04_IMPUTATION_py, 05_CORRECTION_py, 06_SUMMARISATION_py
-```
-or in case of rerun
-``` txt
-Run = 02_FILTERING_WIDE_py
-Order = 07_NORMALISATION_py, 08_IMPUTATION_py, 09_CORRECTION_py, 10_SUMMARISATION_py
-```
-
-[⬆ Back to top](#top)
+All files are automatically generated by Initialization/gui.py. A detailed description can be found in the [Manual](docs/Manual_alpha_version.pdf).
 
 ------------------------------------------------------------------------
 
 # Docker Environment Setup
 
-Before running the pipeline, choose the prebuilt registry image or build a local image from the repository’s `Dockerfile`.
-
-First ensure that **Docker is installed and running**.
+First ensure that **Docker is installed and running**
 
 ---
 ## Start Docker
@@ -554,30 +439,6 @@ Verify Docker is running:
 docker info
 ```
 
----
-
-## Build the Image
-Navigate to the repository root where the `Dockerfile` is located.
-
-```bash
-docker build --no-cache -t unified_env_all:1.0 .
-```
-
-Check that the image was created:
-
-```bash
-docker images
-```
-
-You should see something similar to:
-
-```
-REPOSITORY          TAG       IMAGE ID
-unified_env_all     1.0       <image_id>
-```
-
----
-
 ## Notes
 
 - Docker must be running before starting the pipeline.
@@ -587,6 +448,8 @@ unified_env_all     1.0       <image_id>
 ---
 
 ## Container Configuration in Nextflow
+
+Before running the pipeline, choose the prebuilt registry image or build a local image from the repository’s `Dockerfile`. 
 
 Local image setting in `nextflow.config`:
 
@@ -620,11 +483,11 @@ Update `params.container_image`, or pass `--container_image unified_env_all:1.1`
 
 # Running the Pipeline
 
-Launch from the analysis folder and point Nextflow to the workflow in the repository.
+Launch from the working directory and point Nextflow to the workflow in the repository.
 
 ```bash
-cd "$HOME/Desktop/test pipeline"
-nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
+cd "PATH/TO/WORKDIR/"
+nextflow run "PATH/TO/PrePAIReD/nextflow.nf"
 ```
 
 To launch elsewhere, pass `--config_data /absolute/path/to/Config_data.txt` and set an absolute `WORKING_PATH` in that file. A relative `WORKING_PATH` resolves from the launch directory. Relative data, metadata, and optional imputation procedures paths resolve from `WORKING_PATH`.
@@ -634,7 +497,7 @@ Docker is enabled in the supplied configuration. The optional `-profile linux_do
 ### Optional resource settings
 
 ```bash
-nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf" \
+nextflow run "PATH/TO/PrePAIReD/nextflow.nf" \
   --memory '8 GB' --cpus 4 --max_memory '24 GB'
 ```
 
@@ -688,8 +551,8 @@ cat "02_FILTERING_WIDE/step_status.txt"
 Clone the repository and enter the directory:
 
 ```bash
-git clone https://github.com/Ralser-lab/Preprocessing.git
-cd Preprocessing
+git clone https://github.com/Ralser-lab/PrePAIReD.git
+cd PrePAIReD
 ```
 
 Check that `nextflow.config` contains:
@@ -697,43 +560,16 @@ Check that `nextflow.config` contains:
 ```groovy
 params.container_image = 'ghcr.io/ralser-lab/preprocessing:1.0'
 ```
-
-Move to your working data directory:
-
-```bash
-cd "$HOME/Desktop/test pipeline"
-```
-
-Prepare the required input files in this directory:
-
-- `Config_data.txt`  
-  Include:
-  - path to your input data
-  - path to your metadata
-  - working directory path
-
-- `Config.txt`
-- `Config_evaluation.txt`
-- `Parameters.txt`
-
-Run the pipeline using the absolute path to the workflow:
-
-```bash
-nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
-```
-
----
-
 ## Option 2: Build the Docker image locally
 
 Clone the repository and enter the directory:
 
 ```bash
-git clone https://github.com/Ralser-lab/Preprocessing.git
-cd Preprocessing
+git clone https://github.com/Ralser-lab/PrePAIReD.git
+cd PrePAIReD
 ```
 
-Make sure [Docker is running](#starting-docker) before building the image. 
+Make sure [Docker is running](#docker-environment-setup) before building the image. 
 
 Build the Docker image locally:
 
@@ -747,28 +583,25 @@ Check that `nextflow.config` contains:
 params.container_image = 'unified_env_all:1.0'
 ```
 
+## In both cases
+
 Move to your working data directory:
 
 ```bash
-cd "$HOME/Desktop/test pipeline"
+cd "PATH/TO/WORKDIR/"
 ```
 
-Prepare the required input files in this directory:
+Prepare the required input files in this directory running:
 
-- `Config_data.txt`  
-  Include:
-  - path to your input data
-  - path to your metadata
-  - working directory path
+```bash
+python gui.py
+```
 
-- `Config.txt`
-- `Config_evaluation.txt`
-- `Parameters.txt`
-
+Note: As of now, the GUI requires a minimal environment setup as described in [Manual](docs/Manual_alpha_version.pdf).
 Run the pipeline using the absolute path to the workflow:
 
 ```bash
-nextflow run "$HOME/Desktop/Preprocessing/nextflow.nf"
+nextflow run "PATH/TO/PrePAIReD/nextflow.nf"
 ```
 
 ---
