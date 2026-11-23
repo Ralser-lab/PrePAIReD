@@ -213,12 +213,12 @@ def filter_samples_by_detection_proportion(data_df, sample_thresh=None, sample_a
 # Precursor and Protein Thresholding Functions
 ##############################################################################
 
-def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precursor_thresh=None, precursor_alpha=0.95, filter_per_protein=False, protein_col="Protein.Group", precursor_col="Precursor.Id"):
+def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precursor_thresh=None, precursor_alpha=0.95, filter_per_protein=False, protein_col="Protein.Group", precursor_col="Precursor.Id", min_precursors=1):
     """
     Integrated pipeline that filters precursors from the dataset based on a calculated or 
     user-defined optimal missingness threshold.
 
-    author: SB, BZ
+    author: SB, BZ, Claude Opus 5.5
 
     Parameters
     ----------
@@ -232,11 +232,13 @@ def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precu
     precursor_alpha : float
         Alpha (significance) level for threshold calculation between 0 and 1(default is 0.95).
     filter_per_protein : bool
-        if True, apply threshold protein-wise only to samples containing any precursor of a protein, if False apply filtering considering always all samples
+        if True, first filter globally, then recover precursors above the global threshold if their missingness, computed only on samples in which at least one other precursor of the same protein is measured, is below the threshold (only proteins with at least min_precursors precursors); if False apply filtering considering always all samples
     protein_col : str
         Name of the ID column containing the protein or gene ID. The default is "Protein.Group".
     precursor_col : str
         Name of the ID column in id_mapping_df, containing the precursor ID. The default is "Precursor.Id".
+    min_precursors : int
+        if filter_per_protein=True, only precursors of proteins with at least min_precursors precursors (in data_df) can be recovered; other proteins are filtered with the global threshold only. The samples used for recovery are always those with at least one other precursor of the same protein measured (the precursor itself never counts), so single-precursor proteins are never recovered and min_precursors=1 gives the same result as min_precursors=2. Higher min_precursors never recovers more
         
     Returns
     -------
@@ -251,7 +253,10 @@ def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precu
     
     if filter_per_protein and id_mapping_df is None:
         log += "###ERROR###: No id_mapping_df passed while filter_per_protein set to True. Either set filter_per_protein to False for global thresholding or provide an id_mapping_df to map precursors to protein groups.\n"
-    
+    if filter_per_protein and (isinstance(min_precursors, bool) or not isinstance(min_precursors, (int, np.integer)) or min_precursors < 1):
+        log += f"###ERROR###: Invalid value for min_precursors. Expected an integer >= 1, got {min_precursors}.\n"
+        return data_df, log
+
     # Validate allowed values for precursor_thresh
     if precursor_thresh is not None:
         if not isinstance(precursor_thresh, (int, float)):
@@ -281,14 +286,36 @@ def filter_precursors_by_detection_proportion(data_df, id_mapping_df=None, precu
         
     # Filter by missingness
     if filter_per_protein:
-        log += f"\t\t\t\tFiltering by missingness per protein according to {protein_col} across samples containing at least one precursor of the same protein.\n"
-        keep_precursors = list()
-        for pg in id_mapping_df[id_mapping_df[precursor_col].isin(data_df.index)][protein_col].unique():
+        # step 1: global filtering, precursors below the threshold are always kept
+        keep_global = missingness < optimal_threshold
+        keep_precursors = list(keep_global[keep_global].index)
+        candidates = set(keep_global[~keep_global].index)
+        log += f"\t\t\t\t{len(keep_precursors)} precursors kept by the global threshold of {optimal_threshold:.2f}% missingness, {len(candidates)} precursors above it.\n"
+        # step 2: recover precursors above the global threshold of proteins with at least min_precursors precursors,
+        # evaluating their missingness only in samples in which at least one OTHER precursor of the same protein is measured (the precursor itself never counts)
+        recovered_precursors = list()
+        log += f"\t\t\t\tRecovering precursors of proteins with at least {min_precursors} precursor(s) by missingness per protein according to {protein_col} across samples containing at least 1 other precursor of the same protein.\n"
+        id_map_cand = id_mapping_df[id_mapping_df[precursor_col].isin(candidates)]
+        for pg in id_map_cand[protein_col].unique():
             precursors_pg = list(set(id_mapping_df[id_mapping_df[protein_col]==pg][precursor_col]) & set(data_df.index))
-            pg_threshold = 100 - (100-optimal_threshold) * (sum(data_df.loc[precursors_pg].sum()>0) / data_df.shape[1])
-            keep_precs_df = missingness.loc[precursors_pg] < pg_threshold
-            keep_precursors += keep_precs_df[keep_precs_df].index.to_list()
-        data_df = data_df.loc[keep_precursors]
+            if len(precursors_pg) < max(min_precursors, 2):
+                continue # protein not eligible (fewer than min_precursors precursors) or no other precursor to count samples, nothing recovered
+            candidates_pg = [p for p in precursors_pg if p in candidates]
+            detected_pg = data_df.loc[precursors_pg].notna()
+            detected_cand = detected_pg.loc[candidates_pg].to_numpy()
+            # per candidate and sample: number of measured precursors of the protein except the candidate itself
+            n_other = detected_pg.sum(axis=0).to_numpy()[None, :] - detected_cand
+            samples_counted = n_other >= 1
+            n_counted = samples_counted.sum(axis=1)
+            n_missing = (samples_counted & ~detected_cand).sum(axis=1)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                missingness_counted = n_missing / n_counted * 100
+            recover = (n_counted > 0) & (missingness_counted < optimal_threshold) # no counted sample -> nothing recovered
+            recovered_precursors += [p for p, r in zip(candidates_pg, recover) if r]
+        num_proteins_recovered = id_mapping_df[id_mapping_df[precursor_col].isin(recovered_precursors)][protein_col].nunique()
+        log += f"\t\t\t\t{len(recovered_precursors)} precursors of {num_proteins_recovered} proteins recovered by the protein-wise threshold.\n"
+        keep_precursors += recovered_precursors
+        data_df = data_df.loc[[p for p in data_df.index if p in set(keep_precursors)]]
     else:
         data_df = data_df.loc[missingness < optimal_threshold]
         
@@ -839,10 +866,10 @@ def update_mask(data_df, axis, method, mask_df, mask_description_df, pre_method_
     if method not in mask_description_df.index:
         # Get the second largest value in mask_description_df safely
         sorted_values = mask_description_df['value'].sort_values()
-        #if len(sorted_values) >= 2:
-        #    second_max_mapping = sorted_values.iloc[-2]
-        #else:
-        second_max_mapping = sorted_values.iloc[-1]
+        if len(sorted_values) >= 2:
+            second_max_mapping = sorted_values.iloc[-2]
+        else:
+            second_max_mapping = sorted_values.iloc[-1]
         new_value = second_max_mapping + 1
         mask_description_df.loc[method] = {'value': new_value}
     value = mask_description_df.loc[method,"value"]
@@ -954,14 +981,14 @@ if __name__ == "__main__":
                 # SAMPLE FILTERS
                 if method == "filter_samples_by_metadata":
                     #for every column specified for filtering by metadata
-                    for k,key_column in enumerate(str(parameters_dict['sample_filter_cols']).split(";")):
+                    for k,key_column in enumerate(parameters_dict['sample_filter_cols'].split(";")):
                         # snapshot BEFORE this method
                         pre_method_columns = data_processed_df.columns
                         pre_method_rows = data_processed_df.index
                         
                         #select corresponding column, operator and value
-                        key_value = str(parameters_dict['sample_filter_values']).split(";")[k]
-                        key_operator = str(parameters_dict['sample_filter_operators']).split(";")[k]
+                        key_value = parameters_dict['sample_filter_values'].split(";")[k]
+                        key_operator = parameters_dict['sample_filter_operators'].split(";")[k]
                         
                         #apply filtering based on metadata
                         data_processed_df, log  = filter_samples_based_on_metadata(data_df=data_processed_df, 
@@ -1003,7 +1030,7 @@ if __name__ == "__main__":
                     #apply filtering of samples by detecction proportion (missingness)
                     data_processed_df, log = filter_samples_by_detection_proportion(data_df=data_processed_df, 
                                                                                     sample_thresh=parameters_dict['sample_missingness_thresh'], 
-                                                                                    sample_alpha=parameters_dict['sample_missingness_confidence'])
+                                                                                    sample_alpha=parameters_dict['sample_missingness_alpha'])
                     #catch errors
                     if "###ERROR###" in log:
                         helper.logger(log_file,log)
@@ -1042,10 +1069,11 @@ if __name__ == "__main__":
                     data_processed_df, log = filter_precursors_by_detection_proportion(data_df=data_processed_df, 
                                                                                        id_mapping_df=id_mapping_df,
                                                                                        precursor_thresh=parameters_dict["precursor_missingness_thresh"], 
-                                                                                       precursor_alpha=parameters_dict["precursor_missingness_confidence"],
+                                                                                       precursor_alpha=parameters_dict["precursor_missingness_alpha"],
                                                                                        filter_per_protein=parameters_dict["proteinwise_precursor_missingness"],
                                                                                        protein_col=parameters_dict["protein_col"],
-                                                                                       precursor_col=parameters_dict["precursor_col"])
+                                                                                       precursor_col=parameters_dict["precursor_col"],
+                                                                                       min_precursors=parameters_dict["proteinwise_precursor_missingness_min_precursors"] if parameters_dict["proteinwise_precursor_missingness"] else 1)
                     #catch errors
                     if "###ERROR###" in log:
                         helper.logger(log_file,log)
@@ -1147,9 +1175,9 @@ if __name__ == "__main__":
     
                 elif method == "filter_precursors_by_metadata":
                     #extract correct parameter subset
-                    filter_col=str(parameters_dict["precursor_filter_col"]).split(";")[filter_precursors_by_metadata_counter]
-                    filter_value=str(parameters_dict["precursor_filter_value"]).split(";")[filter_precursors_by_metadata_counter]
-                    filter_operator=str(parameters_dict["precursor_filter_operator"]).split(";")[filter_precursors_by_metadata_counter]
+                    filter_col=parameters_dict["precursor_filter_col"].split(";")[filter_precursors_by_metadata_counter]
+                    filter_value=parameters_dict["precursor_filter_value"].split(";")[filter_precursors_by_metadata_counter]
+                    filter_operator=parameters_dict["precursor_filter_operator"].split(";")[filter_precursors_by_metadata_counter]
                     #apply exclusion of selected precursors
                     data_processed_df, log = filter_precursors_by_metadata(data_df=data_processed_df, 
                                                                            id_mapping_df=id_mapping_df, 
@@ -1250,8 +1278,8 @@ if __name__ == "__main__":
                     log = f"{timestamp()}\tReplacing precursors names in data with defined precursor labels.\n"
                     helper.logger(log_file,log)
                     
-                    target_labels = str(parameters_dict["target_labels"]).split(";")
-                    replace_labels = str(parameters_dict["replace_labels"]).split(";")
+                    target_labels = parameters_dict["target_labels"].split(";")
+                    replace_labels = parameters_dict["replace_labels"].split(";")
                     for i in range(len(target_labels)):
                         data_processed_df, log = replace_labelled_precursors(data_df=data_processed_df, 
                                                                              id_mapping_df=id_mapping_df,
@@ -1287,7 +1315,7 @@ if __name__ == "__main__":
     except Exception as e:
         e_type, e_obj, e_tb = sys.exc_info()
         script_name = os.path.split(e_tb.tb_frame.f_code.co_filename)[1]
-        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) + ": " + str(e) + "\n")
+        helper.logger(log_file, "###ERROR### Module " +script_name + " ran into an error at line : " + str(e_tb.tb_lineno) +"\n\t\t\t\t" + str(e) + "\n")
         if exit_module:
             sys.exit("Filtering_wide exited with an error.")
             
