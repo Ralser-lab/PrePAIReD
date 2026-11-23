@@ -8,12 +8,19 @@ Output: Filtered wide-format data
 functions:
     - read_input: reads DIA-NN output report.tsv or MSFragger output
     - select_filtering_columns: provides based on applied filters a pre-selection of column names to read from the DIA-NN output report.tsv to save RAM
+    - exclude_runs_not_in_metadata: Trims wide_df wide format proteomics data to same samples (columns) present in metadata_df[metadata_filename_col]
+    - data_read_column: Reads in one column of a data file
+    - select_custom_filtering_columns: with given custom filters dictionary, ids and values columns this function creates lists with filters for the report.
     - filtering: apply filtering on DIA-NN output report.tsv
     (- filtering_peptide_specific: some optional additional filters based on peptide properties (so far only based on precursor charge state) => not used)
+    - create_mask: Creates mask and cleans mask description and mask_arr
+    - long_to_wide_format: Transforms long format data frame to wide format
+    - generate_id_mapping: Generates mapping for precursors to proteins to additional data
     - name_unknown_proteins: replaces NaN in id_mapping_df[protein_col], i.e. renames missing protein origins.
+    - create_peptide_ids: strips precursors from charge state to create peptide ids.
     - clean_mask_description_df: removes filters which were not applied from mask_description_df
     (- create_profiles: converts (filtered) DIA-NN output report.tsv to wide-format profiles with IDs as rows and samples as columns (as specified by metadata) => Can be optimised in runtime)
-    - long_to_wide_format: Transforms long format data frame to wide format
+    
 
 
 variable names + types
@@ -286,12 +293,12 @@ def exclude_runs_not_in_metadata(input_df, metadata_df=None, input_filename_colu
 
 def exclude_runs_not_in_metadata(wide_df, metadata_df=None, metadata_filename_col="filename"): 
     """
-    Trims input_df (input_df[diann_sample_column]) to same samples present in metadata_df[filename_col].
+    Trims wide_df wide format proteomics data to same samples (columns) present in metadata_df[metadata_filename_col].
     author: BZ,OL
     
     Parameters
     ----------
-    input_df : pd.DataFrame
+    wide_df : pd.DataFrame
         E.g. DIA-NN output report.tsv, long format.
     metadata_df : pd.DataFrame
         Metadata mapping File.Name to shorter run names. The default is None. 
@@ -316,10 +323,10 @@ def exclude_runs_not_in_metadata(wide_df, metadata_df=None, metadata_filename_co
             log += "###ERROR###: No overlap between samples in metadata and DIA-NN report. Please check whether filename_col is defined correctly.\n\t\t\t\t\t\tReturning not filtered input.\n"
             #sys.exit("###ERROR###: No overlap between samples in metadata and DIA-NN report. please check whether filename_col is defined correctly.")
             return wide_df,log
-        missing_samples = [sample for sample in wide_df.columns if sample in metadata_df[metadata_filename_col]]
+        missing_samples = list(wide_df.columns[~intersect_files])
         wide_df = wide_df.drop(columns=missing_samples)
         if len(missing_samples) > 0:
-            log += "###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(len(intersect_files)) + " files present in metadata.\n"
+            log += "###WARNING###: Not all files in input_df are found in metadata. Analysis performed only on " + str(int(intersect_files.sum())) + " files present in metadata.\n"
     return wide_df, log
 
 
@@ -502,6 +509,7 @@ def filtering(filename, filtering_operation_dict, mask_description_df, mask_arr,
         log += "Note: Filtering per filter is not crisp and can overlap, i.e. precursors can occur multiple times as filtered, thus sum(filtered precursors per step) >= number of total filtered precursors.\n"
     
     return mask_arr, log
+
 
 def create_mask(mask_arr, mask_description_df, precursor_codes, precursor_labels, file_codes, file_labels, last_filter_value = 14):
     """
@@ -744,6 +752,7 @@ def name_unknown_proteins(id_mapping_df,input_fp, ids_list=["Precursor.Id","Stri
     #assign new values to initial mapping
     id_mapping_df[protein_col] = protein_groups
     return(id_mapping_df)
+
 
 def create_peptide_ids(precursors):
     """
