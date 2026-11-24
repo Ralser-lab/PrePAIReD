@@ -48,7 +48,7 @@ def normalize_quantile(df, distribution="normal", seed=42):
 
     # Apply quantile normalization on rows (samples)
     tf = QuantileTransformer(
-        n_quantiles=len(df), output_distribution=distribution, 
+        n_quantiles=1000, output_distribution=distribution, 
         random_state=seed)
     qtransformed_df = pd.DataFrame(
         tf.fit_transform(df), columns=df.columns, index=df.index)
