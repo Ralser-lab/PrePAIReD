@@ -86,7 +86,7 @@ def get_CV_log(values, base=2):
         Coefficient of variation for provided values.
     """
     
-    cv = np.sqrt(float(base**(np.std(values, ddof=1)**2)-1))
+    cv = np.sqrt(float(base**(np.std(values, ddof=1)**2*np.log(base))-1))
     return cv
 
 def get_CV_log_array(df, base=2):
@@ -106,7 +106,7 @@ def get_CV_log_array(df, base=2):
         Coefficient of variation for provided values.
     """
     
-    cv = np.sqrt(np.float64(base**(np.std(df, ddof=1, axis=1)**2)-1))
+    cv = np.sqrt(np.float64(base**(np.std(df, ddof=1, axis=1)**2*np.log(base))-1))
     return list(cv)
 
 def get_indices_by_type(data_origin, metadata, data_processed=None, sample_type_column=None, sample_type = None):
