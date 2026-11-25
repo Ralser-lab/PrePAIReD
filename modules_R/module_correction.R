@@ -23,6 +23,81 @@ script_dir <- dirname(script_path)
 source(file.path(script_dir, "helper_functions_R.R"))
 
 
+#' @title Check feature (precursor) presence per batch
+#' @description
+#' Mirrors the behaviour of the Python correction module
+#' (module_correction.py, check_feature_presence_batch).
+#'
+#' Batch correction estimates a separate mean/variance shift for every feature
+#' WITHIN each batch. If a precursor is measured in too few samples of a given
+#' batch, that estimate is unreliable and ComBat/limma either fail cryptically
+#' or overcorrect. To prevent this, the function checks -- for every batch
+#' column and every batch level -- what fraction of samples actually measured
+#' each precursor. If any precursor is below the required fraction in any batch
+#' level, it stops the module with a clear, informative error (like the Python
+#' version does) instead of letting the correction crash later.
+#'
+#' Controlled by two JSON parameters:
+#'   check_feature_presence_batch : set to 1 to run this check (0 / absent = off)
+#'   presence_batch_threshold     : required presence fraction per batch level,
+#'                                  e.g. 0.5 = "measured in >= 50% of that
+#'                                  batch's samples" (default 0.5).
+#'
+#' Presence is read from the data matrix itself (non-missing values), exactly as
+#' the Python module does with data_df.notna() -- NOT from the mask file.
+#'
+#' @param present_matrix logical features x samples matrix; TRUE where the
+#'   feature was measured (non-NA) in that sample.
+#' @param meta_df samples x annotations; rownames = sample ids matching columns.
+#' @param batch_cols character vector of batch column names in meta_df.
+#' @param threshold required presence fraction per batch level (0-1).
+#' @return Invisibly TRUE if every precursor passes; otherwise stops with an
+#'   error naming the affected batch levels and precursor counts.
+check_feature_presence_batch <- function(present_matrix, meta_df,
+                                         batch_cols, threshold = 0.5) {
+
+    offending <- character(0)   # every precursor that fails anywhere
+    report    <- ""             # human-readable per-batch-level summary
+
+    for (bcol in batch_cols) {
+
+        batch_values <- as.character(meta_df[[bcol]])
+
+        for (lvl in unique(batch_values)) {
+
+            samples_in_level <- rownames(meta_df)[batch_values == lvl]
+
+            frac_present <- rowMeans(
+                present_matrix[, samples_in_level, drop = FALSE]
+            )
+
+            below <- names(frac_present)[frac_present < threshold]
+
+            if (length(below) > 0) {
+                report <- paste0(
+                    report,
+                    sprintf("    %s = %s : %d precursor(s) below %.0f%% presence\n",
+                            bcol, lvl, length(below), threshold * 100))
+                offending <- union(offending, below)
+            }
+        }
+    }
+
+    if (length(offending) > 0) {
+        stop(sprintf(paste0(
+            "check_feature_presence_batch: not every precursor reaches >= %.0f%% ",
+            "presence in every batch level.\n%s",
+            "  %d precursor(s) affected in total.\n",
+            "  Filter these precursors out (or merge/define coarser batches) ",
+            "before running correction."),
+            threshold * 100, report, length(offending)),
+            call. = FALSE)
+    }
+
+    invisible(TRUE)
+}
+
+
 #' @title Function for batch correction in R
 #' @description
 #' Reads a quantitative data table and metadata, then performs batch correction
@@ -31,8 +106,8 @@ source(file.path(script_dir, "helper_functions_R.R"))
 #' The batch correction step is wrapped in a logging function to capture console
 #' output and messages to a log file.
 #'
-#' Additionally, it passes through the corresponding mask and mask_description
-#' files unchanged so the pipeline continues to work consistently.
+#' Additionally, it passes through the corresponding mask file unchanged so the
+#' pipeline continues to work consistently.
 #'
 #' @param datapath Path to quantitative input data (.tsv).
 #' @param parampath Path to a JSON parameter file.
@@ -41,14 +116,13 @@ source(file.path(script_dir, "helper_functions_R.R"))
 #' @param log_file Path to log file.
 #' @param counter Step of the preprocessing pipeline currently run.
 #'
-#' @return NULL (writes corrected data and mask files to disk).
+#' @return NULL (writes corrected data and mask file to disk).
 batch_correct <- function(datapath, parampath, outpath,
                           metadata, log_file, counter){
 
     ## build input paths robustly (no dependence on trailing "/")
     in_data_file <- datapath
     in_mask_file <- sub("\\.tsv$", "_mask.tsv", datapath)
-    in_mask_desc_file <- sub("\\.tsv$", "_mask_description.tsv", datapath)
 
     parameter_list <- read_JSON(parampath)
 
@@ -56,16 +130,15 @@ batch_correct <- function(datapath, parampath, outpath,
     quant_df <- read_tsv_pd(in_data_file)
 
     ## read metadata
-    ## --- CHANGED: the original code used read.table(row.names = 1), which keys
-    ## --- the metadata on its FIRST column (here "Run", the .raw filenames).
-    ## --- But the data matrix columns are SAMPLE ids (metadata_sample_column,
-    ## --- e.g. "CTT_SID"). Keying on "Run" makes
+    ## --- The original code used read.table(row.names = 1), which keys the
+    ## --- metadata on its FIRST column (e.g. "Run", the .raw filenames). But the
+    ## --- data matrix columns are SAMPLE ids (metadata_sample_column, e.g.
+    ## --- "CTT_SID"). Keying on the wrong column makes
     ## ---   intersect(colnames(quant_df), rownames(meta_df))
     ## --- empty, so meta_df collapses to 0 rows, the batch factor has 0 levels,
     ## --- and limma dies with "not enough degrees of freedom to define
-    ## --- contrasts". We now key the metadata on the configured sample column
-    ## --- so it aligns with the data columns (falling back to column 1 if the
-    ## --- parameter is absent, preserving the old behaviour for old inputs).
+    ## --- contrasts". We key the metadata on the configured sample column so it
+    ## --- aligns with the data columns (fallback to column 1 if absent).
     meta_df <- read_tsv_pd(metadata, row_names = FALSE)
 
     sample_col <- parameter_list[["metadata_sample_column"]]
@@ -96,10 +169,10 @@ batch_correct <- function(datapath, parampath, outpath,
     ## align samples
     common <- intersect(colnames(quant_df), rownames(meta_df))
 
-    ## --- ADDED: fail early with a clear message if data and metadata don't
-    ## --- share any samples. Without this, an empty overlap silently produces a
-    ## --- 0-column matrix / 0-level batch factor and surfaces later as the
-    ## --- cryptic limma "not enough degrees of freedom to define contrasts".
+    ## fail early with a clear message if data and metadata share no samples.
+    ## Without this, an empty overlap silently produces a 0-column matrix /
+    ## 0-level batch factor and surfaces later as the cryptic limma
+    ## "not enough degrees of freedom to define contrasts".
     if (length(common) == 0) {
         stop(sprintf(
             paste0("No overlap between data columns and metadata sample ids ",
@@ -115,35 +188,63 @@ batch_correct <- function(datapath, parampath, outpath,
     quant_df <- quant_df[, common, drop = FALSE]
     meta_df <- meta_df[common, , drop = FALSE]
 
-    ## method naming fallback
+    ## optional per-batch feature-presence check (mirrors the Python module).
+    ## Enabled by check_feature_presence_batch = 1. If any precursor is too
+    ## sparse within a batch, this stops here with a clear message instead of
+    ## letting ComBat/limma fail cryptically further down.
+    flag_raw <- parameter_list[["check_feature_presence_batch"]]
+    ## robust truthy test: FALSE when the flag is absent/NULL/empty/non-numeric,
+    ## TRUE only when it is a single value equal to 1 (handles 1, "1", TRUE).
+    run_presence_check <- isTRUE(
+        length(flag_raw) == 1 &&
+        !is.na(suppressWarnings(as.numeric(flag_raw))) &&
+        as.numeric(flag_raw) == 1)
+
+    if (run_presence_check &&
+        !is.null(parameter_list[["batch_cols_meta"]])) {
+
+        threshold <- parameter_list[["presence_batch_threshold"]]
+        if (is.null(threshold)) threshold <- 0.5
+
+        ## TRUE where a value was actually measured. Mirrors Python's
+        ## data_df.notna(): presence is defined by non-missing values in the
+        ## data matrix itself, not by the mask file.
+        present_matrix <- !is.na(as.matrix(quant_df))
+
+        check_feature_presence_batch(
+            present_matrix = present_matrix,
+            meta_df        = meta_df,
+            batch_cols     = unlist(parameter_list[["batch_cols_meta"]]),
+            threshold      = threshold)
+    }
+
+    ## method selection
     method <- parameter_list[["correct_method"]]
 
-    ## call batch correction
+    ## call batch correction. The final unnamed branch is the switch default:
+    ## any method that is not limma / combat_r stops with a clear message
+    ## instead of returning NULL (which would crash inside run_with_logging).
     main_batch <- switch(
         tolower(method),
-        "limma"  = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
-        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list)
+        "limma"    = function() batchcorrect_limma(quant_df, meta_df, parameter_list),
+        "combat_r" = function() batchcorrect_combat(quant_df, meta_df, parameter_list),
         #"harmony_r"= function() batchcorrect_harmony(quant_df, meta_df, parameter_list) # harmony excluded from the wrapper
+        stop(sprintf("Unknown correct_method '%s'. Supported in R: limma, combat_r.",
+                     method), call. = FALSE)
     )
 
     corrected_df <- run_with_logging(main_batch, log_file)
 
-    ## load mask + mask_description to save unchanged
-    mask <- read_tsv_pd(in_mask_file)
-    mask_description <- read_tsv_pd(in_mask_desc_file, id_label = "filter")
-
-    ## write outputs
+    ## write corrected data
     out_data_file <- file.path(outpath,
                                sprintf("data_%02d.tsv", as.numeric(counter)))
+    write_tsv_pd(corrected_df, out_data_file)
+
+    ## pass the mask through unchanged (the data contract is data + mask +
+    ## id_mapping per stage; there is no mask_description file).
     out_mask_file <- file.path(outpath,
                                sprintf("data_%02d_mask.tsv", as.numeric(counter)))
-    out_mask_desc_file <- file.path(outpath,
-                                    sprintf("data_%02d_mask_description.tsv",
-                                            as.numeric(counter)))
-
-    write_tsv_pd(corrected_df, out_data_file)
-    write_tsv_pd(mask, out_mask_file)
-    write_tsv_pd(mask_description, out_mask_desc_file)
+    write_tsv_pd(read_tsv_pd(in_mask_file), out_mask_file)
 
     return(NULL)
 }
