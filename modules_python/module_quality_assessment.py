@@ -1507,6 +1507,8 @@ def plot_PCA(data_origin, metadata, data_processed = None, n_components = 4, siz
 def plot_pca_metadata_vectors(metadata, data_origin_transformed, data_origin_columns, data_processed_transformed = None, data_processed_columns = None, n_components = 4, min_samples = 3, max_entries = 10, max_entries_forced = 30, min_samples_per_entry = 5, categorical_properties = None, verbose = False, top_n = None, noise_level = None, size = (10,10), fontsize = 15, fontsize_title = 20, line_offset = 0.025, fontsize_label = 12, outfile = "PCA_metadata_vectors.png"):
     """
     Plots vector of each metadata property with respect to its contribution driving the variance of the first n_components principal components.
+	
+	Function and support functions were optimized with support from Claude Opus 5.0.
 
     Parameters
     ----------
@@ -1633,6 +1635,8 @@ def plot_pca_metadata_eta2(metadata, data_origin_transformed, data_origin_column
  
     All levels of a property are summarised by a single value in the range [0,1], so a property is a point within the unit square (relationship square) instead of a vector within the unit circle. 
     The distance from the origin measures how much of the plotted plane a property accounts for, the position along an axis how the effect is distributed over the two components.
+
+	Function and support functions were optimized with support from Claude Opus 5.0.
  
     Parameters
     ----------
