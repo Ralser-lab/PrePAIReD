@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Apr  9 16:22:54 2026
+Created with support from ChatGPT 4.5
 
 @author: oliverlemke
 """
