@@ -289,7 +289,7 @@ def get_ids_for_correction(
     metadata are used. Results are identical to the scipy tests applied feature
     by feature.
 
-    author: BZ, CD
+    author: BZ, CD, Claude Opus 5.0 (For vectorization)
 
     Parameters:
     -----------
