@@ -106,10 +106,10 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
         if key_operator == "!=":
             drop_cols = list(set(data_df.columns) & set(metadata_df_indexed[metadata_df_indexed[key_column].isna()].index))
             #log filtering method
-            log += f"{timestamp()}\tRemoving samples with missing values in metadata column {str(key_column)}.\n"
+            log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tRemoving samples with missing values in metadata column {str(key_column)}.\n"
         elif key_operator == "==":
             drop_cols = list(set(data_df.columns) & set(metadata_df_indexed[~metadata_df_indexed[key_column].isna()].index))
-            log += f"{timestamp()}\tOnly keeping samples with missing values in metadata column {str(key_column)}.\n"
+            log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tOnly keeping samples with missing values in metadata column {str(key_column)}.\n"
         else:
             log += f"###WARNING###: Provided operator {key_operator} not allowed for filtering on missing values (value {key_value} provided.\n\t\t\t\t\tFiltering of samples by metadata skipped.\n"
     else:
@@ -128,7 +128,7 @@ def filter_samples_based_on_metadata(data_df, metadata_df, index_column='File.Na
             key_value = str(key_value)
         
         #log filtering method
-        log += f"{timestamp()}\tFiltering data for samples that satisfy metadata_df['{str(key_column)}'] {str(key_operator)} {str(key_value)}.\n"
+        log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering data for samples that satisfy metadata_df['{str(key_column)}'] {str(key_operator)} {str(key_value)}.\n"
     
         # define columns to be dropped from metadata by samples that do not satisfy filtering conditions without altering data_df's column order
         try:
@@ -494,7 +494,7 @@ def filter_proteins_by_precursor_count(data_df, id_mapping_df, min_precursors=1,
     #filtered_protein_count = len(set(proteins_to_keep) & set(id_mapping_df[id_mapping_df[precursor_col].isin(data_df.index)][protein_col]))
     filtered_protein_count = len(id_mapping_df[id_mapping_df[precursor_col].isin(filtered_df.index)][protein_col].unique())
     proteins_dropped = original_protein_count - filtered_protein_count
-    log = f"{timestamp()}\tFiltered out {int(precursors_dropped)} precursors (kept {int(filtered_precursor_count)} out of {int(original_precursor_count)}) based on minimum of {min_precursors} precursors per protein.\n"
+    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltered out {int(precursors_dropped)} precursors (kept {int(filtered_precursor_count)} out of {int(original_precursor_count)}) based on minimum of {min_precursors} precursors per protein.\n"
     log += f"\t\t\t\tFiltered out {int(proteins_dropped)} proteins (kept {int(filtered_protein_count)} out of {int(original_protein_count)}) based on minimum of {min_precursors} precursors per protein.\n"
 
     return filtered_df, log
@@ -597,10 +597,10 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
         if filter_operator == "!=":
             drop_precursors = list(set(data_df.index) & set(id_mapping_df[id_mapping_df[filter_col].isna()][precursor_col]))
             #log filtering method
-            log += f"{timestamp()}\tRemoving precursors with missing values in id mapping column {str(filter_col)}.\n"
+            log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tRemoving precursors with missing values in id mapping column {str(filter_col)}.\n"
         elif filter_operator == "==":
             drop_precursors = list(set(data_df.columns) & set(id_mapping_df[~id_mapping_df[filter_col].isna()][precursor_col]))
-            log += f"{timestamp()}\tOnly keeping precursors with missing values in id mapping column {str(filter_col)}.\n"
+            log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tOnly keeping precursors with missing values in id mapping column {str(filter_col)}.\n"
         else:
             log += f"###WARNING###: Provided operator {filter_operator} not allowed for filtering on missing values (value {filter_value} provided.\n\t\t\t\t\tFiltering of precursors by metadata skipped.\n"
     else:
@@ -619,7 +619,7 @@ def filter_precursors_by_metadata(data_df, id_mapping_df, precursor_col="Precurs
             filter_value = str(filter_value)
     
     #log filtering method
-    log += f"{timestamp()}\tFiltering data for samples that satisfy id_mapping_df['{str(filter_col)}'] {str(filter_operator)} {str(filter_value)}.\n"
+    log += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering data for samples that satisfy id_mapping_df['{str(filter_col)}'] {str(filter_operator)} {str(filter_value)}.\n"
 
     #apply filtering
     try:
@@ -948,11 +948,9 @@ if __name__ == "__main__":
             if exit_module:
                 sys.exit("###ERROR###: Metadata does not contain specified metadata_filename_column " + parameters_dict["metadata_filename_column"])
         
-        #helper functions
-        timestamp = lambda: time.strftime("%Y-%m-%d%t%H:%M:%S")
         
         # Log parameters
-        #log = f"{timestamp()}\tFiltering Wide Format\n"
+        #log = f"{time.strftime("%Y-%m-%d%t%H:%M:%S")}\tFiltering Wide Format\n"
         #log += "\nParameters\n------------\n"
         #log += "\t" + pd.DataFrame(parameters_dict.items(),columns=["Parameter","Value"]).to_string(index=False).replace("\n","\n\t") 
         #log += "\n------------\n"  
@@ -1025,7 +1023,7 @@ if __name__ == "__main__":
                       
                 elif method == "filter_samples_by_detection_proportion":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering samples from data by missingness threshold.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering samples from data by missingness threshold.\n"
                     helper.logger(log_file,log)
                     #apply filtering of samples by detecction proportion (missingness)
                     data_processed_df, log = filter_samples_by_detection_proportion(data_df=data_processed_df, 
@@ -1062,7 +1060,7 @@ if __name__ == "__main__":
                 # PRECURSOR FILTERS
                 elif method == "filter_precursors_by_detection_proportion":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering precursors from data by missingness threshold.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering precursors from data by missingness threshold.\n"
                     helper.logger(log_file,log)
     
                     #apply filtering of precursors by detection proportion (missingness)
@@ -1101,7 +1099,7 @@ if __name__ == "__main__":
     
                 elif method == "filter_proteins_by_peptide_count":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_peptides']} peptides per protein.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering proteins from data with less than {parameters_dict['min_peptides']} peptides per protein.\n"
                     helper.logger(log_file,log)
                     #apply filtering by minimum number of precursors per protein
                     data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
@@ -1138,7 +1136,7 @@ if __name__ == "__main__":
                     
                 elif method == "filter_proteins_by_precursor_count":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering proteins from data with less than {parameters_dict['min_precursors']} precursors per protein.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering proteins from data with less than {parameters_dict['min_precursors']} precursors per protein.\n"
                     helper.logger(log_file,log)
                     #apply filtering by minimum number of precursors per protein
                     data_processed_df, log = filter_proteins_by_id_count(data_df=data_processed_df, 
@@ -1214,7 +1212,7 @@ if __name__ == "__main__":
                     
                 elif method == "filter_precursors_by_exclusion_list":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering {parameters_dict['exclusion_list_id_col']} from data as provided by {parameters_dict['exclusion_list_fp']}.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering {parameters_dict['exclusion_list_id_col']} from data as provided by {parameters_dict['exclusion_list_fp']}.\n"
                     helper.logger(log_file,log)
                     # Load exclusion list
                     if os.path.exists(parameters_dict["exclusion_list_fp"]):
@@ -1249,7 +1247,7 @@ if __name__ == "__main__":
                     
                 elif method == "filter_precursors_by_peptide_labels":
                     #log filtering method
-                    log = f"{timestamp()}\tFiltering precursors from data by defined precursor labels.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tFiltering precursors from data by defined precursor labels.\n"
                     helper.logger(log_file,log)
                     #apply filtering by pre-defined precursor labels
                     data_processed_df, log = filter_precursors_by_peptide_labels(data_df=data_processed_df, 
@@ -1275,7 +1273,7 @@ if __name__ == "__main__":
                 # PRECURSOR RENAMING
                 elif method == "replace_labelled_precursors":
                     #log
-                    log = f"{timestamp()}\tReplacing precursors names in data with defined precursor labels.\n"
+                    log = f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tReplacing precursors names in data with defined precursor labels.\n"
                     helper.logger(log_file,log)
                     
                     target_labels = str(parameters_dict["target_labels"]).split(";")
@@ -1305,10 +1303,10 @@ if __name__ == "__main__":
         if not sample_filters_df.empty:
             sample_filters_df.fillna(False,inplace=True)
             sample_filters_df.to_csv(os.path.join(out_dir_fp, "filtered_samples.tsv"), sep="\t")
-            module_output += f"{timestamp()}\tAdditional metadata containing information about filtered samples saved to {os.path.join(out_dir_fp, 'filtered_samples.tsv')}\n"
+            module_output += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tAdditional metadata containing information about filtered samples saved to {os.path.join(out_dir_fp, 'filtered_samples.tsv')}\n"
         #save id_mapping_df
         id_mapping_df.to_csv(os.path.join(out_dir_fp, "id_mapping.tsv"), sep="\t") # is this the correct location #???
-        module_output += f"{timestamp()}\tInformation about filtered precursors saved to {os.path.join(out_dir_fp, 'id_mapping.tsv')}\n"
+        module_output += f"{time.strftime('%Y-%m-%d%t%H:%M:%S')}\tInformation about filtered precursors saved to {os.path.join(out_dir_fp, 'id_mapping.tsv')}\n"
         
         #close module
         helper.close_module(data_processed_df=data_processed_df, masked_df=mask_df, mask_description_df=mask_description_df, log_file=log_file, module_output=module_output, out_dir_fp=out_dir_fp, outname=outname, mask=True, exit_module=exit_module)
